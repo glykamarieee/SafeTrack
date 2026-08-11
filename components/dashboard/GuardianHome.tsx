@@ -1,136 +1,678 @@
-import { useEffect } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+
 import { useAuthStore } from "../../store/authStore";
 import { useLocationStore } from "../../store/locationStore";
 import { useSosStore } from "../../store/sosStore";
-import { Card } from "../common/Card";
-import { EmptyState } from "../common/EmptyState";
-import { LoadingState } from "../common/LoadingState";
-import { SosStatusPill } from "../sos/SosStatusPill";
-import { QuickActionButton } from "./QuickActionButton";
-import { spacing, typography } from "../../constants/theme";
+import { supabase } from "../../lib/supabase";
+import { LocationMapCard } from "../location/LocationMapCard";
+import {
+  safeTrackColors as colors,
+  safeTrackRadius as radius,
+  safeTrackShadow as shadow,
+  safeTrackSpacing as spacing,
+} from "../../constants/safeTrackDesign";
 
-function formatRelativeTime(iso: string) {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const minutes = Math.round(diffMs / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes} min ago`;
+function firstName(value?: string) {
+  return value?.trim().split(/\s+/)[0] || "Guardian";
+}
+
+function relativeTime(value?: string | null) {
+  if (!value) {
+    return "No update recorded";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "No update recorded";
+  }
+
+  const difference = Math.max(0, Date.now() - date.getTime());
+  const minutes = Math.round(difference / 60_000);
+
+  if (minutes < 1) {
+    return "Updated just now";
+  }
+
+  if (minutes < 60) {
+    return `Updated ${minutes} min ago`;
+  }
+
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} hr ago`;
-  const days = Math.round(hours / 24);
-  return `${days} day${days === 1 ? "" : "s"} ago`;
+
+  if (hours < 24) {
+    return `Updated ${hours} hr ago`;
+  }
+
+  return `Updated ${Math.round(hours / 24)} day(s) ago`;
+}
+
+function getChildMobileAccessText(source?: string) {
+  const normalized = source?.trim().toLowerCase();
+
+  if (normalized === "both") {
+    return "Smartwatch and child phone access";
+  }
+
+  if (normalized === "mobile") {
+    return "Child phone access is available";
+  }
+
+  return "Mobile access requires Mobile or Both";
+}
+
+function QuickAction({
+  icon,
+  label,
+  onPress,
+  danger = false,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.quickAction,
+        pressed && styles.pressed,
+      ]}
+    >
+      <View
+        style={[
+          styles.quickIcon,
+          danger && styles.quickIconDanger,
+        ]}
+      >
+        <Ionicons
+          name={icon}
+          size={23}
+          color={danger ? colors.danger : colors.primary}
+        />
+      </View>
+
+      <Text style={styles.quickText}>{label}</Text>
+    </Pressable>
+  );
 }
 
 export function GuardianHome() {
   const router = useRouter();
-  const guardian = useAuthStore((s) => s.guardian);
-  const linkedChildren = useAuthStore((s) => s.linkedChildren);
+
+  const guardian = useAuthStore((state) => state.guardian);
+  const linkedChildren = useAuthStore((state) => state.linkedChildren);
+
   const primaryChild = linkedChildren[0] ?? null;
 
-  const latestLocation = useLocationStore((s) => s.latest);
-  const isLocationLoading = useLocationStore((s) => s.isLoading);
-  const loadLocationForChild = useLocationStore((s) => s.loadForChild);
+  const childInfo = primaryChild as
+    | (typeof primaryChild & {
+        age?: number;
+        relationship?: string;
+        trackingSource?: string;
+      })
+    | null;
 
-  const sosAlerts = useSosStore((s) => s.alerts);
-  const isSosLoading = useSosStore((s) => s.isLoading);
-  const loadSosForChild = useSosStore((s) => s.loadForChild);
+  const latest = useLocationStore((state) => state.latest);
+  const isLocationLoading = useLocationStore((state) => state.isLoading);
+  const loadLocation = useLocationStore((state) => state.loadForChild);
+
+  const alerts = useSosStore((state) => state.alerts);
+  const loadSos = useSosStore((state) => state.loadForChild);
+
+  const [activeZones, setActiveZones] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const activeSos = useMemo(
+    () => alerts.filter((alert) => alert.status === "active").length,
+    [alerts]
+  );
+
+  const hasActiveSos = activeSos > 0;
 
   useEffect(() => {
-    if (primaryChild) {
-      loadLocationForChild(primaryChild.id);
-      loadSosForChild(primaryChild.id);
+    if (!primaryChild?.id) {
+      return;
     }
-  }, [primaryChild?.id]);
 
-  const firstName = guardian?.fullName.split(" ")[0] ?? "there";
-  const latestSos = sosAlerts[0];
+    void loadLocation(primaryChild.id);
+    void loadSos(primaryChild.id);
+
+    const intervalId = setInterval(() => {
+      void loadLocation(primaryChild.id);
+      void loadSos(primaryChild.id);
+    }, 30_000);
+
+    return () => clearInterval(intervalId);
+  }, [primaryChild?.id, loadLocation, loadSos]);
+
+  useEffect(() => {
+    if (!guardian?.id || !primaryChild?.id) {
+      setActiveZones(0);
+      return;
+    }
+
+    const loadSafeZones = async () => {
+      const { count, error } = await supabase
+        .from("geofences")
+        .select("id", {
+          count: "exact",
+          head: true,
+        })
+        .eq("guardian_id", guardian.id)
+        .eq("child_id", primaryChild.id)
+        .eq("is_enabled", true);
+
+      if (!error) {
+        setActiveZones(count ?? 0);
+      }
+    };
+
+    void loadSafeZones();
+  }, [guardian?.id, primaryChild?.id]);
+
+  const refresh = async () => {
+    if (!primaryChild) {
+      return;
+    }
+
+    setRefreshing(true);
+
+    try {
+      await Promise.all([
+        loadLocation(primaryChild.id),
+        loadSos(primaryChild.id),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  if (!primaryChild) {
+    return (
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.greeting}>
+          Hello, {firstName(guardian?.fullName)}
+        </Text>
+
+        <Text style={styles.subtitle}>
+          Complete child setup to begin monitoring.
+        </Text>
+
+        <Pressable
+          onPress={() => router.push("/(auth)/child-registration")}
+          style={({ pressed }) => [
+            styles.setupCard,
+            pressed && styles.pressed,
+          ]}
+        >
+          <View style={styles.setupIcon}>
+            <Ionicons
+              name="person-add-outline"
+              size={24}
+              color={colors.primary}
+            />
+          </View>
+
+          <View style={styles.setupCopy}>
+            <Text style={styles.setupTitle}>Register your child</Text>
+
+            <Text style={styles.setupText}>
+              Add a child profile before using SafeTrack location, safe-zone,
+              SOS, and child-device features.
+            </Text>
+          </View>
+
+          <Ionicons
+            name="arrow-forward"
+            size={20}
+            color={colors.primaryDark}
+          />
+        </Pressable>
+      </ScrollView>
+    );
+  }
 
   return (
-    <View>
-      <Text style={styles.greeting}>Hello, {firstName}</Text>
-      <Text style={styles.subGreeting}>Here's how your family is doing today.</Text>
+    <ScrollView
+      style={styles.flex}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.header}>
+        <View style={styles.headerCopy}>
+          <Text style={styles.greeting}>
+            Hello, {firstName(guardian?.fullName)}
+          </Text>
 
-      {!primaryChild ? (
-        <EmptyState
-          icon="people-outline"
-          title="No child linked yet"
-          message="Link a child's account in Supabase to start seeing their location and safety status here."
+          <Text style={styles.subtitle}>
+            {primaryChild.fullName}&apos;s latest safety information.
+          </Text>
+        </View>
+
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>
+            {primaryChild.fullName.trim().charAt(0).toUpperCase()}
+          </Text>
+        </View>
+      </View>
+
+      <LocationMapCard
+        location={latest}
+        height={286}
+        loading={refreshing || isLocationLoading}
+        onRefresh={() => void refresh()}
+      />
+
+      <View style={styles.metrics}>
+        <View style={styles.metric}>
+          <Ionicons
+            name="shield-checkmark-outline"
+            color={colors.primary}
+            size={20}
+          />
+
+          <Text style={styles.metricValue}>{activeZones}</Text>
+          <Text style={styles.metricLabel}>Safe zones</Text>
+        </View>
+
+        <View style={styles.metricDivider} />
+
+        <View style={styles.metric}>
+          <Ionicons
+            name="warning-outline"
+            color={hasActiveSos ? colors.danger : colors.primary}
+            size={20}
+          />
+
+          <Text style={styles.metricValue}>{activeSos}</Text>
+          <Text style={styles.metricLabel}>Active SOS</Text>
+        </View>
+
+        <View style={styles.metricDivider} />
+
+        <View style={styles.metric}>
+          <Ionicons
+            name="location-outline"
+            color={colors.primary}
+            size={20}
+          />
+
+          <Text style={styles.metricValue}>{latest ? "1" : "0"}</Text>
+          <Text style={styles.metricLabel}>Location record</Text>
+        </View>
+      </View>
+
+      <View style={styles.notice}>
+        <Ionicons
+          name={
+            hasActiveSos
+              ? "alert-circle-outline"
+              : "checkmark-circle-outline"
+          }
+          size={19}
+          color={hasActiveSos ? colors.danger : colors.primary}
         />
-      ) : (
-        <>
-          <Card style={styles.card}>
-            <Text style={styles.cardLabel}>Linked Child</Text>
-            <Text style={styles.childName}>{primaryChild.fullName}</Text>
-          </Card>
 
-          <Card style={styles.card}>
-            <Text style={styles.cardLabel}>Latest Available Location</Text>
-            {isLocationLoading ? (
-              <LoadingState message="Checking latest location..." />
-            ) : latestLocation ? (
-              <Text style={styles.cardValue}>Updated {formatRelativeTime(latestLocation.recordedAt)}</Text>
-            ) : (
-              <Text style={styles.cardValue}>No location reported yet</Text>
-            )}
-          </Card>
+        <Text
+          style={[
+            styles.noticeText,
+            hasActiveSos && styles.noticeDanger,
+          ]}
+        >
+          {hasActiveSos
+            ? "An SOS alert requires your acknowledgement."
+            : "No active safety alert needs your attention."}
+        </Text>
+      </View>
 
-          <Card style={styles.card}>
-            <Text style={styles.cardLabel}>Latest SOS Status</Text>
-            {isSosLoading ? (
-              <LoadingState message="Checking SOS status..." />
-            ) : latestSos ? (
-              <View style={styles.sosRow}>
-                <SosStatusPill status={latestSos.status} />
-                <Text style={styles.sosMeta}>{formatRelativeTime(latestSos.triggeredAt)}</Text>
-              </View>
-            ) : (
-              <Text style={styles.cardValue}>No SOS alerts recorded</Text>
-            )}
-          </Card>
-        </>
-      )}
+      <Text style={styles.sectionTitle}>Quick access</Text>
 
-      <Text style={styles.sectionTitle}>Quick Actions</Text>
-      <QuickActionButton icon="location-outline" label="View Location" onPress={() => router.push("/location")} />
-      <QuickActionButton icon="warning-outline" label="View SOS Alerts" onPress={() => router.push("/sos-alerts")} />
-      <QuickActionButton icon="document-text-outline" label="View Reports" onPress={() => router.push("/reports")} />
-    </View>
+      <View style={styles.quickActions}>
+        <QuickAction
+          icon="location-outline"
+          label="Location"
+          onPress={() => router.push("/location")}
+        />
+
+        <QuickAction
+          icon="shield-checkmark-outline"
+          label="Safety"
+          onPress={() => router.push("/safety-center")}
+        />
+
+        <QuickAction
+          icon="warning-outline"
+          label="SOS alerts"
+          danger={hasActiveSos}
+          onPress={() => router.push("/sos-alerts")}
+        />
+      </View>
+
+      <Text style={styles.sectionTitle}>Child connection</Text>
+
+      <Pressable
+        onPress={() => router.push("/child-mobile-link")}
+        style={({ pressed }) => [
+          styles.childRow,
+          pressed && styles.pressed,
+        ]}
+      >
+        <View style={styles.childAvatar}>
+          <Text style={styles.childInitial}>
+            {primaryChild.fullName.trim().charAt(0).toUpperCase()}
+          </Text>
+        </View>
+
+        <View style={styles.childCopy}>
+          <Text style={styles.childName}>{primaryChild.fullName}</Text>
+
+          <Text style={styles.childDetail}>
+            {childInfo?.age ? `${childInfo.age} years old · ` : ""}
+            {childInfo?.relationship || "Guardian"}
+          </Text>
+
+          <Text style={styles.watchText}>
+            {getChildMobileAccessText(childInfo?.trackingSource)}
+          </Text>
+        </View>
+
+        <View style={styles.childAction}>
+          <Ionicons
+            name="phone-portrait-outline"
+            size={18}
+            color={colors.primaryDark}
+          />
+
+          <Ionicons
+            name="chevron-forward"
+            size={18}
+            color={colors.primaryDark}
+          />
+        </View>
+      </Pressable>
+
+      <Text style={styles.latestRecordText}>
+        Latest stored location: {relativeTime(latest?.recordedAt)}
+      </Text>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+
+  content: {
+    padding: spacing.lg,
+    paddingTop: 44,
+    paddingBottom: 36,
+  },
+
+  header: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: 18,
+  },
+
+  headerCopy: {
+    flex: 1,
+    marginRight: 14,
+  },
+
   greeting: {
-    ...typography.display,
+    color: colors.ink,
+    fontSize: 30,
+    lineHeight: 37,
+    fontWeight: "900",
+    letterSpacing: -0.9,
   },
-  subGreeting: {
-    ...typography.body,
-    marginBottom: spacing.lg,
+
+  subtitle: {
+    color: colors.muted,
+    fontSize: 14.5,
+    lineHeight: 21,
+    marginTop: 4,
   },
-  card: {
-    marginBottom: spacing.md,
+
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 19,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  cardLabel: {
-    ...typography.label,
-    marginBottom: spacing.xs,
+
+  avatarText: {
+    color: colors.white,
+    fontSize: 23,
+    fontWeight: "900",
   },
-  cardValue: {
-    ...typography.bodyStrong,
+
+  metrics: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    borderRadius: radius.md,
+    backgroundColor: colors.white,
+    paddingVertical: 13,
+    marginTop: 18,
+    ...shadow.soft,
   },
-  childName: {
-    ...typography.subtitle,
+
+  metric: {
+    flex: 1,
+    alignItems: "center",
   },
-  sosRow: {
+
+  metricValue: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: 3,
+  },
+
+  metricLabel: {
+    color: colors.muted,
+    fontSize: 10.5,
+    fontWeight: "800",
+    marginTop: 2,
+    textAlign: "center",
+  },
+
+  metricDivider: {
+    width: 1,
+    backgroundColor: colors.border,
+    marginVertical: 4,
+  },
+
+  notice: {
     flexDirection: "row",
     alignItems: "center",
+    marginTop: 14,
+    paddingHorizontal: 3,
+  },
+
+  noticeText: {
+    flex: 1,
+    color: colors.primaryDark,
+    fontSize: 12.5,
+    lineHeight: 18,
+    fontWeight: "800",
+    marginLeft: 8,
+  },
+
+  noticeDanger: {
+    color: colors.danger,
+  },
+
+  sectionTitle: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: 21,
+    marginBottom: 10,
+  },
+
+  quickActions: {
+    flexDirection: "row",
     justifyContent: "space-between",
   },
-  sosMeta: {
-    ...typography.caption,
+
+  quickAction: {
+    width: "30%",
+    alignItems: "center",
   },
-  sectionTitle: {
-    ...typography.label,
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
+
+  quickIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 19,
+    backgroundColor: colors.softMint,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  quickIconDanger: {
+    backgroundColor: colors.dangerSoft,
+  },
+
+  quickText: {
+    color: colors.ink,
+    fontSize: 11.5,
+    fontWeight: "800",
+    textAlign: "center",
+    marginTop: 8,
+  },
+
+  childRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 15,
+    borderRadius: radius.md,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.soft,
+  },
+
+  childAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 17,
+    backgroundColor: colors.sage,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  childInitial: {
+    color: colors.white,
+    fontSize: 19,
+    fontWeight: "900",
+  },
+
+  childCopy: {
+    flex: 1,
+    marginLeft: 13,
+    marginRight: 8,
+  },
+
+  childName: {
+    color: colors.ink,
+    fontSize: 15.5,
+    fontWeight: "900",
+  },
+
+  childDetail: {
+    color: colors.muted,
+    fontSize: 12.5,
+    marginTop: 2,
+  },
+
+  watchText: {
+    color: colors.primaryDark,
+    fontSize: 11,
+    fontWeight: "800",
+    marginTop: 5,
+  },
+
+  childAction: {
+    width: 45,
+    height: 45,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 15,
+    backgroundColor: colors.softMint,
+  },
+
+  latestRecordText: {
+    color: colors.muted,
+    fontSize: 10.5,
+    fontWeight: "800",
+    textAlign: "center",
+    marginTop: 12,
+  },
+
+  setupCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 18,
+    borderRadius: radius.md,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginTop: 24,
+    ...shadow.card,
+  },
+
+  setupIcon: {
+    width: 47,
+    height: 47,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 16,
+    backgroundColor: colors.softMint,
+  },
+
+  setupCopy: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 10,
+  },
+
+  setupTitle: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "900",
+  },
+
+  setupText: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 2,
+  },
+
+  pressed: {
+    opacity: 0.76,
+    transform: [{ scale: 0.985 }],
   },
 });

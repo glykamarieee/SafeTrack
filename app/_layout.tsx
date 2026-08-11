@@ -1,19 +1,40 @@
 import { Stack } from "expo-router";
-import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { AuthProvider } from "../context/AuthProvider";
 
 export default function RootLayout() {
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <StatusBar style="dark" />
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(app)" />
-        </Stack>
-      </AuthProvider>
-    </SafeAreaProvider>
+    <>
+      <StatusBar style="dark" />
+
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: "fade",
+        }}
+      >
+        <Stack.Screen name="index" />
+
+        <Stack.Screen
+          name="(auth)"
+          options={{
+            headerShown: false,
+          }}
+        />
+
+        <Stack.Screen
+          name="(app)"
+          options={{
+            headerShown: false,
+          }}
+        />
+
+        <Stack.Screen
+          name="(child)"
+          options={{
+            headerShown: false,
+          }}
+        />
+      </Stack>
+    </>
   );
 }

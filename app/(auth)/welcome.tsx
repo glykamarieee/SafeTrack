@@ -1,86 +1,172 @@
-import { StyleSheet, Text, View } from "react-native";
-import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { StatusBar } from "expo-status-bar";
+import { router } from "expo-router";
+import { useVideoPlayer, VideoView } from "expo-video";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Logo } from "../../components/common/Logo";
-import { Button } from "../../components/common/Button";
-import { colors, spacing, typography } from "../../constants/theme";
 
 export default function WelcomeScreen() {
-  const router = useRouter();
+  const player = useVideoPlayer(
+    require("../../assets/videos/safetrack-intro.mp4"),
+    (videoPlayer) => {
+      videoPlayer.loop = true;
+      videoPlayer.muted = true;
+      videoPlayer.play();
+    }
+  );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.top}>
-          <Logo size={100} />
-          <Text style={styles.title}>SafeTrack</Text>
-          <Text style={styles.message}>Stay connected to the people who matter most.</Text>
+    <View style={styles.container}>
+      <StatusBar style="light" />
 
-          <View style={styles.featureRow}>
-            <Ionicons name="location-outline" size={16} color={colors.emerald} />
-            <Text style={styles.featureText}>Real-time location awareness</Text>
-          </View>
-          <View style={styles.featureRow}>
-            <Ionicons name="warning-outline" size={16} color={colors.emerald} />
-            <Text style={styles.featureText}>Instant SOS alerts</Text>
-          </View>
-          <View style={styles.featureRow}>
-            <Ionicons name="shield-checkmark-outline" size={16} color={colors.emerald} />
-            <Text style={styles.featureText}>Simple, calm, family-first design</Text>
-          </View>
+      <VideoView
+        player={player}
+        style={styles.backgroundVideo}
+        nativeControls={false}
+        contentFit="cover"
+      />
+
+      <View pointerEvents="none" style={styles.fullScreenOverlay} />
+
+      <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
+        <View style={styles.logoArea}>
+          <Image
+            source={require("../../assets/images/logo.png")}
+            resizeMode="contain"
+            style={styles.logo}
+            accessibilityLabel="SafeTrack logo"
+          />
         </View>
 
-        <View style={styles.actions}>
-          <Button label="Get Started" onPress={() => router.push("/(auth)/register")} />
-          <Button label="Login" onPress={() => router.push("/(auth)/login")} variant="secondary" style={styles.spaced} />
+        <View style={styles.bottomContent}>
+          <Text style={styles.headline}>
+            Know where they are.{"\n"}
+            Be there when it matters.
+          </Text>
+
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.getStartedButton,
+              pressed && styles.getStartedButtonPressed,
+            ]}
+            onPress={() => router.push("/(auth)/register")}
+          >
+            <Text style={styles.getStartedText}>Get Started</Text>
+          </Pressable>
+
+          <Text style={styles.signInText}>
+            Already have an account?{" "}
+            <Text
+              style={styles.signInLink}
+              onPress={() => router.push("/(auth)/login")}
+            >
+              Sign in
+            </Text>
+          </Text>
         </View>
-      </View>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.softGray,
+    backgroundColor: "#24573A",
   },
-  content: {
+
+  backgroundVideo: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  },
+
+  /*
+   * One full-screen overlay only.
+   * This removes the visible middle line caused by the old bottom overlay.
+   */
+  fullScreenOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: "rgba(6, 49, 28, 0.46)",
+  },
+
+  safeArea: {
     flex: 1,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.lg,
     justifyContent: "space-between",
+    paddingHorizontal: 22,
+    paddingBottom: 34,
   },
-  top: {
+
+  logoArea: {
     alignItems: "center",
-    marginTop: spacing.xxl,
+    marginTop: 18,
   },
-  title: {
-    ...typography.display,
-    marginTop: spacing.lg,
+
+  logo: {
+    width: 225,
+    height: 135,
   },
-  message: {
-    ...typography.body,
+
+  bottomContent: {
+    gap: 18,
+  },
+
+  headline: {
+    color: "#FFFFFF",
+    fontSize: 27,
+    lineHeight: 34,
+    fontWeight: "900",
     textAlign: "center",
-    marginTop: spacing.sm,
-    marginBottom: spacing.xl,
-    paddingHorizontal: spacing.md,
+    textShadowColor: "rgba(0, 0, 0, 0.38)",
+    textShadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    textShadowRadius: 8,
   },
-  featureRow: {
-    flexDirection: "row",
+
+  getStartedButton: {
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#22BE73",
     alignItems: "center",
-    alignSelf: "stretch",
-    marginBottom: spacing.md,
-    paddingHorizontal: spacing.lg,
+    justifyContent: "center",
+    shadowColor: "#061F11",
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.28,
+    shadowRadius: 13,
+    elevation: 7,
   },
-  featureText: {
-    ...typography.body,
-    marginLeft: spacing.sm,
+
+  getStartedButtonPressed: {
+    opacity: 0.84,
+    transform: [{ scale: 0.985 }],
   },
-  actions: {
-    marginTop: spacing.lg,
+
+  getStartedText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "900",
   },
-  spaced: {
-    marginTop: spacing.sm,
+
+  signInText: {
+    color: "rgba(255, 255, 255, 0.90)",
+    textAlign: "center",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+
+  signInLink: {
+    color: "#FFFFFF",
+    fontWeight: "900",
   },
 });

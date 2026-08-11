@@ -1,27 +1,35 @@
 import { create } from "zustand";
 import type { Session } from "@supabase/supabase-js";
-import { supabase } from "../lib/supabase";
+
 import {
-  getCurrentSession,
+  getCurrentSafeTrackAccount,
   signInWithPassword,
   signOut as signOutRequest,
   signUpGuardian,
+  type SafeTrackPerson,
 } from "../services/supabaseAuthService";
+
 import {
-  createGuardianProfile,
+  ensureGuardianProfile,
   fetchLinkedChildren,
   resolveProfileForUser,
-  type ResolvedProfile,
 } from "../services/profileService";
-import { readCache, writeCache } from "../lib/offlineCache";
-import type { Administrator, Child, Guardian, UserRole } from "../types/safetrack";
+
+import type {
+  Administrator,
+  Child,
+  Guardian,
+  UserRole,
+} from "../types/safetrack";
 
 interface AuthState {
   isBootstrapped: boolean;
   isLoading: boolean;
   error: string | null;
+
   session: Session | null;
   role: UserRole | null;
+
   guardian: Guardian | null;
   child: Child | null;
   administrator: Administrator | null;
@@ -29,126 +37,372 @@ interface AuthState {
 
   bootstrap: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
-  register: (fullName: string, email: string, password: string) => Promise<void>;
+  register: (
+    fullName: string,
+    email: string,
+    password: string
+  ) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
 }
 
-async function loadProfileIntoState(
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (typeof error === "object" && error !== null) {
+    const possibleError = error as {
+      message?: unknown;
+      details?: unknown;
+      hint?: unknown;
+    };
+
+    const message =
+      typeof possibleError.message === "string"
+        ? possibleError.message
+        : "";
+
+    const details =
+      typeof possibleError.details === "string"
+        ? possibleError.details
+        : "";
+
+    const hint =
+      typeof possibleError.hint === "string"
+        ? possibleError.hint
+        : "";
+
+    const combined = [message, details, hint]
+      .filter(Boolean)
+      .join(" ");
+
+    if (combined) {
+      return combined;
+    }
+  }
+
+  return fallback;
+}
+
+function isMissingGuardianProfileError(error: unknown) {
+  const message = getErrorMessage(error, "").toLowerCase();
+
+  return (
+    message.includes("guardian profile was not found") ||
+    message.includes("no profile found") ||
+    message.includes("no guardian profile")
+  );
+}
+
+function getGuardianNameFromSession(
+  session: Session,
+  fallbackEmail: string
+) {
+  const metadata = session.user?.user_metadata as {
+    full_name?: unknown;
+  };
+
+  if (
+    typeof metadata?.full_name === "string" &&
+    metadata.full_name.trim().length >= 2
+  ) {
+    return metadata.full_name.trim();
+  }
+
+  const emailName = fallbackEmail
+    .split("@")[0]
+    .replace(/[._-]+/g, " ")
+    .trim();
+
+  return emailName || "Guardian";
+}
+
+function clearProfileState() {
+  return {
+    role: null,
+    guardian: null,
+    child: null,
+    administrator: null,
+    linkedChildren: [],
+  };
+}
+
+function createAdministrator(
+  person: SafeTrackPerson,
+  authUserId: string,
+  createdAt: string
+): Administrator {
+  return {
+    id: person.id,
+    userId: authUserId,
+    fullName: person.fullName,
+    email: person.email,
+    createdAt,
+  };
+}
+
+async function loadGuardianState(
   userId: string,
   set: (partial: Partial<AuthState>) => void
 ) {
-  const profileCacheKey = `auth:profile:${userId}`;
-  let resolved: ResolvedProfile;
-  try {
-    resolved = await resolveProfileForUser(userId);
-    writeCache<ResolvedProfile>(profileCacheKey, resolved);
-  } catch (err) {
-    const cached = await readCache<ResolvedProfile>(profileCacheKey);
-    if (!cached) throw err;
-    resolved = cached.data;
+  const profile = await resolveProfileForUser(userId);
+
+  if (!profile.guardian) {
+    throw new Error("Guardian profile was not found.");
   }
 
-  const { role, guardian, child, administrator } = resolved;
+  const linkedChildren = await fetchLinkedChildren(profile.guardian.id);
 
   set({
-    role,
-    guardian: guardian ?? null,
-    child: child ?? null,
-    administrator: administrator ?? null,
+    role: "guardian",
+    guardian: profile.guardian,
+    child: null,
+    administrator: null,
+    linkedChildren,
   });
+}
 
-  if (role === "guardian" && guardian) {
-    const childrenCacheKey = `auth:linkedChildren:${guardian.id}`;
-    try {
-      const children = await fetchLinkedChildren(guardian.id);
-      set({ linkedChildren: children });
-      writeCache<Child[]>(childrenCacheKey, children);
-    } catch {
-      const cached = await readCache<Child[]>(childrenCacheKey);
-      set({ linkedChildren: cached?.data ?? [] });
+async function loadOrProvisionGuardianState(
+  session: Session,
+  email: string,
+  set: (partial: Partial<AuthState>) => void
+) {
+  try {
+    await loadGuardianState(session.user.id, set);
+  } catch (error) {
+    if (!isMissingGuardianProfileError(error)) {
+      throw error;
     }
-  } else {
-    set({ linkedChildren: [] });
+
+    await ensureGuardianProfile(
+      getGuardianNameFromSession(session, email),
+      email.trim().toLowerCase()
+    );
+
+    await loadGuardianState(session.user.id, set);
   }
+}
+
+function loadAdministratorState(
+  person: SafeTrackPerson,
+  session: Session,
+  set: (partial: Partial<AuthState>) => void
+) {
+  set({
+    role: "admin",
+    guardian: null,
+    child: null,
+    linkedChildren: [],
+    administrator: createAdministrator(
+      person,
+      session.user.id,
+      session.user.created_at
+    ),
+  });
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   isBootstrapped: false,
   isLoading: false,
   error: null,
+
   session: null,
   role: null,
+
   guardian: null,
   child: null,
   administrator: null,
   linkedChildren: [],
 
   bootstrap: async () => {
-    set({ isLoading: true, error: null });
+    set({
+      isLoading: true,
+      error: null,
+    });
+
     try {
-      const session = await getCurrentSession();
-      set({ session });
-      if (session?.user) {
-        await loadProfileIntoState(session.user.id, set);
+      const account = await getCurrentSafeTrackAccount();
+
+      if (!account?.session?.user) {
+        set({
+          session: null,
+          ...clearProfileState(),
+        });
+
+        return;
       }
-    } catch (err) {
-      set({ error: err instanceof Error ? err.message : "Could not restore session." });
+
+      set({
+        session: account.session,
+      });
+
+      if (account.role === "admin" && account.person) {
+        loadAdministratorState(account.person, account.session, set);
+        return;
+      }
+
+      if (account.role === "guardian") {
+        await loadOrProvisionGuardianState(
+          account.session,
+          account.session.user.email ?? "",
+          set
+        );
+
+        return;
+      }
+
+      set({
+        ...clearProfileState(),
+      });
+    } catch (error) {
+      set({
+        error: getErrorMessage(
+          error,
+          "Could not restore your SafeTrack session."
+        ),
+      });
     } finally {
-      set({ isLoading: false, isBootstrapped: true });
+      set({
+        isLoading: false,
+        isBootstrapped: true,
+      });
     }
   },
 
   login: async (email, password) => {
-    set({ isLoading: true, error: null });
-    try {
-      const result = await signInWithPassword(email, password);
-      const { data } = await supabase.auth.getSession();
-      set({ session: data.session });
-      await loadProfileIntoState(result.userId, set);
-    } catch (err) {
-      console.error("[authStore.login]", err);
-      set({ error: err instanceof Error ? err.message : "Unable to sign in." });
-      throw err;
-    } finally {
-      set({ isLoading: false });
-    }
-  },
+    set({
+      isLoading: true,
+      error: null,
+    });
 
-  register: async (fullName, email, password) => {
-    set({ isLoading: true, error: null });
     try {
-      const result = await signUpGuardian(fullName, email, password);
-      const guardian = await createGuardianProfile(result.userId, fullName, result.email);
-      set({ role: "guardian", guardian, child: null, administrator: null, linkedChildren: [] });
-      const { data } = await supabase.auth.getSession();
-      set({ session: data.session });
-    } catch (err) {
-      set({ error: err instanceof Error ? err.message : "Unable to create account." });
-      throw err;
-    } finally {
-      set({ isLoading: false });
-    }
-  },
+      const signInResult = await signInWithPassword(email, password);
+      const session = signInResult.session;
 
-  logout: async () => {
-    set({ isLoading: true, error: null });
-    try {
-      await signOutRequest();
-    } catch {
-      // ignore network errors on sign-out, clear local state regardless
+      if (!session?.user) {
+        throw new Error("SafeTrack could not confirm your login session.");
+      }
+
+      set({
+        session,
+      });
+
+      /*
+        ADMIN LOGIN:
+        The account role comes from:
+        persons → person_roles → roles.
+      */
+      if (signInResult.role === "admin" && signInResult.person) {
+        loadAdministratorState(signInResult.person, session, set);
+        return;
+      }
+
+      /*
+        GUARDIAN LOGIN:
+        Existing Guardian profiles are loaded directly.
+        The profile RPC runs only if the Guardian profile is missing.
+      */
+      if (signInResult.role === "guardian") {
+        await loadOrProvisionGuardianState(
+          session,
+          signInResult.person?.email ??
+            session.user.email ??
+            email.trim().toLowerCase(),
+          set
+        );
+
+        return;
+      }
+
+      /*
+        Newly registered Guardian accounts may not yet have a persons/role row.
+        Provision the Guardian profile once, then load it.
+      */
+      if (!signInResult.person) {
+        await loadOrProvisionGuardianState(
+          session,
+          session.user.email ?? email.trim().toLowerCase(),
+          set
+        );
+
+        return;
+      }
+
+      throw new Error(
+        "This SafeTrack account has no valid Guardian or Administrator role."
+      );
+    } catch (error) {
+      console.error("[authStore.login]", error);
+
+      set({
+        error: getErrorMessage(error, "Unable to sign in."),
+      });
+
+      throw error;
     } finally {
       set({
-        session: null,
-        role: null,
-        guardian: null,
-        child: null,
-        administrator: null,
-        linkedChildren: [],
         isLoading: false,
       });
     }
   },
 
-  clearError: () => set({ error: null }),
+  register: async (fullName, email, password) => {
+    set({
+      isLoading: true,
+      error: null,
+    });
+
+    try {
+      await signUpGuardian(fullName, email, password);
+
+      try {
+        await signOutRequest();
+      } catch {
+        // Supabase may not create an active session until email confirmation.
+      }
+
+      set({
+        session: null,
+        ...clearProfileState(),
+      });
+    } catch (error) {
+      console.error("[authStore.register]", error);
+
+      set({
+        error: getErrorMessage(error, "Unable to create account."),
+      });
+
+      throw error;
+    } finally {
+      set({
+        isLoading: false,
+      });
+    }
+  },
+
+  logout: async () => {
+    set({
+      isLoading: true,
+      error: null,
+    });
+
+    try {
+      await signOutRequest();
+    } catch {
+      // Local SafeTrack state must still clear if Supabase is offline.
+    } finally {
+      set({
+        session: null,
+        ...clearProfileState(),
+        isLoading: false,
+      });
+    }
+  },
+
+  clearError: () => {
+    set({
+      error: null,
+    });
+  },
 }));

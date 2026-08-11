@@ -1,66 +1,130 @@
-import { useEffect, useRef } from "react";
-import { Animated, StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import {
+  Animated,
+  Image,
+  StyleSheet,
+  View,
+} from "react-native";
 import { Redirect } from "expo-router";
-import { Logo } from "../components/common/Logo";
+import { StatusBar } from "expo-status-bar";
+
 import { useAuthStore } from "../store/authStore";
-import { colors, spacing, typography } from "../constants/theme";
 
 export default function SplashScreen() {
-  const isBootstrapped = useAuthStore((s) => s.isBootstrapped);
-  const bootstrap = useAuthStore((s) => s.bootstrap);
-  const session = useAuthStore((s) => s.session);
-  const role = useAuthStore((s) => s.role);
+  const bootstrap = useAuthStore((state) => state.bootstrap);
+  const isBootstrapped = useAuthStore((state) => state.isBootstrapped);
+  const session = useAuthStore((state) => state.session);
+  const role = useAuthStore((state) => state.role);
+  const linkedChildren = useAuthStore((state) => state.linkedChildren);
 
-  const pulse = useRef(new Animated.Value(0.4)).current;
+  const [minimumSplashFinished, setMinimumSplashFinished] = useState(false);
+
+  const logoOpacity = useRef(new Animated.Value(0.55)).current;
+  const logoScale = useRef(new Animated.Value(0.96)).current;
 
   useEffect(() => {
-    bootstrap();
-  }, []);
+    void bootstrap();
 
-  useEffect(() => {
-    const loop = Animated.loop(
+    const splashTimer = setTimeout(() => {
+      setMinimumSplashFinished(true);
+    }, 1800);
+
+    const animation = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 800, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0.4, duration: 800, useNativeDriver: true }),
+        Animated.parallel([
+          Animated.timing(logoOpacity, {
+            toValue: 1,
+            duration: 850,
+            useNativeDriver: true,
+          }),
+          Animated.timing(logoScale, {
+            toValue: 1,
+            duration: 850,
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.parallel([
+          Animated.timing(logoOpacity, {
+            toValue: 0.72,
+            duration: 850,
+            useNativeDriver: true,
+          }),
+          Animated.timing(logoScale, {
+            toValue: 0.98,
+            duration: 850,
+            useNativeDriver: true,
+          }),
+        ]),
       ])
     );
-    loop.start();
-    return () => loop.stop();
-  }, [pulse]);
 
-  if (isBootstrapped) {
-    if (session && role) {
-      return <Redirect href="/(app)/home" />;
-    }
+    animation.start();
+
+    return () => {
+      clearTimeout(splashTimer);
+      animation.stop();
+    };
+  }, [bootstrap, logoOpacity, logoScale]);
+
+  if (!isBootstrapped || !minimumSplashFinished) {
+    return (
+      <View style={styles.container}>
+        <StatusBar style="light" />
+
+        <Animated.View
+          style={[
+            styles.logoWrap,
+            {
+              opacity: logoOpacity,
+              transform: [{ scale: logoScale }],
+            },
+          ]}
+        >
+          <Image
+            source={require("../assets/images/logo.png")}
+            resizeMode="contain"
+            style={styles.logo}
+            accessibilityLabel="SafeTrack logo"
+          />
+        </Animated.View>
+      </View>
+    );
+  }
+
+  if (!session) {
     return <Redirect href="/(auth)/welcome" />;
   }
 
-  return (
-    <View style={styles.container}>
-      <Logo size={112} />
-      <Text style={styles.title}>SafeTrack</Text>
-      <Animated.View style={[styles.dot, { opacity: pulse }]} />
-    </View>
-  );
+  if (role === "guardian") {
+    return (
+      <Redirect
+        href={
+          linkedChildren.length > 0
+            ? "/(app)/home"
+            : "/(auth)/child-registration"
+        }
+      />
+    );
+  }
+
+  return <Redirect href="/(auth)/login" />;
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.sageLight,
+    backgroundColor: "#2B7A53",
     alignItems: "center",
     justifyContent: "center",
   },
-  title: {
-    ...typography.display,
-    marginTop: spacing.lg,
-    color: colors.emeraldDark,
+
+  logoWrap: {
+    alignItems: "center",
+    justifyContent: "center",
   },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: colors.emerald,
-    marginTop: spacing.xl,
+
+  logo: {
+    width: 210,
+    height: 145,
   },
 });

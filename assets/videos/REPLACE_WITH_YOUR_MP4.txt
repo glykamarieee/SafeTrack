@@ -1,0 +1,1 @@
+Replace safetrack-intro.mp4 with your own welcome-screen background video. Keep the filename unchanged.

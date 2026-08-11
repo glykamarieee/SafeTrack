@@ -37,7 +37,17 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 160
         }
-      ]
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow SafeTrack to access your photos so you can choose a profile picture.",
+          "cameraPermission": "Allow SafeTrack to access your camera so you can take a profile picture.",
+          "microphonePermission": false
+        }
+      ],
+      "expo-video",
+      "expo-sharing"
     ]
   }
 }

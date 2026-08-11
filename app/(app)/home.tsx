@@ -1,19 +1,38 @@
-import { ScreenContainer } from "../../components/common/ScreenContainer";
-import { LoadingState } from "../../components/common/LoadingState";
-import { GuardianHome } from "../../components/dashboard/GuardianHome";
-import { ChildHome } from "../../components/dashboard/ChildHome";
-import { AdminHome } from "../../components/dashboard/AdminHome";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { Redirect } from "expo-router";
 import { useAuthStore } from "../../store/authStore";
+import { GuardianHome } from "../../components/dashboard/GuardianHome";
+import { AdminHome } from "../../components/dashboard/AdminHome";
+import { safeTrackColors as colors } from "../../constants/safeTrackDesign";
 
 export default function HomeScreen() {
-  const role = useAuthStore((s) => s.role);
+  const isBootstrapped = useAuthStore((state) => state.isBootstrapped);
+  const role = useAuthStore((state) => state.role);
 
-  return (
-    <ScreenContainer>
-      {role === "guardian" && <GuardianHome />}
-      {role === "child" && <ChildHome />}
-      {role === "admin" && <AdminHome />}
-      {!role && <LoadingState message="Loading your dashboard..." />}
-    </ScreenContainer>
-  );
+  if (!isBootstrapped) {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (role === "admin") {
+    return <AdminHome />;
+  }
+
+  if (role === "guardian") {
+    return <GuardianHome />;
+  }
+
+  return <Redirect href="/(auth)/login" />;
 }
+
+const styles = StyleSheet.create({
+  loading: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.background,
+  },
+});

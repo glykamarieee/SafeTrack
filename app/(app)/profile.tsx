@@ -1,98 +1,23 @@
-import { useState, type ReactNode } from "react";
-import { StyleSheet, Switch, Text, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { ScreenContainer } from "../../components/common/ScreenContainer";
-import { Button } from "../../components/common/Button";
-import { ProfileHeader } from "../../components/profile/ProfileHeader";
-import { ProfileSection } from "../../components/profile/ProfileSection";
 import { useAuthStore } from "../../store/authStore";
-import { colors, spacing, typography } from "../../constants/theme";
-import { showAlert } from "../../lib/platformAlert";
+import { supabase } from "../../lib/supabase";
+import { getProfileAvatarUrl } from "../../services/profileAvatarService";
+import { safeTrackColors as colors, safeTrackRadius as radius, safeTrackShadow as shadow, safeTrackSpacing as spacing } from "../../constants/safeTrackDesign";
 
-function SettingsRow({ icon, label, right }: { icon: keyof typeof Ionicons.glyphMap; label: string; right: ReactNode }) {
-  return (
-    <View style={styles.settingsRow}>
-      <Ionicons name={icon} size={18} color={colors.emerald} style={styles.settingsIcon} />
-      <Text style={styles.settingsLabel}>{label}</Text>
-      {right}
-    </View>
-  );
+type Profile={id:string;full_name:string;email:string;avatar_path:string|null};type ChildInfo={id:string;full_name:string;age:number;relationship:string;tracking_source:string;avatar_path:string|null};
+function initial(value?:string){return value?.trim().charAt(0).toUpperCase()||"S"}
+function Row({icon,title,detail,onPress,imageUri,imageInitial,last=false}:{icon:keyof typeof Ionicons.glyphMap;title:string;detail:string;onPress:()=>void;imageUri?:string|null;imageInitial?:string;last?:boolean}){return <Pressable onPress={onPress} style={({pressed})=>[styles.row,!last&&styles.rowDivider,pressed&&styles.pressed]}><View style={styles.rowLeading}>{imageUri?<Image source={{uri:imageUri}} style={styles.rowImage}/>:imageInitial?<Text style={styles.rowInitial}>{imageInitial}</Text>:<Ionicons name={icon} size={21} color={colors.primary}/>}</View><View style={styles.rowCopy}><Text style={styles.rowTitle}>{title}</Text><Text style={styles.rowDetail}>{detail}</Text></View><Ionicons name="chevron-forward" size={22} color={colors.muted}/></Pressable>}
+
+export default function ProfileScreen(){
+ const router=useRouter();const logout=useAuthStore(s=>s.logout);const [guardian,setGuardian]=useState<Profile|null>(null);const [child,setChild]=useState<ChildInfo|null>(null);const [guardianAvatar,setGuardianAvatar]=useState<string|null>(null);const [childAvatar,setChildAvatar]=useState<string|null>(null);const [watchId,setWatchId]=useState<string|null>(null);const [loading,setLoading]=useState(true);
+ const load=useCallback(async()=>{setLoading(true);try{const {data:auth,error:authError}=await supabase.auth.getUser();if(authError||!auth.user)throw new Error("Your session has expired. Please log in again.");const [g,c]=await Promise.all([supabase.from("guardian_profiles").select("id,full_name,email,avatar_path").eq("id",auth.user.id).maybeSingle(),supabase.from("child_profiles").select("id,full_name,age,relationship,tracking_source,avatar_path").eq("guardian_id",auth.user.id).order("created_at",{ascending:false}).limit(1).maybeSingle()]);if(g.error)throw g.error;if(c.error)throw c.error;const nextGuardian=(g.data??{id:auth.user.id,full_name:String(auth.user.user_metadata?.full_name??"Guardian"),email:auth.user.email??"",avatar_path:null}) as Profile;const nextChild=c.data as ChildInfo|null;let nextWatch:string|null=null;if(nextChild){const {data}=await supabase.from("smartwatch_devices").select("watch_id").eq("child_id",nextChild.id).eq("is_active",true).order("paired_at",{ascending:false}).limit(1).maybeSingle();nextWatch=data?.watch_id??null;}setGuardian(nextGuardian);setChild(nextChild);setWatchId(nextWatch);const urls=await Promise.all([getProfileAvatarUrl(nextGuardian.avatar_path),getProfileAvatarUrl(nextChild?.avatar_path)]);setGuardianAvatar(urls[0]);setChildAvatar(urls[1]);}catch(error){Alert.alert("Unable to load profile",error instanceof Error?error.message:"Please try again.")}finally{setLoading(false)}},[]);
+ useEffect(() => { void load(); }, [load]);
+ const signOut=()=>Alert.alert("Sign out of SafeTrack?","You will need to log in again to access guardian information.",[{text:"Cancel",style:"cancel"},{text:"Sign out",style:"destructive",onPress:async()=>{await logout();router.replace("/(auth)/welcome")}}]);
+ if(loading&&!guardian)return <SafeAreaView style={styles.loading}><ActivityIndicator size="large" color={colors.primary}/></SafeAreaView>;
+ return <SafeAreaView style={styles.safe} edges={["top","left","right"]}><ScrollView style={styles.flex} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}><View style={styles.accountTop}><View style={styles.identity}><Pressable onPress={()=>router.push("/edit-guardian-profile")} style={styles.avatar}>{guardianAvatar?<Image source={{uri:guardianAvatar}} style={styles.avatarImage}/>:<Text style={styles.avatarText}>{initial(guardian?.full_name)}</Text>}</Pressable><View style={styles.identityCopy}><Text style={styles.eyebrow}>YOUR ACCOUNT</Text><Text style={styles.name}>{guardian?.full_name||"Guardian"}</Text><Text style={styles.email}>{guardian?.email||"No email saved"}</Text></View></View><Pressable onPress={()=>router.push("/edit-guardian-profile")} style={styles.editTop}><Ionicons name="create-outline" size={21} color={colors.primary}/></Pressable></View><View style={styles.sectionHeading}><Text style={styles.sectionLabel}>CHILD PROFILE</Text>{child?<View style={styles.linked}><View style={styles.dot}/><Text style={styles.linkedText}>Linked</Text></View>:null}</View><View style={styles.list}><Row icon="person-outline" title={child?.full_name||"No child registered"} detail={child?`${child.age} years old • ${child.relationship}`:"Register a child profile to continue."} onPress={()=>router.push(child?"/edit-child-profile":"/(auth)/child-registration")} imageUri={childAvatar} imageInitial={child?initial(child.full_name):undefined}/><Row icon="watch-outline" title="Tracking source" detail={child?`${child.tracking_source==="both"?"Smartwatch and mobile":child.tracking_source==="mobile"?"Mobile":"Smartwatch"} • ${watchId?"Connected":"Not linked"}`:"No tracking source selected."} onPress={()=>router.push(child?"/edit-child-profile":"/(auth)/child-registration")} last/></View><Pressable onPress={()=>router.push(child?"/edit-child-profile":"/(auth)/child-registration")} style={({pressed})=>[styles.editChild,pressed&&styles.pressed]}><Ionicons name={child?"create-outline":"person-add-outline"} size={21} color={colors.primary}/><Text style={styles.editChildText}>{child?"Edit child profile":"Register child profile"}</Text><Ionicons name="arrow-forward" size={21} color={colors.primary}/></Pressable><Text style={styles.sectionLabel}>PRIVACY AND SUPPORT</Text><View style={styles.list}><Row icon="lock-closed-outline" title="Data and privacy" detail="Guardian access and child safety-data protection" onPress={()=>Alert.alert("Data and privacy","SafeTrack limits access to the signed-in guardian and registered child records.")}/><Row icon="notifications-outline" title="Notification settings" detail="SOS, geofence, and location-pattern notices" onPress={()=>Alert.alert("Notification settings","Push notification preferences are configured on this device.")}/><Row icon="help-circle-outline" title="Help and support" detail="SafeTrack guidance and practical limitations" onPress={()=>Alert.alert("SafeTrack guidance","SafeTrack displays available records for guardian review. It does not guarantee a child’s exact location, immediate condition, or safety status.")} last/></View><Pressable onPress={signOut} style={({pressed})=>[styles.signOut,pressed&&styles.pressed]}><Ionicons name="log-out-outline" size={20} color={colors.primary}/><Text style={styles.signOutText}>Sign out</Text></Pressable></ScrollView></SafeAreaView>;
 }
-
-export default function ProfileScreen() {
-  const router = useRouter();
-  const role = useAuthStore((s) => s.role);
-  const guardian = useAuthStore((s) => s.guardian);
-  const child = useAuthStore((s) => s.child);
-  const administrator = useAuthStore((s) => s.administrator);
-  const logout = useAuthStore((s) => s.logout);
-
-  const [pushEnabled, setPushEnabled] = useState(true);
-
-  const fullName = guardian?.fullName ?? child?.fullName ?? administrator?.fullName ?? "SafeTrack User";
-  const email = guardian?.email ?? administrator?.email ?? "—";
-
-  const handleLogout = () => {
-    showAlert("Log out", "Are you sure you want to log out?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Log out",
-        style: "destructive",
-        onPress: async () => {
-          await logout();
-          router.replace("/(auth)/welcome");
-        },
-      },
-    ]);
-  };
-
-  return (
-    <ScreenContainer>
-      {role ? <ProfileHeader fullName={fullName} email={email} role={role} /> : null}
-
-      <ProfileSection title="Notifications">
-        <SettingsRow
-          icon="notifications-outline"
-          label="Push notifications"
-          right={<Switch value={pushEnabled} onValueChange={setPushEnabled} trackColor={{ true: colors.emerald }} />}
-        />
-      </ProfileSection>
-
-      <ProfileSection title="Privacy">
-        <Text style={styles.privacyText}>
-          Your location is only shared with linked family members. SafeTrack never sells your data.
-        </Text>
-      </ProfileSection>
-
-      <ProfileSection title="Support">
-        <SettingsRow icon="help-circle-outline" label="Help Center" right={<Ionicons name="chevron-forward" size={16} color={colors.gray} />} />
-        <SettingsRow icon="mail-outline" label="Contact Support" right={<Ionicons name="chevron-forward" size={16} color={colors.gray} />} />
-      </ProfileSection>
-
-      <Button label="Log Out" onPress={handleLogout} variant="danger" style={styles.logoutButton} />
-    </ScreenContainer>
-  );
-}
-
-const styles = StyleSheet.create({
-  settingsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: spacing.sm,
-  },
-  settingsIcon: {
-    marginRight: spacing.sm,
-  },
-  settingsLabel: {
-    ...typography.body,
-    flex: 1,
-    color: colors.textPrimary,
-  },
-  privacyText: {
-    ...typography.body,
-  },
-  logoutButton: {
-    marginTop: spacing.sm,
-  },
-});
+const styles=StyleSheet.create({safe:{flex:1,backgroundColor:colors.background},flex:{flex:1},content:{paddingHorizontal:spacing.lg,paddingTop:35,paddingBottom:30},loading:{flex:1,alignItems:"center",justifyContent:"center",backgroundColor:colors.background},accountTop:{flexDirection:"row",alignItems:"center",justifyContent:"space-between"},identity:{flex:1,flexDirection:"row",alignItems:"center"},avatar:{width:58,height:58,borderRadius:20,overflow:"hidden",alignItems:"center",justifyContent:"center",backgroundColor:colors.primary},avatarImage:{width:"100%",height:"100%"},avatarText:{color:colors.white,fontSize:24,fontWeight:"900"},identityCopy:{flex:1,marginLeft:13},eyebrow:{color:colors.primary,fontSize:10,fontWeight:"900",letterSpacing:1.5},name:{color:colors.ink,fontSize:22,fontWeight:"900",marginTop:3},email:{color:colors.muted,fontSize:13.5,marginTop:2},editTop:{width:42,height:42,borderRadius:14,alignItems:"center",justifyContent:"center",backgroundColor:colors.white,...shadow.soft},sectionHeading:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",marginTop:24,marginBottom:9},sectionLabel:{color:colors.muted,fontSize:10,fontWeight:"900",letterSpacing:1.5,marginTop:24,marginBottom:9},linked:{flexDirection:"row",alignItems:"center",paddingHorizontal:9,paddingVertical:5,borderRadius:radius.pill,backgroundColor:colors.softMint},dot:{width:7,height:7,borderRadius:4,backgroundColor:colors.primary,marginRight:5},linkedText:{color:colors.primaryDark,fontSize:11,fontWeight:"900"},list:{overflow:"hidden",borderRadius:radius.md,backgroundColor:colors.white,...shadow.soft},row:{minHeight:76,flexDirection:"row",alignItems:"center",paddingHorizontal:14},rowDivider:{borderBottomWidth:1,borderBottomColor:colors.border},rowLeading:{width:46,height:46,borderRadius:15,overflow:"hidden",alignItems:"center",justifyContent:"center",backgroundColor:colors.softMint},rowImage:{width:"100%",height:"100%"},rowInitial:{color:colors.primaryDark,fontSize:18,fontWeight:"900"},rowCopy:{flex:1,marginLeft:12,marginRight:8},rowTitle:{color:colors.ink,fontSize:15,fontWeight:"900"},rowDetail:{color:colors.muted,fontSize:12.5,lineHeight:18,marginTop:2},editChild:{minHeight:56,flexDirection:"row",alignItems:"center",justifyContent:"center",borderWidth:1.5,borderColor:colors.primary,borderRadius:radius.pill,backgroundColor:colors.white,marginTop:14},editChildText:{color:colors.primaryDark,fontSize:15.5,fontWeight:"900",marginHorizontal:9},signOut:{minHeight:54,flexDirection:"row",alignItems:"center",justifyContent:"center",borderWidth:1.5,borderColor:colors.primary,borderRadius:radius.pill,backgroundColor:colors.white,marginTop:16},signOutText:{color:colors.primaryDark,fontSize:15,fontWeight:"900",marginLeft:8},pressed:{opacity:.76,transform:[{scale:.99}]}});
