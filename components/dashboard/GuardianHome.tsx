@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAuthStore } from "../../store/authStore";
@@ -111,56 +113,101 @@ export function GuardianHome() {
   const router = useRouter();
 
   const guardian = useAuthStore((state) => state.guardian);
-  const linkedChildren = useAuthStore((state) => state.linkedChildren);
+  const linkedChildren = useAuthStore(
+    (state) => state.linkedChildren
+  );
 
   const primaryChild = linkedChildren[0] ?? null;
 
-  const childInfo = primaryChild as
-    | (typeof primaryChild & {
-        age?: number;
-        relationship?: string;
-        trackingSource?: string;
-      })
-    | null;
-
   const latest = useLocationStore((state) => state.latest);
-  const isLocationLoading = useLocationStore((state) => state.isLoading);
-  const loadLocation = useLocationStore((state) => state.loadForChild);
+
+  const isLocationLoading = useLocationStore(
+    (state) => state.isLoading
+  );
+
+  const loadLocation = useLocationStore(
+    (state) => state.loadForChild
+  );
 
   const alerts = useSosStore((state) => state.alerts);
-  const loadSos = useSosStore((state) => state.loadForChild);
+
+  const loadSos = useSosStore(
+    (state) => state.loadForChild
+  );
 
   const [activeZones, setActiveZones] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [deletingChildId, setDeletingChildId] =
+    useState<string | null>(null);
 
   const activeSos = useMemo(
-    () => alerts.filter((alert) => alert.status === "active").length,
+    () =>
+      alerts.filter(
+        (alert) => alert.status === "active"
+      ).length,
     [alerts]
   );
 
   const hasActiveSos = activeSos > 0;
 
+  /*
+   * Refresh dashboard whenever the screen becomes active.
+   *
+   * IMPORTANT:
+   * AuthStore is refreshed by bootstrap/login.
+   * This screen also uses the current linkedChildren
+   * from the store, so deleted children disappear
+   * immediately after the local store update below.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      if (!primaryChild?.id) {
+        return;
+      }
+
+      void loadLocation(primaryChild.id);
+      void loadSos(primaryChild.id);
+
+      return undefined;
+    }, [
+      primaryChild?.id,
+      loadLocation,
+      loadSos,
+    ])
+  );
+
+  /*
+   * Periodically refresh the current dashboard child.
+   */
   useEffect(() => {
     if (!primaryChild?.id) {
       return;
     }
-
-    void loadLocation(primaryChild.id);
-    void loadSos(primaryChild.id);
 
     const intervalId = setInterval(() => {
       void loadLocation(primaryChild.id);
       void loadSos(primaryChild.id);
     }, 30_000);
 
-    return () => clearInterval(intervalId);
-  }, [primaryChild?.id, loadLocation, loadSos]);
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [
+    primaryChild?.id,
+    loadLocation,
+    loadSos,
+  ]);
 
+  /*
+   * Load active safe zones for the current child.
+   */
   useEffect(() => {
     if (!guardian?.id || !primaryChild?.id) {
       setActiveZones(0);
       return;
     }
+
+    let cancelled = false;
 
     const loadSafeZones = async () => {
       const { count, error } = await supabase
@@ -173,14 +220,30 @@ export function GuardianHome() {
         .eq("child_id", primaryChild.id)
         .eq("is_enabled", true);
 
+      if (cancelled) {
+        return;
+      }
+
       if (!error) {
         setActiveZones(count ?? 0);
+      } else {
+        setActiveZones(0);
       }
     };
 
     void loadSafeZones();
-  }, [guardian?.id, primaryChild?.id]);
 
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    guardian?.id,
+    primaryChild?.id,
+  ]);
+
+  /*
+   * MANUAL REFRESH
+   */
   const refresh = async () => {
     if (!primaryChild) {
       return;
@@ -198,6 +261,164 @@ export function GuardianHome() {
     }
   };
 
+  /*
+   * ADD CHILD
+   */
+  const handleAddChild = () => {
+    router.push("/(auth)/child-registration");
+  };
+
+  /*
+   * OPEN CHILD MOBILE CONNECTION
+   *
+   * The actual child ID is passed to the connection screen.
+   * This prevents one child's link code from being used
+   * for another child.
+   */
+  const handleChildConnection = (childId: string) => {
+    router.push({
+      pathname: "/child-mobile-link",
+      params: {
+        childId,
+      },
+    });
+  };
+
+  /*
+   * DELETE CHILD
+   *
+   * IMPORTANT:
+   *
+   * We intentionally DO NOT use:
+   *
+   *   .delete().select("*")
+   *
+   * because that requires Supabase to return the deleted
+   * record and can produce an empty returned array even
+   * though the DELETE itself succeeded.
+   *
+   * Instead:
+   *
+   * 1. Delete the exact child belonging to this Guardian.
+   * 2. If Supabase reports no error, immediately remove
+   *    that child from Zustand linkedChildren.
+   *
+   * This makes the deleted child disappear from the
+   * dashboard immediately.
+   */
+  const deleteChild = async (childId: string) => {
+    if (!childId) {
+      return;
+    }
+
+    if (!guardian?.id) {
+      Alert.alert(
+        "Unable to delete child",
+        "The Guardian account could not be identified."
+      );
+      return;
+    }
+
+    setDeletingChildId(childId);
+
+    try {
+      /*
+       * DELETE ONLY THE SELECTED CHILD.
+       *
+       * The guardian_id condition is important.
+       */
+      const { error } = await supabase
+        .from("child_profiles")
+        .delete()
+        .eq("id", childId)
+        .eq("guardian_id", guardian.id);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      /*
+       * IMPORTANT:
+       *
+       * Supabase successfully accepted the DELETE.
+       *
+       * Now immediately remove the child from the
+       * Guardian's local Zustand state.
+       *
+       * We intentionally filter by ID so only the selected
+       * child is removed.
+       */
+      useAuthStore.setState((state) => ({
+        linkedChildren: state.linkedChildren.filter(
+          (child) => child.id !== childId
+        ),
+        child:
+          state.child?.id === childId
+            ? null
+            : state.child,
+      }));
+
+      /*
+       * Clear any location/SOS UI state associated with
+       * the deleted child by simply allowing the dashboard
+       * to switch to the next remaining child.
+       *
+       * The primaryChild value will automatically recalculate
+       * from linkedChildren after the Zustand update.
+       */
+
+      Alert.alert(
+        "Child deleted",
+        "The child profile has been successfully removed from this Guardian account."
+      );
+    } catch (error) {
+      console.error(
+        "[GuardianHome.deleteChild]",
+        error
+      );
+
+      Alert.alert(
+        "Unable to delete child",
+        error instanceof Error
+          ? error.message
+          : "SafeTrack could not delete the child profile."
+      );
+    } finally {
+      setDeletingChildId(null);
+    }
+  };
+
+  /*
+   * DELETE CONFIRMATION
+   */
+  const confirmDeleteChild = (
+    childId: string,
+    childName: string
+  ) => {
+    Alert.alert(
+      "Delete child profile?",
+      `Are you sure you want to delete ${childName}?\n\nThis removes the child from this Guardian account. This action cannot be undone.`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void deleteChild(childId);
+          },
+        },
+      ]
+    );
+  };
+
+  /*
+   * EMPTY STATE
+   *
+   * This appears when the Guardian has no remaining children.
+   */
   if (!primaryChild) {
     return (
       <ScrollView
@@ -205,16 +426,28 @@ export function GuardianHome() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.greeting}>
-          Hello, {firstName(guardian?.fullName)}
-        </Text>
+        <View style={styles.header}>
+          <View style={styles.headerCopy}>
+            <Text style={styles.greeting}>
+              Hello, {firstName(guardian?.fullName)}
+            </Text>
 
-        <Text style={styles.subtitle}>
-          Complete child setup to begin monitoring.
-        </Text>
+            <Text style={styles.subtitle}>
+              Complete child setup to begin monitoring.
+            </Text>
+          </View>
+
+          <View style={styles.avatar}>
+            <Ionicons
+              name="person-outline"
+              size={25}
+              color={colors.white}
+            />
+          </View>
+        </View>
 
         <Pressable
-          onPress={() => router.push("/(auth)/child-registration")}
+          onPress={handleAddChild}
           style={({ pressed }) => [
             styles.setupCard,
             pressed && styles.pressed,
@@ -229,11 +462,14 @@ export function GuardianHome() {
           </View>
 
           <View style={styles.setupCopy}>
-            <Text style={styles.setupTitle}>Register your child</Text>
+            <Text style={styles.setupTitle}>
+              Register your child
+            </Text>
 
             <Text style={styles.setupText}>
-              Add a child profile before using SafeTrack location, safe-zone,
-              SOS, and child-device features.
+              Add a child profile before using SafeTrack
+              location, safe-zone, SOS, and child-device
+              features.
             </Text>
           </View>
 
@@ -247,12 +483,17 @@ export function GuardianHome() {
     );
   }
 
+  /*
+   * NORMAL GUARDIAN DASHBOARD
+   */
   return (
     <ScrollView
       style={styles.flex}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
+      {/* HEADER */}
+
       <View style={styles.header}>
         <View style={styles.headerCopy}>
           <Text style={styles.greeting}>
@@ -260,23 +501,33 @@ export function GuardianHome() {
           </Text>
 
           <Text style={styles.subtitle}>
-            {primaryChild.fullName}&apos;s latest safety information.
+            {primaryChild.fullName}
+            &apos;s latest safety information.
           </Text>
         </View>
 
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>
-            {primaryChild.fullName.trim().charAt(0).toUpperCase()}
+            {primaryChild.fullName
+              .trim()
+              .charAt(0)
+              .toUpperCase()}
           </Text>
         </View>
       </View>
 
+      {/* LOCATION MAP */}
+
       <LocationMapCard
         location={latest}
         height={286}
-        loading={refreshing || isLocationLoading}
+        loading={
+          refreshing || isLocationLoading
+        }
         onRefresh={() => void refresh()}
       />
+
+      {/* METRICS */}
 
       <View style={styles.metrics}>
         <View style={styles.metric}>
@@ -286,8 +537,13 @@ export function GuardianHome() {
             size={20}
           />
 
-          <Text style={styles.metricValue}>{activeZones}</Text>
-          <Text style={styles.metricLabel}>Safe zones</Text>
+          <Text style={styles.metricValue}>
+            {activeZones}
+          </Text>
+
+          <Text style={styles.metricLabel}>
+            Safe zones
+          </Text>
         </View>
 
         <View style={styles.metricDivider} />
@@ -295,12 +551,21 @@ export function GuardianHome() {
         <View style={styles.metric}>
           <Ionicons
             name="warning-outline"
-            color={hasActiveSos ? colors.danger : colors.primary}
+            color={
+              hasActiveSos
+                ? colors.danger
+                : colors.primary
+            }
             size={20}
           />
 
-          <Text style={styles.metricValue}>{activeSos}</Text>
-          <Text style={styles.metricLabel}>Active SOS</Text>
+          <Text style={styles.metricValue}>
+            {activeSos}
+          </Text>
+
+          <Text style={styles.metricLabel}>
+            Active SOS
+          </Text>
         </View>
 
         <View style={styles.metricDivider} />
@@ -312,10 +577,17 @@ export function GuardianHome() {
             size={20}
           />
 
-          <Text style={styles.metricValue}>{latest ? "1" : "0"}</Text>
-          <Text style={styles.metricLabel}>Location record</Text>
+          <Text style={styles.metricValue}>
+            {latest ? "1" : "0"}
+          </Text>
+
+          <Text style={styles.metricLabel}>
+            Location record
+          </Text>
         </View>
       </View>
+
+      {/* SAFETY NOTICE */}
 
       <View style={styles.notice}>
         <Ionicons
@@ -325,13 +597,18 @@ export function GuardianHome() {
               : "checkmark-circle-outline"
           }
           size={19}
-          color={hasActiveSos ? colors.danger : colors.primary}
+          color={
+            hasActiveSos
+              ? colors.danger
+              : colors.primary
+          }
         />
 
         <Text
           style={[
             styles.noticeText,
-            hasActiveSos && styles.noticeDanger,
+            hasActiveSos &&
+              styles.noticeDanger,
           ]}
         >
           {hasActiveSos
@@ -340,74 +617,251 @@ export function GuardianHome() {
         </Text>
       </View>
 
-      <Text style={styles.sectionTitle}>Quick access</Text>
+      {/* QUICK ACCESS */}
+
+      <Text style={styles.sectionTitle}>
+        Quick access
+      </Text>
 
       <View style={styles.quickActions}>
         <QuickAction
           icon="location-outline"
           label="Location"
-          onPress={() => router.push("/location")}
+          onPress={() =>
+            router.push("/location")
+          }
         />
 
         <QuickAction
           icon="shield-checkmark-outline"
           label="Safety"
-          onPress={() => router.push("/safety-center")}
+          onPress={() =>
+            router.push("/safety-center")
+          }
         />
 
         <QuickAction
           icon="warning-outline"
           label="SOS alerts"
           danger={hasActiveSos}
-          onPress={() => router.push("/sos-alerts")}
+          onPress={() =>
+            router.push("/sos-alerts")
+          }
         />
       </View>
 
-      <Text style={styles.sectionTitle}>Child connection</Text>
+      {/* CHILD CONNECTION */}
+
+      <View style={styles.childSectionHeader}>
+        <Text style={styles.sectionTitle}>
+          Child connection
+        </Text>
+
+        <Text style={styles.childCount}>
+          {linkedChildren.length}{" "}
+          {linkedChildren.length === 1
+            ? "child"
+            : "children"}
+        </Text>
+      </View>
+
+      {/* CHILDREN */}
+
+      {linkedChildren.map((child, index) => {
+        const childData = child as typeof child & {
+          age?: number;
+          relationship?: string;
+          trackingSource?: string;
+        };
+
+        const initial =
+          child.fullName
+            ?.trim()
+            .charAt(0)
+            .toUpperCase() || "?";
+
+        const isDeleting =
+          deletingChildId === child.id;
+
+        return (
+          <View
+            key={child.id}
+            style={[
+              styles.childRowContainer,
+              isDeleting &&
+                styles.childRowDeleting,
+            ]}
+          >
+            <Pressable
+              onPress={() =>
+                handleChildConnection(child.id)
+              }
+              disabled={isDeleting}
+              style={({ pressed }) => [
+                styles.childRow,
+                pressed && styles.pressed,
+              ]}
+            >
+              <View style={styles.childAvatar}>
+                <Text style={styles.childInitial}>
+                  {initial}
+                </Text>
+              </View>
+
+              <View style={styles.childCopy}>
+                <View style={styles.childNameRow}>
+                  <Text
+                    style={styles.childName}
+                    numberOfLines={1}
+                  >
+                    {child.fullName}
+                  </Text>
+
+                  {index === 0 ? (
+                    <View
+                      style={
+                        styles.primaryBadge
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.primaryBadgeText
+                        }
+                      >
+                        ACTIVE
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                <Text style={styles.childDetail}>
+                  {childData.age
+                    ? `${childData.age} years old · `
+                    : ""}
+                  {childData.relationship ||
+                    "Guardian"}
+                </Text>
+
+                <Text style={styles.watchText}>
+                  {getChildMobileAccessText(
+                    childData.trackingSource
+                  )}
+                </Text>
+              </View>
+
+              <View style={styles.childAction}>
+                <Ionicons
+                  name="phone-portrait-outline"
+                  size={18}
+                  color={colors.primaryDark}
+                />
+
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.primaryDark}
+                />
+              </View>
+            </Pressable>
+
+            {/* DELETE BUTTON */}
+
+            <Pressable
+              onPress={() =>
+                confirmDeleteChild(
+                  child.id,
+                  child.fullName
+                )
+              }
+              disabled={isDeleting}
+              style={({ pressed }) => [
+                styles.deleteChildButton,
+                pressed &&
+                  styles.deletePressed,
+                isDeleting &&
+                  styles.deleteDisabled,
+              ]}
+            >
+              {isDeleting ? (
+                <ActivityIndicator
+                  size="small"
+                  color={colors.danger}
+                />
+              ) : (
+                <Ionicons
+                  name="trash-outline"
+                  size={18}
+                  color={colors.danger}
+                />
+              )}
+
+              <Text style={styles.deleteChildText}>
+                {isDeleting
+                  ? "Deleting..."
+                  : "Delete child"}
+              </Text>
+            </Pressable>
+          </View>
+        );
+      })}
+
+      {/* ADD CHILD */}
 
       <Pressable
-        onPress={() => router.push("/child-mobile-link")}
+        onPress={handleAddChild}
         style={({ pressed }) => [
-          styles.childRow,
+          styles.addChildButton,
           pressed && styles.pressed,
         ]}
       >
-        <View style={styles.childAvatar}>
-          <Text style={styles.childInitial}>
-            {primaryChild.fullName.trim().charAt(0).toUpperCase()}
-          </Text>
-        </View>
-
-        <View style={styles.childCopy}>
-          <Text style={styles.childName}>{primaryChild.fullName}</Text>
-
-          <Text style={styles.childDetail}>
-            {childInfo?.age ? `${childInfo.age} years old · ` : ""}
-            {childInfo?.relationship || "Guardian"}
-          </Text>
-
-          <Text style={styles.watchText}>
-            {getChildMobileAccessText(childInfo?.trackingSource)}
-          </Text>
-        </View>
-
-        <View style={styles.childAction}>
+        <View style={styles.addChildIcon}>
           <Ionicons
-            name="phone-portrait-outline"
-            size={18}
-            color={colors.primaryDark}
-          />
-
-          <Ionicons
-            name="chevron-forward"
-            size={18}
-            color={colors.primaryDark}
+            name="add"
+            size={25}
+            color={colors.primary}
           />
         </View>
+
+        <View style={styles.addChildCopy}>
+          <Text style={styles.addChildTitle}>
+            Add another child
+          </Text>
+
+          <Text style={styles.addChildDescription}>
+            Register another child under this guardian
+            account.
+          </Text>
+        </View>
+
+        <Ionicons
+          name="chevron-forward"
+          size={20}
+          color={colors.primaryDark}
+        />
       </Pressable>
 
+      {/* INFORMATION */}
+
+      <View style={styles.connectionInfo}>
+        <Ionicons
+          name="information-circle-outline"
+          size={18}
+          color={colors.primary}
+        />
+
+        <Text style={styles.connectionInfoText}>
+          You can register multiple children using
+          the same guardian account. Each child has
+          a separate SafeTrack profile and device
+          connection.
+        </Text>
+      </View>
+
       <Text style={styles.latestRecordText}>
-        Latest stored location: {relativeTime(latest?.recordedAt)}
+        Latest stored location:{" "}
+        {relativeTime(
+          latest?.recordedAt
+        )}
       </Text>
     </ScrollView>
   );
@@ -531,6 +985,19 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
+  childSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  childCount: {
+    color: colors.primaryDark,
+    fontSize: 11.5,
+    fontWeight: "900",
+    marginTop: 11,
+  },
+
   quickActions: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -562,15 +1029,24 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
-  childRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 15,
+  childRowContainer: {
     borderRadius: radius.md,
     backgroundColor: colors.white,
     borderWidth: 1,
     borderColor: colors.border,
+    marginBottom: 10,
+    overflow: "hidden",
     ...shadow.soft,
+  },
+
+  childRowDeleting: {
+    opacity: 0.65,
+  },
+
+  childRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 15,
   },
 
   childAvatar: {
@@ -594,10 +1070,31 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
 
+  childNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
   childName: {
+    flexShrink: 1,
     color: colors.ink,
     fontSize: 15.5,
     fontWeight: "900",
+  },
+
+  primaryBadge: {
+    marginLeft: 7,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 7,
+    backgroundColor: colors.softMint,
+  },
+
+  primaryBadgeText: {
+    color: colors.primaryDark,
+    fontSize: 7.5,
+    fontWeight: "900",
+    letterSpacing: 0.4,
   },
 
   childDetail: {
@@ -621,6 +1118,88 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 15,
     backgroundColor: colors.softMint,
+  },
+
+  deleteChildButton: {
+    minHeight: 46,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.dangerSoft,
+  },
+
+  deleteChildText: {
+    color: colors.danger,
+    fontSize: 12,
+    fontWeight: "900",
+    marginLeft: 7,
+  },
+
+  deletePressed: {
+    opacity: 0.7,
+  },
+
+  deleteDisabled: {
+    opacity: 0.6,
+  },
+
+  addChildButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 70,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    borderRadius: radius.md,
+    backgroundColor: colors.white,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderStyle: "dashed",
+    marginTop: 2,
+  },
+
+  addChildIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.softMint,
+  },
+
+  addChildCopy: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 8,
+  },
+
+  addChildTitle: {
+    color: colors.primaryDark,
+    fontSize: 14.5,
+    fontWeight: "900",
+  },
+
+  addChildDescription: {
+    color: colors.muted,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+
+  connectionInfo: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingHorizontal: 3,
+    marginTop: 12,
+  },
+
+  connectionInfoText: {
+    flex: 1,
+    color: colors.muted,
+    fontSize: 10.5,
+    lineHeight: 16,
+    marginLeft: 7,
   },
 
   latestRecordText: {

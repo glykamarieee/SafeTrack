@@ -44,6 +44,14 @@ interface AuthState {
   ) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
+
+  /*
+   * Child state helpers.
+   */
+  refreshLinkedChildren: () => Promise<void>;
+  removeLinkedChild: (childId: string) => void;
+  addLinkedChild: (child: Child) => void;
+  updateLinkedChild: (child: Child) => void;
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -152,7 +160,9 @@ async function loadGuardianState(
     throw new Error("Guardian profile was not found.");
   }
 
-  const linkedChildren = await fetchLinkedChildren(profile.guardian.id);
+  const linkedChildren = await fetchLinkedChildren(
+    profile.guardian.id
+  );
 
   set({
     role: "guardian",
@@ -202,7 +212,7 @@ function loadAdministratorState(
   });
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   isBootstrapped: false,
   isLoading: false,
   error: null,
@@ -215,6 +225,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   administrator: null,
   linkedChildren: [],
 
+  /*
+   * BOOTSTRAP
+   */
   bootstrap: async () => {
     set({
       isLoading: true,
@@ -238,7 +251,12 @@ export const useAuthStore = create<AuthState>((set) => ({
       });
 
       if (account.role === "admin" && account.person) {
-        loadAdministratorState(account.person, account.session, set);
+        loadAdministratorState(
+          account.person,
+          account.session,
+          set
+        );
+
         return;
       }
 
@@ -256,6 +274,8 @@ export const useAuthStore = create<AuthState>((set) => ({
         ...clearProfileState(),
       });
     } catch (error) {
+      console.error("[authStore.bootstrap]", error);
+
       set({
         error: getErrorMessage(
           error,
@@ -270,6 +290,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
+  /*
+   * LOGIN
+   */
   login: async (email, password) => {
     set({
       isLoading: true,
@@ -277,11 +300,17 @@ export const useAuthStore = create<AuthState>((set) => ({
     });
 
     try {
-      const signInResult = await signInWithPassword(email, password);
+      const signInResult = await signInWithPassword(
+        email,
+        password
+      );
+
       const session = signInResult.session;
 
       if (!session?.user) {
-        throw new Error("SafeTrack could not confirm your login session.");
+        throw new Error(
+          "SafeTrack could not confirm your login session."
+        );
       }
 
       set({
@@ -289,20 +318,24 @@ export const useAuthStore = create<AuthState>((set) => ({
       });
 
       /*
-        ADMIN LOGIN:
-        The account role comes from:
-        persons → person_roles → roles.
-      */
-      if (signInResult.role === "admin" && signInResult.person) {
-        loadAdministratorState(signInResult.person, session, set);
+       * ADMIN LOGIN
+       */
+      if (
+        signInResult.role === "admin" &&
+        signInResult.person
+      ) {
+        loadAdministratorState(
+          signInResult.person,
+          session,
+          set
+        );
+
         return;
       }
 
       /*
-        GUARDIAN LOGIN:
-        Existing Guardian profiles are loaded directly.
-        The profile RPC runs only if the Guardian profile is missing.
-      */
+       * GUARDIAN LOGIN
+       */
       if (signInResult.role === "guardian") {
         await loadOrProvisionGuardianState(
           session,
@@ -316,13 +349,14 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
 
       /*
-        Newly registered Guardian accounts may not yet have a persons/role row.
-        Provision the Guardian profile once, then load it.
-      */
+       * Newly registered Guardian accounts may not yet
+       * have a persons/role row.
+       */
       if (!signInResult.person) {
         await loadOrProvisionGuardianState(
           session,
-          session.user.email ?? email.trim().toLowerCase(),
+          session.user.email ??
+            email.trim().toLowerCase(),
           set
         );
 
@@ -336,7 +370,10 @@ export const useAuthStore = create<AuthState>((set) => ({
       console.error("[authStore.login]", error);
 
       set({
-        error: getErrorMessage(error, "Unable to sign in."),
+        error: getErrorMessage(
+          error,
+          "Unable to sign in."
+        ),
       });
 
       throw error;
@@ -347,19 +384,33 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  register: async (fullName, email, password) => {
+  /*
+   * REGISTER
+   */
+  register: async (
+    fullName,
+    email,
+    password
+  ) => {
     set({
       isLoading: true,
       error: null,
     });
 
     try {
-      await signUpGuardian(fullName, email, password);
+      await signUpGuardian(
+        fullName,
+        email,
+        password
+      );
 
       try {
         await signOutRequest();
       } catch {
-        // Supabase may not create an active session until email confirmation.
+        /*
+         * Supabase may not create an active session
+         * until email confirmation.
+         */
       }
 
       set({
@@ -367,10 +418,16 @@ export const useAuthStore = create<AuthState>((set) => ({
         ...clearProfileState(),
       });
     } catch (error) {
-      console.error("[authStore.register]", error);
+      console.error(
+        "[authStore.register]",
+        error
+      );
 
       set({
-        error: getErrorMessage(error, "Unable to create account."),
+        error: getErrorMessage(
+          error,
+          "Unable to create account."
+        ),
       });
 
       throw error;
@@ -381,6 +438,140 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
+  /*
+   * REFRESH CHILDREN
+   *
+   * This reloads the actual child_profiles records
+   * from Supabase.
+   */
+  refreshLinkedChildren: async () => {
+    const guardian = get().guardian;
+
+    if (!guardian?.id) {
+      set({
+        linkedChildren: [],
+      });
+
+      return;
+    }
+
+    try {
+      const children = await fetchLinkedChildren(
+        guardian.id
+      );
+
+      set({
+        linkedChildren: children,
+      });
+    } catch (error) {
+      console.error(
+        "[authStore.refreshLinkedChildren]",
+        error
+      );
+
+      set({
+        error: getErrorMessage(
+          error,
+          "Unable to refresh the registered children."
+        ),
+      });
+
+      throw error;
+    }
+  },
+
+  /*
+   * REMOVE CHILD FROM LOCAL STATE
+   *
+   * THIS IS THE IMPORTANT FIX.
+   *
+   * Once Supabase confirms deletion, the dashboard
+   * immediately removes the same child from Zustand.
+   */
+  removeLinkedChild: (childId: string) => {
+    if (!childId) {
+      return;
+    }
+
+    set((state) => {
+      const remainingChildren =
+        state.linkedChildren.filter(
+          (child) => child.id !== childId
+        );
+
+      /*
+       * If the currently selected child was deleted,
+       * automatically select the first remaining child.
+       *
+       * If there are no children left, child becomes null.
+       */
+      const currentChildWasDeleted =
+        state.child?.id === childId;
+
+      return {
+        linkedChildren: remainingChildren,
+        child: currentChildWasDeleted
+          ? remainingChildren[0] ?? null
+          : state.child,
+      };
+    });
+  },
+
+  /*
+   * ADD CHILD TO LOCAL STATE
+   *
+   * Useful after registering a new child.
+   */
+  addLinkedChild: (child: Child) => {
+    set((state) => {
+      const alreadyExists =
+        state.linkedChildren.some(
+          (existingChild) =>
+            existingChild.id === child.id
+        );
+
+      if (alreadyExists) {
+        return {
+          linkedChildren: state.linkedChildren.map(
+            (existingChild) =>
+              existingChild.id === child.id
+                ? child
+                : existingChild
+          ),
+        };
+      }
+
+      return {
+        linkedChildren: [
+          ...state.linkedChildren,
+          child,
+        ],
+      };
+    });
+  },
+
+  /*
+   * UPDATE CHILD IN LOCAL STATE
+   */
+  updateLinkedChild: (child: Child) => {
+    set((state) => ({
+      linkedChildren: state.linkedChildren.map(
+        (existingChild) =>
+          existingChild.id === child.id
+            ? child
+            : existingChild
+      ),
+
+      child:
+        state.child?.id === child.id
+          ? child
+          : state.child,
+    }));
+  },
+
+  /*
+   * LOGOUT
+   */
   logout: async () => {
     set({
       isLoading: true,
@@ -390,7 +581,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       await signOutRequest();
     } catch {
-      // Local SafeTrack state must still clear if Supabase is offline.
+      /*
+       * Local SafeTrack state must still clear
+       * if Supabase is offline.
+       */
     } finally {
       set({
         session: null,
@@ -400,6 +594,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
+  /*
+   * CLEAR ERROR
+   */
   clearError: () => {
     set({
       error: null,

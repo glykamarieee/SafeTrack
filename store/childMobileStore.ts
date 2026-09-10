@@ -5,7 +5,7 @@ import type {
   ChildMobileLocation,
   ChildMobileSosAlert,
   ChildSafeZoneStatus,
-} from "../types/childMobile";
+} from "../services/childMobileService";
 
 import {
   createChildMobileSosAlert,
@@ -49,10 +49,24 @@ interface ChildMobileState {
   clearError: () => void;
 }
 
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error && error.message
-    ? error.message
-    : fallback;
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error
+  ) {
+    const message = (error as { message?: unknown }).message;
+
+    if (typeof message === "string" && message.trim()) {
+      return message;
+    }
+  }
+
+  return fallback;
 }
 
 export const useChildMobileStore = create<ChildMobileState>(
@@ -65,6 +79,10 @@ export const useChildMobileStore = create<ChildMobileState>(
     latestLocation: null,
     safeZoneStatus: null,
     activeSos: null,
+
+    /* =====================================================
+       BOOTSTRAP
+    ===================================================== */
 
     bootstrap: async () => {
       set({
@@ -112,6 +130,10 @@ export const useChildMobileStore = create<ChildMobileState>(
       }
     },
 
+    /* =====================================================
+       LINK DEVICE
+    ===================================================== */
+
     linkDevice: async (code: string) => {
       set({
         isLoading: true,
@@ -119,7 +141,16 @@ export const useChildMobileStore = create<ChildMobileState>(
       });
 
       try {
-        const context = await linkChildMobileDevice(code);
+        const normalizedCode = code.trim().toUpperCase();
+
+        if (!normalizedCode) {
+          throw new Error(
+            "Please enter the child-device connection code."
+          );
+        }
+
+        const context =
+          await linkChildMobileDevice(normalizedCode);
 
         const [safeZoneStatus, activeSos] = await Promise.all([
           fetchChildSafeZoneStatus(),
@@ -151,6 +182,10 @@ export const useChildMobileStore = create<ChildMobileState>(
       }
     },
 
+    /* =====================================================
+       REFRESH DASHBOARD
+    ===================================================== */
+
     refreshDashboard: async () => {
       if (!get().context) {
         return;
@@ -162,12 +197,15 @@ export const useChildMobileStore = create<ChildMobileState>(
       });
 
       try {
-        const [context, safeZoneStatus, activeSos] =
-          await Promise.all([
-            fetchChildMobileContext(),
-            fetchChildSafeZoneStatus(),
-            fetchChildMobileActiveSos(),
-          ]);
+        const [
+          context,
+          safeZoneStatus,
+          activeSos,
+        ] = await Promise.all([
+          fetchChildMobileContext(),
+          fetchChildSafeZoneStatus(),
+          fetchChildMobileActiveSos(),
+        ]);
 
         if (!context) {
           set({
@@ -204,6 +242,10 @@ export const useChildMobileStore = create<ChildMobileState>(
       await get().refreshDashboard();
     },
 
+    /* =====================================================
+       LOCATION
+    ===================================================== */
+
     publishLocation: async () => {
       set({
         isLoading: true,
@@ -211,12 +253,16 @@ export const useChildMobileStore = create<ChildMobileState>(
       });
 
       try {
-        const latestLocation = await sendChildMobileLocation();
-        const safeZoneStatus = await fetchChildSafeZoneStatus();
+        const latestLocation =
+          await sendChildMobileLocation();
+
+        const safeZoneStatus =
+          await fetchChildSafeZoneStatus();
 
         set((state) => ({
           latestLocation,
           safeZoneStatus,
+
           context: state.context
             ? {
                 ...state.context,
@@ -246,6 +292,10 @@ export const useChildMobileStore = create<ChildMobileState>(
       await get().publishLocation();
     },
 
+    /* =====================================================
+       SOS
+    ===================================================== */
+
     triggerSos: async () => {
       set({
         isLoading: true,
@@ -254,15 +304,19 @@ export const useChildMobileStore = create<ChildMobileState>(
 
       try {
         /*
-          A fresh location is attempted first.
-          SOS can still continue using the latest stored location
-          if current location is temporarily unavailable.
-        */
+         * Attempt to obtain a fresh location first.
+         *
+         * If location permission or GPS temporarily fails,
+         * SOS will still continue using the latest location
+         * already stored in SafeTrack.
+         */
         try {
-          const latestLocation = await sendChildMobileLocation();
+          const latestLocation =
+            await sendChildMobileLocation();
 
           set((state) => ({
             latestLocation,
+
             context: state.context
               ? {
                   ...state.context,
@@ -271,10 +325,14 @@ export const useChildMobileStore = create<ChildMobileState>(
               : null,
           }));
         } catch {
-          // Keep SOS available even without a fresh location.
+          /*
+           * Do not block SOS because of a temporary
+           * location failure.
+           */
         }
 
-        const activeSos = await createChildMobileSosAlert();
+        const activeSos =
+          await createChildMobileSosAlert();
 
         set({
           activeSos,
@@ -297,9 +355,14 @@ export const useChildMobileStore = create<ChildMobileState>(
       }
     },
 
+    /* =====================================================
+       ACTIVE SOS
+    ===================================================== */
+
     refreshActiveSos: async () => {
       try {
-        const activeSos = await fetchChildMobileActiveSos();
+        const activeSos =
+          await fetchChildMobileActiveSos();
 
         set({
           activeSos,
@@ -314,17 +377,26 @@ export const useChildMobileStore = create<ChildMobileState>(
       }
     },
 
-    recordSosRealert: async () => {
-      const currentAlert = get().activeSos;
+    /* =====================================================
+       SOS RE-ALERT
+    ===================================================== */
 
-      if (!currentAlert || currentAlert.status !== "active") {
+    recordSosRealert: async () => {
+      const currentAlert =
+        get().activeSos;
+
+      if (
+        !currentAlert ||
+        currentAlert.status !== "active"
+      ) {
         return;
       }
 
       try {
-        const updatedAlert = await recordChildMobileSosRealert(
-          currentAlert.id
-        );
+        const updatedAlert =
+          await recordChildMobileSosRealert(
+            currentAlert.id
+          );
 
         set({
           activeSos: updatedAlert,
@@ -342,6 +414,10 @@ export const useChildMobileStore = create<ChildMobileState>(
     recordRealert: async () => {
       await get().recordSosRealert();
     },
+
+    /* =====================================================
+       DISCONNECT
+    ===================================================== */
 
     disconnectDevice: async () => {
       set({
@@ -380,6 +456,10 @@ export const useChildMobileStore = create<ChildMobileState>(
     disconnect: async () => {
       await get().disconnectDevice();
     },
+
+    /* =====================================================
+       ERROR
+    ===================================================== */
 
     clearError: () => {
       set({

@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { WebView } from "react-native-webview";
 import { Ionicons } from "@expo/vector-icons";
+
 import {
   safeTrackColors as colors,
   safeTrackRadius as radius,
@@ -130,8 +131,10 @@ function createMapHtml(
   const cleanCircles = circles
     .filter(
       (circle) =>
-        isValidCoordinate(Number(circle.latitude), Number(circle.longitude)) &&
-        Number(circle.radiusMeters) > 0
+        isValidCoordinate(
+          Number(circle.latitude),
+          Number(circle.longitude)
+        ) && Number(circle.radiusMeters) > 0
     )
     .map((circle) => ({
       ...circle,
@@ -143,7 +146,10 @@ function createMapHtml(
 
   const cleanPath = path
     .filter((point) =>
-      isValidCoordinate(Number(point.latitude), Number(point.longitude))
+      isValidCoordinate(
+        Number(point.latitude),
+        Number(point.longitude)
+      )
     )
     .map((point) => ({
       latitude: Number(point.latitude),
@@ -162,7 +168,9 @@ function createMapHtml(
 <!DOCTYPE html>
 <html lang="en">
 <head>
+
   <meta charset="UTF-8" />
+
   <meta
     name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
@@ -174,6 +182,7 @@ function createMapHtml(
   />
 
   <style>
+
     html,
     body,
     #map {
@@ -182,9 +191,14 @@ function createMapHtml(
       margin: 0;
       padding: 0;
       overflow: hidden;
-      background: #d7edf4;
+      background: #D7EDF4;
+      touch-action: none;
     }
 
+    /*
+     * Leaflet's built-in zoom control is hidden because
+     * SafeTrack provides its own native + / - controls.
+     */
     .leaflet-control-zoom {
       display: none !important;
     }
@@ -224,6 +238,10 @@ function createMapHtml(
       font-size: 11px;
       line-height: 1.45;
     }
+
+    /*
+     * SAFETRACK MARKERS
+     */
 
     .safetrack-marker {
       width: 44px;
@@ -272,235 +290,714 @@ function createMapHtml(
       border: 2px solid rgba(255,255,255,0.92);
       font-size: 9px;
     }
+
+    /*
+     * Improve touch interaction.
+     */
+
+    .leaflet-container {
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
   </style>
+
 </head>
 
 <body>
+
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script>
+
     const data = ${mapData};
 
+    /*
+     * MAP TILE SOURCES
+     */
+
     const MAP_SOURCES = {
+
       default: {
         url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 19,
+        maxZoom: 19
       },
+
       satellite: {
-        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        url:
+          "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         attribution:
           "Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
-        maxZoom: 19,
-      },
+        maxZoom: 19
+      }
+
     };
 
+    /*
+     * MAP INITIALIZATION
+     *
+     * IMPORTANT:
+     *
+     * touchZoom: true
+     *   Enables pinch-to-zoom.
+     *
+     * doubleClickZoom: true
+     *   Enables double-tap zoom on mobile.
+     *
+     * scrollWheelZoom: true
+     *   Enables mouse-wheel zoom where applicable.
+     *
+     * zoomAnimation: true
+     *   Enables smooth zoom animation.
+     */
+
     const map = L.map("map", {
+
       zoomControl: false,
+
       attributionControl: true,
+
       preferCanvas: true,
+
       minZoom: 4,
+
       maxZoom: 19,
+
+      touchZoom: true,
+
+      doubleClickZoom: true,
+
+      scrollWheelZoom: true,
+
+      boxZoom: true,
+
+      keyboard: true,
+
+      dragging: true,
+
+      zoomAnimation: true,
+
+      fadeAnimation: true,
+
+      markerZoomAnimation: true,
+
+      zoomAnimationThreshold: 4
+
     }).setView(
-      [data.defaultCenter.latitude, data.defaultCenter.longitude],
+
+      [
+        data.defaultCenter.latitude,
+        data.defaultCenter.longitude
+      ],
+
       data.defaultZoom
+
     );
 
+    /*
+     * Make Leaflet use smoother zoom transitions.
+     */
+
+    map.options.zoomAnimation = true;
+
+    map.options.fadeAnimation = true;
+
+    map.options.markerZoomAnimation = true;
+
     let activeLayer = null;
+
     let activeStyle = "default";
 
+    /*
+     * SEND MESSAGE TO REACT NATIVE
+     */
+
     function sendToApp(payload) {
+
       if (window.ReactNativeWebView) {
-        window.ReactNativeWebView.postMessage(JSON.stringify(payload));
+
+        window.ReactNativeWebView.postMessage(
+          JSON.stringify(payload)
+        );
+
       }
+
     }
+
+    /*
+     * MARKER SYMBOL
+     */
 
     function markerSymbol(kind) {
-      if (kind === "start") return "S";
-      if (kind === "end") return "E";
-      if (kind === "zone") return "Z";
-      if (kind === "sos") return "!";
+
+      if (kind === "start") {
+        return "S";
+      }
+
+      if (kind === "end") {
+        return "E";
+      }
+
+      if (kind === "zone") {
+        return "Z";
+      }
+
+      if (kind === "sos") {
+        return "!";
+      }
+
       return "•";
+
     }
 
-    function setSafeTrackMapStyle(nextStyle, notify = true) {
-      const source = MAP_SOURCES[nextStyle] || MAP_SOURCES.default;
+    /*
+     * MAP STYLE
+     */
+
+    function setSafeTrackMapStyle(
+      nextStyle,
+      notify = true
+    ) {
+
+      const source =
+        MAP_SOURCES[nextStyle] ||
+        MAP_SOURCES.default;
 
       if (activeLayer) {
-        map.removeLayer(activeLayer);
+
+        map.removeLayer(
+          activeLayer
+        );
+
       }
 
-      activeLayer = L.tileLayer(source.url, {
-        maxZoom: source.maxZoom,
-        attribution: source.attribution,
-      }).addTo(map);
+      activeLayer =
+        L.tileLayer(
+          source.url,
+          {
+            maxZoom:
+              source.maxZoom,
 
-      activeStyle = nextStyle;
+            attribution:
+              source.attribution,
+
+            updateWhenZooming:
+              true,
+
+            updateWhenIdle:
+              false,
+
+            keepBuffer:
+              4
+          }
+        ).addTo(map);
+
+      activeStyle =
+        nextStyle;
 
       if (notify) {
-        const center = map.getCenter();
+
+        const center =
+          map.getCenter();
 
         sendToApp({
+
           type: "map-state",
-          style: activeStyle,
-          zoom: map.getZoom(),
-          latitude: center.lat,
-          longitude: center.lng,
+
+          style:
+            activeStyle,
+
+          zoom:
+            map.getZoom(),
+
+          latitude:
+            center.lat,
+
+          longitude:
+            center.lng
+
         });
+
       }
+
     }
+
+    /*
+     * GET ALL CONTENT COORDINATES
+     */
 
     function getAllCoordinates() {
+
       const coordinates = [];
 
-      data.markers.forEach((marker) => {
-        coordinates.push([marker.latitude, marker.longitude]);
-      });
+      data.markers.forEach(
+        (marker) => {
 
-      data.circles.forEach((circle) => {
-        coordinates.push([circle.latitude, circle.longitude]);
-      });
+          coordinates.push([
+            marker.latitude,
+            marker.longitude
+          ]);
 
-      data.path.forEach((point) => {
-        coordinates.push([point.latitude, point.longitude]);
-      });
+        }
+      );
+
+      data.circles.forEach(
+        (circle) => {
+
+          coordinates.push([
+            circle.latitude,
+            circle.longitude
+          ]);
+
+        }
+      );
+
+      data.path.forEach(
+        (point) => {
+
+          coordinates.push([
+            point.latitude,
+            point.longitude
+          ]);
+
+        }
+      );
 
       return coordinates;
+
     }
 
+    /*
+     * RECENTER / FIT CONTENT
+     */
+
     function fitSafeTrackContent() {
-      const coordinates = getAllCoordinates();
+
+      const coordinates =
+        getAllCoordinates();
 
       if (!coordinates.length) {
+
         map.flyTo(
-          [data.defaultCenter.latitude, data.defaultCenter.longitude],
+
+          [
+            data.defaultCenter.latitude,
+            data.defaultCenter.longitude
+          ],
+
           data.defaultZoom,
+
           {
             animate: true,
             duration: 0.65,
+            easeLinearity: 0.25
           }
+
         );
+
         return;
+
       }
 
       if (coordinates.length === 1) {
-        map.flyTo(coordinates[0], 15, {
-          animate: true,
-          duration: 0.65,
-        });
+
+        map.flyTo(
+
+          coordinates[0],
+
+          15,
+
+          {
+            animate: true,
+            duration: 0.65,
+            easeLinearity: 0.25
+          }
+
+        );
+
         return;
+
       }
 
-      map.fitBounds(coordinates, {
-        padding: [34, 34],
-        maxZoom: 15,
-        animate: true,
-      });
+      map.fitBounds(
+
+        coordinates,
+
+        {
+          padding: [
+            34,
+            34
+          ],
+
+          maxZoom: 15,
+
+          animate: true,
+
+          duration: 0.65,
+
+          easeLinearity: 0.25
+        }
+
+      );
+
     }
 
-    window.safeTrackResetMap = fitSafeTrackContent;
+    /*
+     * SAFE TRACK ZOOM FUNCTIONS
+     */
 
-    window.safeTrackSetMapStyle = function (style) {
-      setSafeTrackMapStyle(style, true);
+    function zoomIn() {
+
+      map.setZoom(
+
+        Math.min(
+          map.getZoom() + 1,
+          map.getMaxZoom()
+        ),
+
+        {
+          animate: true
+        }
+
+      );
+
+    }
+
+    function zoomOut() {
+
+      map.setZoom(
+
+        Math.max(
+          map.getZoom() - 1,
+          map.getMinZoom()
+        ),
+
+        {
+          animate: true
+        }
+
+      );
+
+    }
+
+    /*
+     * Expose functions to React Native.
+     */
+
+    window.safeTrackResetMap =
+      fitSafeTrackContent;
+
+    window.safeTrackZoomIn =
+      zoomIn;
+
+    window.safeTrackZoomOut =
+      zoomOut;
+
+    window.safeTrackSetMapStyle =
+      function(style) {
+
+        setSafeTrackMapStyle(
+          style,
+          true
+        );
+
     };
 
-    setSafeTrackMapStyle("default", false);
+    /*
+     * INITIAL MAP STYLE
+     */
 
-    if (data.path.length > 1) {
-      L.polyline(data.path, {
-        color: "#188f5a",
-        weight: 4,
-        opacity: 0.86,
-        lineCap: "round",
-        lineJoin: "round",
-      }).addTo(map);
+    setSafeTrackMapStyle(
+      "default",
+      false
+    );
+
+    /*
+     * ROUTE / PATH
+     */
+
+    if (
+      data.path.length > 1
+    ) {
+
+      L.polyline(
+
+        data.path,
+
+        {
+
+          color: "#188f5a",
+
+          weight: 4,
+
+          opacity: 0.86,
+
+          lineCap: "round",
+
+          lineJoin: "round",
+
+          smoothFactor: 1.2
+
+        }
+
+      ).addTo(map);
+
     }
 
-    data.circles.forEach((circle) => {
-      const enabled = circle.enabled !== false;
+    /*
+     * SAFE ZONES
+     */
 
-      const zoneCircle = L.circle(
-        [circle.latitude, circle.longitude],
-        {
-          radius: circle.radiusMeters,
-          color: enabled ? "#19885a" : "#718178",
-          weight: 2,
-          opacity: 0.82,
-          fillColor: enabled ? "#4ecb8d" : "#aab7b1",
-          fillOpacity: enabled ? 0.18 : 0.11,
-        }
-      ).addTo(map);
+    data.circles.forEach(
+      (circle) => {
 
-      zoneCircle.bindPopup(
-        '<div class="popup-title">' +
-          circle.label +
-        '</div>' +
-        '<div class="popup-detail">' +
-          Math.round(circle.radiusMeters) +
-          ' meter safe-zone radius</div>'
-      );
-    });
+        const enabled =
+          circle.enabled !== false;
 
-    data.markers.forEach((marker) => {
-      const kind = marker.kind || "location";
+        const zoneCircle =
+          L.circle(
 
-      const icon = L.divIcon({
-        className: "",
-        html:
-          '<div class="safetrack-marker marker-' +
-          kind +
-          '"><div class="marker-inner">' +
-          markerSymbol(kind) +
-          '</div></div>',
-        iconSize: [44, 44],
-        iconAnchor: [22, 22],
-        popupAnchor: [0, -23],
-      });
+            [
+              circle.latitude,
+              circle.longitude
+            ],
 
-      const leafletMarker = L.marker(
-        [marker.latitude, marker.longitude],
-        { icon: icon }
-      ).addTo(map);
+            {
 
-      leafletMarker.bindPopup(
-        '<div class="popup-title">' +
-          marker.title +
-        '</div>' +
-        '<div class="popup-detail">' +
-          marker.detail +
-        '</div>'
-      );
-    });
+              radius:
+                circle.radiusMeters,
+
+              color:
+                enabled
+                  ? "#19885a"
+                  : "#718178",
+
+              weight: 2,
+
+              opacity: 0.82,
+
+              fillColor:
+                enabled
+                  ? "#4ecb8d"
+                  : "#aab7b1",
+
+              fillOpacity:
+                enabled
+                  ? 0.18
+                  : 0.11
+
+            }
+
+          ).addTo(map);
+
+        zoneCircle.bindPopup(
+
+          '<div class="popup-title">' +
+
+            circle.label +
+
+          '</div>' +
+
+          '<div class="popup-detail">' +
+
+            Math.round(
+              circle.radiusMeters
+            ) +
+
+            ' meter safe-zone radius</div>'
+
+        );
+
+      }
+    );
+
+    /*
+     * MARKERS
+     */
+
+    data.markers.forEach(
+      (marker) => {
+
+        const kind =
+          marker.kind ||
+          "location";
+
+        const icon =
+          L.divIcon({
+
+            className: "",
+
+            html:
+
+              '<div class="safetrack-marker marker-' +
+
+              kind +
+
+              '">' +
+
+                '<div class="marker-inner">' +
+
+                  markerSymbol(
+                    kind
+                  ) +
+
+                '</div>' +
+
+              '</div>',
+
+            iconSize: [
+              44,
+              44
+            ],
+
+            iconAnchor: [
+              22,
+              22
+            ],
+
+            popupAnchor: [
+              0,
+              -23
+            ]
+
+          });
+
+        const leafletMarker =
+          L.marker(
+
+            [
+              marker.latitude,
+              marker.longitude
+            ],
+
+            {
+              icon:
+                icon
+            }
+
+          ).addTo(map);
+
+        leafletMarker.bindPopup(
+
+          '<div class="popup-title">' +
+
+            marker.title +
+
+          '</div>' +
+
+          '<div class="popup-detail">' +
+
+            marker.detail +
+
+          '</div>'
+
+        );
+
+      }
+    );
+
+    /*
+     * INITIAL VIEW
+     */
 
     fitSafeTrackContent();
 
-    map.on("moveend", function () {
-      const center = map.getCenter();
+    /*
+     * MAP STATE
+     */
 
-      sendToApp({
-        type: "map-state",
-        style: activeStyle,
-        zoom: map.getZoom(),
-        latitude: center.lat,
-        longitude: center.lng,
-      });
-    });
+    map.on(
+      "moveend",
+      function() {
 
-    map.on("click", function (event) {
-      sendToApp({
-        type: "map-press",
-        latitude: event.latlng.lat,
-        longitude: event.latlng.lng,
-      });
-    });
+        const center =
+          map.getCenter();
 
-    setTimeout(function () {
-      map.invalidateSize();
-    }, 350);
+        sendToApp({
+
+          type:
+            "map-state",
+
+          style:
+            activeStyle,
+
+          zoom:
+            map.getZoom(),
+
+          latitude:
+            center.lat,
+
+          longitude:
+            center.lng
+
+        });
+
+      }
+    );
+
+    /*
+     * MAP PRESS
+     */
+
+    map.on(
+      "click",
+      function(event) {
+
+        sendToApp({
+
+          type:
+            "map-press",
+
+          latitude:
+            event.latlng.lat,
+
+          longitude:
+            event.latlng.lng
+
+        });
+
+      }
+    );
+
+    /*
+     * Prevent the WebView from treating a pinch
+     * as ordinary page scrolling.
+     */
+
+    document.addEventListener(
+      "gesturestart",
+      function(event) {
+
+        event.preventDefault();
+
+      },
+      {
+        passive: false
+      }
+    );
+
+    /*
+     * Make sure the map gets the correct WebView size.
+     */
+
+    setTimeout(
+      function() {
+
+        map.invalidateSize(
+          false
+        );
+
+      },
+      350
+    );
+
   </script>
+
 </body>
 </html>
 `;
@@ -521,337 +1018,1189 @@ export function SafeTrackInteractiveMap({
   onMapStateChange,
   onMapPress,
 }: SafeTrackInteractiveMapProps) {
-  const webViewRef = useRef<WebView>(null);
-  const lastRecenterSignal = useRef(recenterSignal);
 
-  const [mapStyle, setMapStyle] = useState<SafeTrackMapStyle>("default");
-  const [showStyleMenu, setShowStyleMenu] = useState(false);
+  const webViewRef =
+    useRef<WebView>(null);
 
-  const mapHtml = useMemo(
-    () =>
-      createMapHtml(
+  const lastRecenterSignal =
+    useRef(recenterSignal);
+
+  const [mapStyle, setMapStyle] =
+    useState<SafeTrackMapStyle>(
+      "default"
+    );
+
+  const [showStyleMenu, setShowStyleMenu] =
+    useState(false);
+
+  const mapHtml =
+    useMemo(
+      () =>
+        createMapHtml(
+          markers,
+          circles,
+          path,
+          defaultCenter,
+          defaultZoom
+        ),
+
+      [
         markers,
         circles,
         path,
         defaultCenter,
         defaultZoom
-      ),
-    [markers, circles, path, defaultCenter, defaultZoom]
-  );
+      ]
+    );
 
-  const injectMapStyle = useCallback((styleToApply: SafeTrackMapStyle) => {
-    webViewRef.current?.injectJavaScript(`
-      if (window.safeTrackSetMapStyle) {
-        window.safeTrackSetMapStyle(${JSON.stringify(styleToApply)});
-      }
-      true;
-    `);
-  }, []);
+  /*
+   * MAP STYLE
+   */
+
+  const injectMapStyle =
+    useCallback(
+      (
+        styleToApply:
+          SafeTrackMapStyle
+      ) => {
+
+        webViewRef.current?.injectJavaScript(`
+
+          if (
+            window.safeTrackSetMapStyle
+          ) {
+
+            window.safeTrackSetMapStyle(
+              ${JSON.stringify(
+                styleToApply
+              )}
+            );
+
+          }
+
+          true;
+
+        `);
+
+      },
+      []
+    );
+
+  /*
+   * ZOOM IN
+   */
+
+  const zoomIn =
+    useCallback(() => {
+
+      webViewRef.current?.injectJavaScript(`
+
+        if (
+          window.safeTrackZoomIn
+        ) {
+
+          window.safeTrackZoomIn();
+
+        }
+
+        true;
+
+      `);
+
+    }, []);
+
+  /*
+   * ZOOM OUT
+   */
+
+  const zoomOut =
+    useCallback(() => {
+
+      webViewRef.current?.injectJavaScript(`
+
+        if (
+          window.safeTrackZoomOut
+        ) {
+
+          window.safeTrackZoomOut();
+
+        }
+
+        true;
+
+      `);
+
+    }, []);
+
+  /*
+   * RECENTER
+   */
+
+  const recenterMap =
+    useCallback(() => {
+
+      webViewRef.current?.injectJavaScript(`
+
+        if (
+          window.safeTrackResetMap
+        ) {
+
+          window.safeTrackResetMap();
+
+        }
+
+        true;
+
+      `);
+
+    }, []);
+
+  /*
+   * RECENTER SIGNAL
+   */
 
   useEffect(() => {
-    if (lastRecenterSignal.current === recenterSignal) {
+
+    if (
+      lastRecenterSignal.current ===
+      recenterSignal
+    ) {
+
       return;
+
     }
 
-    lastRecenterSignal.current = recenterSignal;
+    lastRecenterSignal.current =
+      recenterSignal;
 
-    webViewRef.current?.injectJavaScript(`
-      if (window.safeTrackResetMap) {
-        window.safeTrackResetMap();
+    recenterMap();
+
+  }, [
+    recenterSignal,
+    recenterMap
+  ]);
+
+  /*
+   * WEBVIEW MESSAGE HANDLER
+   */
+
+  const handleMapMessage =
+    (
+      event: {
+        nativeEvent: {
+          data: string;
+        };
       }
-      true;
-    `);
-  }, [recenterSignal]);
+    ) => {
 
-  const handleMapMessage = (event: { nativeEvent: { data: string } }) => {
-    try {
-      const payload = JSON.parse(event.nativeEvent.data) as {
-        type?: string;
-        style?: SafeTrackMapStyle;
-        zoom?: number;
-        latitude?: number;
-        longitude?: number;
-      };
+      try {
 
-      if (
-        payload.type === "map-state" &&
-        payload.style &&
-        typeof payload.zoom === "number" &&
-        typeof payload.latitude === "number" &&
-        typeof payload.longitude === "number"
-      ) {
-        const nextStyle =
-          payload.style === "satellite" ? "satellite" : "default";
+        const payload =
+          JSON.parse(
+            event.nativeEvent.data
+          ) as {
 
-        setMapStyle(nextStyle);
+            type?: string;
 
-        onMapStateChange?.({
-          style: nextStyle,
-          zoom: Math.round(payload.zoom),
-          latitude: payload.latitude,
-          longitude: payload.longitude,
-        });
+            style?:
+              SafeTrackMapStyle;
+
+            zoom?: number;
+
+            latitude?: number;
+
+            longitude?: number;
+
+          };
+
+        /*
+         * MAP STATE
+         */
+
+        if (
+
+          payload.type ===
+            "map-state" &&
+
+          payload.style &&
+
+          typeof payload.zoom ===
+            "number" &&
+
+          typeof payload.latitude ===
+            "number" &&
+
+          typeof payload.longitude ===
+            "number"
+
+        ) {
+
+          const nextStyle =
+            payload.style ===
+            "satellite"
+              ? "satellite"
+              : "default";
+
+          setMapStyle(
+            nextStyle
+          );
+
+          onMapStateChange?.({
+
+            style:
+              nextStyle,
+
+            zoom:
+              Math.round(
+                payload.zoom
+              ),
+
+            latitude:
+              payload.latitude,
+
+            longitude:
+              payload.longitude
+
+          });
+
+        }
+
+        /*
+         * MAP PRESS
+         */
+
+        if (
+
+          payload.type ===
+            "map-press" &&
+
+          typeof payload.latitude ===
+            "number" &&
+
+          typeof payload.longitude ===
+            "number"
+
+        ) {
+
+          onMapPress?.({
+
+            latitude:
+              payload.latitude,
+
+            longitude:
+              payload.longitude
+
+          });
+
+        }
+
+      } catch {
+
+        /*
+         * Ignore malformed
+         * WebView messages.
+         */
+
       }
 
-      if (
-        payload.type === "map-press" &&
-        typeof payload.latitude === "number" &&
-        typeof payload.longitude === "number"
-      ) {
-        onMapPress?.({
-          latitude: payload.latitude,
-          longitude: payload.longitude,
-        });
-      }
-    } catch {
-      // Ignore unexpected WebView messages safely.
-    }
-  };
+    };
 
-  const selectMapStyle = (nextStyle: SafeTrackMapStyle) => {
-    setMapStyle(nextStyle);
-    setShowStyleMenu(false);
-    injectMapStyle(nextStyle);
-  };
+  /*
+   * SELECT MAP STYLE
+   */
+
+  const selectMapStyle =
+    (
+      nextStyle:
+        SafeTrackMapStyle
+    ) => {
+
+      setMapStyle(
+        nextStyle
+      );
+
+      setShowStyleMenu(
+        false
+      );
+
+      injectMapStyle(
+        nextStyle
+      );
+
+    };
 
   return (
-    <View style={[styles.root, { height }, style]}>
+
+    <View
+      style={[
+        styles.root,
+        {
+          height
+        },
+        style
+      ]}
+    >
+
       <WebView
         ref={webViewRef}
-        source={{ html: mapHtml }}
-        originWhitelist={["*"]}
-        javaScriptEnabled
-        domStorageEnabled
-        scrollEnabled={false}
-        showsVerticalScrollIndicator={false}
-        showsHorizontalScrollIndicator={false}
-        mixedContentMode="compatibility"
-        onMessage={handleMapMessage}
-        onLoadEnd={() => {
-          setTimeout(() => {
-            injectMapStyle(mapStyle);
-          }, 180);
+
+        source={{
+          html:
+            mapHtml
         }}
-        style={styles.webView}
+
+        originWhitelist={[
+          "*"
+        ]}
+
+        javaScriptEnabled
+
+        domStorageEnabled
+
+        scrollEnabled={
+          false
+        }
+
+        showsVerticalScrollIndicator={
+          false
+        }
+
+        showsHorizontalScrollIndicator={
+          false
+        }
+
+        mixedContentMode={
+          "compatibility"
+        }
+
+        bounces={
+          false
+        }
+
+        overScrollMode={
+          "never"
+        }
+
+        onMessage={
+          handleMapMessage
+        }
+
+        onLoadEnd={() => {
+
+          setTimeout(
+            () => {
+
+              injectMapStyle(
+                mapStyle
+              );
+
+            },
+            180
+          );
+
+        }}
+
+        style={
+          styles.webView
+        }
+
       />
 
-      {showMapStyleControl ? (
-        <View pointerEvents="box-none" style={styles.overlay}>
+      {/*
+       * MAP CONTROLS
+       */}
+
+      <View
+        pointerEvents="box-none"
+        style={
+          styles.overlay
+        }
+      >
+
+        {/*
+         * MAP STYLE CONTROL
+         */}
+
+        {showMapStyleControl ? (
+
           <View
             style={[
               styles.mapStyleControl,
+
               {
-                top: mapStyleControlTop,
-                left: mapStyleControlLeft,
-              },
+                top:
+                  mapStyleControlTop,
+
+                left:
+                  mapStyleControlLeft
+              }
+
             ]}
           >
+
             <Pressable
-              onPress={() => setShowStyleMenu((value) => !value)}
-              style={({ pressed }) => [
+              onPress={() =>
+                setShowStyleMenu(
+                  value =>
+                    !value
+                )
+              }
+
+              style={({
+                pressed
+              }) => [
+
                 styles.mapStyleButton,
-                showStyleMenu && styles.mapStyleButtonOpen,
-                pressed && styles.pressed,
+
+                showStyleMenu &&
+                  styles.mapStyleButtonOpen,
+
+                pressed &&
+                  styles.pressed
+
               ]}
             >
+
               <Ionicons
-                name="layers-outline"
-                size={18}
-                color={showStyleMenu ? colors.white : colors.primaryDark}
+                name={
+                  "layers-outline"
+                }
+
+                size={
+                  18
+                }
+
+                color={
+                  showStyleMenu
+                    ? colors.white
+                    : colors.primaryDark
+                }
               />
 
               <Text
                 style={[
                   styles.mapStyleText,
-                  showStyleMenu && styles.mapStyleTextOpen,
+
+                  showStyleMenu &&
+                    styles.mapStyleTextOpen
                 ]}
               >
                 Map style
               </Text>
 
               <Ionicons
-                name={showStyleMenu ? "chevron-up" : "chevron-down"}
-                size={16}
-                color={showStyleMenu ? colors.white : colors.primaryDark}
+                name={
+                  showStyleMenu
+                    ? "chevron-up"
+                    : "chevron-down"
+                }
+
+                size={
+                  16
+                }
+
+                color={
+                  showStyleMenu
+                    ? colors.white
+                    : colors.primaryDark
+                }
               />
+
             </Pressable>
 
             {showStyleMenu ? (
-              <View style={styles.mapStyleMenu}>
-                {MAP_OPTIONS.map((option, index) => {
-                  const selected = mapStyle === option.key;
 
-                  return (
-                    <View key={option.key}>
-                      {index > 0 ? <View style={styles.menuDivider} /> : null}
+              <View
+                style={
+                  styles.mapStyleMenu
+                }
+              >
 
-                      <Pressable
-                        onPress={() => selectMapStyle(option.key)}
-                        style={({ pressed }) => [
-                          styles.mapStyleOption,
-                          selected && styles.mapStyleOptionSelected,
-                          pressed && styles.pressed,
-                        ]}
+                {MAP_OPTIONS.map(
+                  (
+                    option,
+                    index
+                  ) => {
+
+                    const selected =
+                      mapStyle ===
+                      option.key;
+
+                    return (
+
+                      <View
+                        key={
+                          option.key
+                        }
                       >
-                        <View
-                          style={[
-                            styles.menuIcon,
-                            selected && styles.menuIconSelected,
-                          ]}
-                        >
-                          <Ionicons
-                            name={option.icon}
-                            size={18}
-                            color={
-                              selected
-                                ? colors.white
-                                : colors.primaryDark
+
+                        {index > 0 ? (
+                          <View
+                            style={
+                              styles.menuDivider
                             }
                           />
-                        </View>
+                        ) : null}
 
-                        <View style={styles.menuCopy}>
-                          <Text
+                        <Pressable
+                          onPress={() =>
+                            selectMapStyle(
+                              option.key
+                            )
+                          }
+
+                          style={({
+                            pressed
+                          }) => [
+
+                            styles.mapStyleOption,
+
+                            selected &&
+                              styles.mapStyleOptionSelected,
+
+                            pressed &&
+                              styles.pressed
+
+                          ]}
+                        >
+
+                          <View
                             style={[
-                              styles.menuTitle,
-                              selected && styles.menuTitleSelected,
+                              styles.menuIcon,
+
+                              selected &&
+                                styles.menuIconSelected
                             ]}
                           >
-                            {option.label}
-                          </Text>
 
-                          <Text style={styles.menuDescription}>
-                            {option.description}
-                          </Text>
-                        </View>
+                            <Ionicons
+                              name={
+                                option.icon
+                              }
 
-                        {selected ? (
-                          <Ionicons
-                            name="checkmark-circle"
-                            size={20}
-                            color={colors.primary}
-                          />
-                        ) : null}
-                      </Pressable>
-                    </View>
-                  );
-                })}
+                              size={
+                                18
+                              }
+
+                              color={
+                                selected
+                                  ? colors.white
+                                  : colors.primaryDark
+                              }
+                            />
+
+                          </View>
+
+                          <View
+                            style={
+                              styles.menuCopy
+                            }
+                          >
+
+                            <Text
+                              style={[
+                                styles.menuTitle,
+
+                                selected &&
+                                  styles.menuTitleSelected
+                              ]}
+                            >
+                              {
+                                option.label
+                              }
+                            </Text>
+
+                            <Text
+                              style={
+                                styles.menuDescription
+                              }
+                            >
+                              {
+                                option.description
+                              }
+                            </Text>
+
+                          </View>
+
+                          {selected ? (
+
+                            <Ionicons
+                              name={
+                                "checkmark-circle"
+                              }
+
+                              size={
+                                20
+                              }
+
+                              color={
+                                colors.primary
+                              }
+                            />
+
+                          ) : null}
+
+                        </Pressable>
+
+                      </View>
+
+                    );
+
+                  }
+                )}
+
               </View>
+
             ) : null}
+
           </View>
+
+        ) : null}
+
+        {/*
+         * ZOOM CONTROLS
+         *
+         * Positioned on the right side.
+         */}
+
+        <View
+          style={[
+            styles.zoomControls,
+
+            {
+              top:
+                mapStyleControlTop
+            }
+          ]}
+        >
+
+          {/*
+           * PLUS
+           */}
+
+          <Pressable
+            accessibilityLabel="Zoom in"
+            onPress={
+              zoomIn
+            }
+
+            style={({
+              pressed
+            }) => [
+
+              styles.zoomButton,
+
+              styles.zoomButtonTop,
+
+              pressed &&
+                styles.zoomButtonPressed
+
+            ]}
+          >
+
+            <Ionicons
+              name="add"
+              size={24}
+              color={
+                colors.primaryDark
+              }
+            />
+
+          </Pressable>
+
+          {/*
+           * DIVIDER
+           */}
+
+          <View
+            style={
+              styles.zoomDivider
+            }
+          />
+
+          {/*
+           * MINUS
+           */}
+
+          <Pressable
+            accessibilityLabel="Zoom out"
+            onPress={
+              zoomOut
+            }
+
+            style={({
+              pressed
+            }) => [
+
+              styles.zoomButton,
+
+              styles.zoomButtonBottom,
+
+              pressed &&
+                styles.zoomButtonPressed
+
+            ]}
+          >
+
+            <Ionicons
+              name="remove"
+              size={24}
+              color={
+                colors.primaryDark
+              }
+            />
+
+          </Pressable>
+
         </View>
-      ) : null}
+
+        {/*
+         * RECENTER
+         */}
+
+        <View
+          style={
+            styles.recenterControl
+          }
+        >
+
+          <Pressable
+            accessibilityLabel="Recenter map"
+            onPress={
+              recenterMap
+            }
+
+            style={({
+              pressed
+            }) => [
+
+              styles.recenterButton,
+
+              pressed &&
+                styles.recenterButtonPressed
+
+            ]}
+          >
+
+            <Ionicons
+              name="locate-outline"
+              size={23}
+              color={
+                colors.primaryDark
+              }
+            />
+
+          </Pressable>
+
+        </View>
+
+      </View>
+
     </View>
+
   );
+
 }
 
-const styles = StyleSheet.create({
-  root: {
-    overflow: "hidden",
-    backgroundColor: "#D7EDF4",
-  },
+const styles =
+  StyleSheet.create({
 
-  webView: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: "#D7EDF4",
-  },
+    root: {
 
-  overlay: {
-    ...StyleSheet.absoluteFill,
-  },
+      overflow:
+        "hidden",
 
-  mapStyleControl: {
-    position: "absolute",
-    width: 154,
-  },
+      backgroundColor:
+        "#D7EDF4"
 
-  mapStyleButton: {
-    minHeight: 42,
-    paddingHorizontal: 12,
-    borderRadius: radius.sm,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.96)",
-    ...shadow.soft,
-  },
+    },
 
-  mapStyleButtonOpen: {
-    backgroundColor: colors.primary,
-  },
+    /*
+     * IMPORTANT:
+     *
+     * We intentionally use absoluteFill
+     * instead of absoluteFillObject because
+     * your React Native version does not expose
+     * StyleSheet.absoluteFillObject.
+     */
 
-  mapStyleText: {
-    flex: 1,
-    marginLeft: 7,
-    color: colors.primaryDark,
-    fontSize: 12,
-    fontWeight: "900",
-  },
+    webView: {
 
-  mapStyleTextOpen: {
-    color: colors.white,
-  },
+      ...StyleSheet.absoluteFill,
 
-  mapStyleMenu: {
-    overflow: "hidden",
-    marginTop: 8,
-    borderRadius: radius.md,
-    backgroundColor: "rgba(255,255,255,0.98)",
-    ...shadow.card,
-  },
+      backgroundColor:
+        "#D7EDF4"
 
-  mapStyleOption: {
-    minHeight: 62,
-    paddingHorizontal: 11,
-    flexDirection: "row",
-    alignItems: "center",
-  },
+    },
 
-  mapStyleOptionSelected: {
-    backgroundColor: "#F0F8F3",
-  },
+    overlay: {
 
-  menuIcon: {
-    width: 35,
-    height: 35,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.softMint,
-  },
+      ...StyleSheet.absoluteFill
 
-  menuIconSelected: {
-    backgroundColor: colors.primary,
-  },
+    },
 
-  menuCopy: {
-    flex: 1,
-    marginLeft: 9,
-  },
+    /*
+     * MAP STYLE
+     */
 
-  menuTitle: {
-    color: colors.ink,
-    fontSize: 12.5,
-    fontWeight: "900",
-  },
+    mapStyleControl: {
 
-  menuTitleSelected: {
-    color: colors.primaryDark,
-  },
+      position:
+        "absolute",
 
-  menuDescription: {
-    color: colors.muted,
-    fontSize: 10.5,
-    marginTop: 2,
-  },
+      width:
+        154
 
-  menuDivider: {
-    height: 1,
-    marginLeft: 56,
-    backgroundColor: colors.border,
-  },
+    },
 
-  pressed: {
-    opacity: 0.74,
-    transform: [{ scale: 0.97 }],
-  },
-});
+    mapStyleButton: {
+
+      minHeight:
+        42,
+
+      paddingHorizontal:
+        12,
+
+      borderRadius:
+        radius.sm,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      backgroundColor:
+        "rgba(255,255,255,0.96)",
+
+      ...shadow.soft
+
+    },
+
+    mapStyleButtonOpen: {
+
+      backgroundColor:
+        colors.primary
+
+    },
+
+    mapStyleText: {
+
+      flex:
+        1,
+
+      marginLeft:
+        7,
+
+      color:
+        colors.primaryDark,
+
+      fontSize:
+        12,
+
+      fontWeight:
+        "900"
+
+    },
+
+    mapStyleTextOpen: {
+
+      color:
+        colors.white
+
+    },
+
+    mapStyleMenu: {
+
+      overflow:
+        "hidden",
+
+      marginTop:
+        8,
+
+      borderRadius:
+        radius.md,
+
+      backgroundColor:
+        "rgba(255,255,255,0.98)",
+
+      ...shadow.card
+
+    },
+
+    mapStyleOption: {
+
+      minHeight:
+        62,
+
+      paddingHorizontal:
+        11,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center"
+
+    },
+
+    mapStyleOptionSelected: {
+
+      backgroundColor:
+        "#F0F8F3"
+
+    },
+
+    menuIcon: {
+
+      width:
+        35,
+
+      height:
+        35,
+
+      borderRadius:
+        12,
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+
+      backgroundColor:
+        colors.softMint
+
+    },
+
+    menuIconSelected: {
+
+      backgroundColor:
+        colors.primary
+
+    },
+
+    menuCopy: {
+
+      flex:
+        1,
+
+      marginLeft:
+        9
+
+    },
+
+    menuTitle: {
+
+      color:
+        colors.ink,
+
+      fontSize:
+        12.5,
+
+      fontWeight:
+        "900"
+
+    },
+
+    menuTitleSelected: {
+
+      color:
+        colors.primaryDark
+
+    },
+
+    menuDescription: {
+
+      color:
+        colors.muted,
+
+      fontSize:
+        10.5,
+
+      marginTop:
+        2
+
+    },
+
+    menuDivider: {
+
+      height:
+        1,
+
+      marginLeft:
+        56,
+
+      backgroundColor:
+        colors.border
+
+    },
+
+    /*
+     * ZOOM CONTROLS
+     */
+
+    zoomControls: {
+
+      position:
+        "absolute",
+
+      right:
+        14,
+
+      width:
+        44,
+
+      borderRadius:
+        13,
+
+      overflow:
+        "hidden",
+
+      backgroundColor:
+        "rgba(255,255,255,0.97)",
+
+      ...shadow.card
+
+    },
+
+    zoomButton: {
+
+      width:
+        44,
+
+      height:
+        44,
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+
+      backgroundColor:
+        "rgba(255,255,255,0.97)"
+
+    },
+
+    zoomButtonTop: {
+
+      borderTopLeftRadius:
+        13,
+
+      borderTopRightRadius:
+        13
+
+    },
+
+    zoomButtonBottom: {
+
+      borderBottomLeftRadius:
+        13,
+
+      borderBottomRightRadius:
+        13
+
+    },
+
+    zoomDivider: {
+
+      height:
+        1,
+
+      marginHorizontal:
+        8,
+
+      backgroundColor:
+        colors.border
+
+    },
+
+    zoomButtonPressed: {
+
+      backgroundColor:
+        "#E8F4ED",
+
+      transform: [
+        {
+          scale:
+            0.94
+        }
+      ]
+
+    },
+
+    /*
+     * RECENTER
+     */
+
+    recenterControl: {
+
+      position:
+        "absolute",
+
+      right:
+        14,
+
+      bottom:
+        14
+
+    },
+
+    recenterButton: {
+
+      width:
+        48,
+
+      height:
+        48,
+
+      borderRadius:
+        24,
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+
+      backgroundColor:
+        "rgba(255,255,255,0.97)",
+
+      ...shadow.card
+
+    },
+
+    recenterButtonPressed: {
+
+      backgroundColor:
+        "#E8F4ED",
+
+      transform: [
+        {
+          scale:
+            0.94
+        }
+      ]
+
+    },
+
+    /*
+     * GENERAL PRESS STATE
+     */
+
+    pressed: {
+
+      opacity:
+        0.74,
+
+      transform: [
+        {
+          scale:
+            0.97
+        }
+      ]
+
+    }
+
+  });

@@ -5,7 +5,6 @@ import { supabase } from "../lib/supabase";
 
 /* =========================================================
    CHILD MOBILE TYPES
-   Kept inside this service to avoid the broken type-path issue.
 ========================================================= */
 
 export type ChildMobileTrackingSource =
@@ -76,7 +75,10 @@ type UnknownRecord = Record<string, unknown>;
    HELPER FUNCTIONS
 ========================================================= */
 
-function getErrorMessage(error: unknown, fallback: string) {
+function getErrorMessage(
+  error: unknown,
+  fallback: string
+): string {
   if (error instanceof Error && error.message) {
     return error.message;
   }
@@ -89,13 +91,19 @@ function getErrorMessage(error: unknown, fallback: string) {
     };
 
     const message =
-      typeof value.message === "string" ? value.message : "";
+      typeof value.message === "string"
+        ? value.message
+        : "";
 
     const details =
-      typeof value.details === "string" ? value.details : "";
+      typeof value.details === "string"
+        ? value.details
+        : "";
 
     const hint =
-      typeof value.hint === "string" ? value.hint : "";
+      typeof value.hint === "string"
+        ? value.hint
+        : "";
 
     const combined = [message, details, hint]
       .filter(Boolean)
@@ -109,16 +117,27 @@ function getErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
-function asRecord(value: unknown): UnknownRecord | null {
-  if (value && typeof value === "object") {
+function asRecord(
+  value: unknown
+): UnknownRecord | null {
+  if (
+    value !== null &&
+    typeof value === "object"
+  ) {
     return value as UnknownRecord;
   }
 
   return null;
 }
 
-function asText(value: unknown, fallback = "") {
-  if (typeof value === "string" && value.trim()) {
+function asText(
+  value: unknown,
+  fallback = ""
+): string {
+  if (
+    typeof value === "string" &&
+    value.trim()
+  ) {
     return value.trim();
   }
 
@@ -129,13 +148,17 @@ function asText(value: unknown, fallback = "") {
   return fallback;
 }
 
-function asNullableText(value: unknown) {
+function asNullableText(
+  value: unknown
+): string | null {
   const text = asText(value);
-
   return text || null;
 }
 
-function asNumber(value: unknown, fallback = 0) {
+function asNumber(
+  value: unknown,
+  fallback = 0
+): number {
   const numericValue = Number(value);
 
   return Number.isFinite(numericValue)
@@ -143,7 +166,9 @@ function asNumber(value: unknown, fallback = 0) {
     : fallback;
 }
 
-function asNullableNumber(value: unknown) {
+function asNullableNumber(
+  value: unknown
+): number | null {
   const numericValue = Number(value);
 
   return Number.isFinite(numericValue)
@@ -151,23 +176,32 @@ function asNullableNumber(value: unknown) {
     : null;
 }
 
-function asBoolean(value: unknown) {
-  return value === true || value === "true" || value === 1;
+function asBoolean(value: unknown): boolean {
+  return (
+    value === true ||
+    value === "true" ||
+    value === 1
+  );
 }
 
 function readField(
   row: UnknownRecord,
   camelCaseField: string,
   snakeCaseField: string
-) {
-  return row[camelCaseField] ?? row[snakeCaseField];
+): unknown {
+  return (
+    row[camelCaseField] ??
+    row[snakeCaseField]
+  );
 }
 
 /* =========================================================
    DATA MAPPERS
 ========================================================= */
 
-function mapLocation(value: unknown): ChildMobileLocation | null {
+function mapLocation(
+  value: unknown
+): ChildMobileLocation | null {
   const row = asRecord(value);
 
   if (!row) {
@@ -176,79 +210,186 @@ function mapLocation(value: unknown): ChildMobileLocation | null {
 
   return {
     id: asText(row.id),
-    childId: asText(readField(row, "childId", "child_id")),
+
+    childId: asText(
+      readField(
+        row,
+        "childId",
+        "child_id"
+      )
+    ),
+
     childName: asNullableText(
-      readField(row, "childName", "child_name")
+      readField(
+        row,
+        "childName",
+        "child_name"
+      )
     ),
+
     guardianId: asNullableText(
-      readField(row, "guardianId", "guardian_id")
+      readField(
+        row,
+        "guardianId",
+        "guardian_id"
+      )
     ),
-    latitude: asNumber(row.latitude),
-    longitude: asNumber(row.longitude),
-    accuracyMeters: asNullableNumber(
-      readField(row, "accuracyMeters", "accuracy_meters")
+
+    latitude: asNumber(
+      row.latitude
     ),
-    source: asText(row.source, "mobile"),
-    locationLabel: asNullableText(
-      readField(row, "locationLabel", "location_label")
+
+    longitude: asNumber(
+      row.longitude
     ),
+
+    accuracyMeters:
+      asNullableNumber(
+        readField(
+          row,
+          "accuracyMeters",
+          "accuracy_meters"
+        )
+      ),
+
+    source: asText(
+      row.source,
+      "mobile"
+    ),
+
+    locationLabel:
+      asNullableText(
+        readField(
+          row,
+          "locationLabel",
+          "location_label"
+        )
+      ),
+
     recordedAt: asText(
-      readField(row, "recordedAt", "recorded_at")
+      readField(
+        row,
+        "recordedAt",
+        "recorded_at"
+      )
     ),
   };
 }
 
-function mapChildContext(value: unknown): ChildMobileContext {
+function mapChildContext(
+  value: unknown
+): ChildMobileContext {
   const row = asRecord(value);
 
   if (!row) {
-    throw new Error("SafeTrack could not load the child-device connection.");
+    throw new Error(
+      "SafeTrack could not load the child-device connection."
+    );
   }
 
   return {
-    childId: asText(readField(row, "childId", "child_id")),
+    childId: asText(
+      readField(
+        row,
+        "childId",
+        "child_id"
+      )
+    ),
+
     childName: asText(
-      readField(row, "childName", "child_name"),
+      readField(
+        row,
+        "childName",
+        "child_name"
+      ),
       "Child"
     ),
+
     guardianId: asText(
-      readField(row, "guardianId", "guardian_id")
+      readField(
+        row,
+        "guardianId",
+        "guardian_id"
+      )
     ),
+
     guardianName: asText(
-      readField(row, "guardianName", "guardian_name"),
+      readField(
+        row,
+        "guardianName",
+        "guardian_name"
+      ),
       "Guardian"
     ),
+
     guardianEmail: asText(
-      readField(row, "guardianEmail", "guardian_email"),
+      readField(
+        row,
+        "guardianEmail",
+        "guardian_email"
+      ),
       "No email record"
     ),
+
     trackingSource: asText(
-      readField(row, "trackingSource", "tracking_source"),
+      readField(
+        row,
+        "trackingSource",
+        "tracking_source"
+      ),
       "mobile"
     ),
+
     mobileDeviceActive: asBoolean(
-      readField(row, "mobileDeviceActive", "mobile_device_active")
+      readField(
+        row,
+        "mobileDeviceActive",
+        "mobile_device_active"
+      )
     ),
-    mobilePlatform: asNullableText(
-      readField(row, "mobilePlatform", "mobile_platform")
-    ),
+
+    mobilePlatform:
+      asNullableText(
+        readField(
+          row,
+          "mobilePlatform",
+          "mobile_platform"
+        )
+      ),
+
     linkedAt: asNullableText(
-      readField(row, "linkedAt", "linked_at")
+      readField(
+        row,
+        "linkedAt",
+        "linked_at"
+      )
     ),
+
     latestLocation: mapLocation(
-      readField(row, "latestLocation", "latest_location")
+      readField(
+        row,
+        "latestLocation",
+        "latest_location"
+      )
     ),
   };
 }
 
-function mapSafeZoneStatus(value: unknown): ChildSafeZoneStatus {
+function mapSafeZoneStatus(
+  value: unknown
+): ChildSafeZoneStatus {
   const row = asRecord(value);
 
   if (!row) {
-    throw new Error("SafeTrack could not load safe-zone status.");
+    throw new Error(
+      "SafeTrack could not load safe-zone status."
+    );
   }
 
-  const rawStatus = asText(row.status, "unavailable");
+  const rawStatus = asText(
+    row.status,
+    "unavailable"
+  );
 
   const status: ChildSafeZoneState =
     rawStatus === "inside" ||
@@ -259,20 +400,34 @@ function mapSafeZoneStatus(value: unknown): ChildSafeZoneStatus {
 
   return {
     status,
+
     zoneName: asNullableText(
-      readField(row, "zoneName", "zone_name")
+      readField(
+        row,
+        "zoneName",
+        "zone_name"
+      )
     ),
+
     message: asText(
       row.message,
       "Location update unavailable."
     ),
-    latestLocationAt: asNullableText(
-      readField(row, "latestLocationAt", "latest_location_at")
-    ),
+
+    latestLocationAt:
+      asNullableText(
+        readField(
+          row,
+          "latestLocationAt",
+          "latest_location_at"
+        )
+      ),
   };
 }
 
-function mapSosAlert(value: unknown): ChildMobileSosAlert | null {
+function mapSosAlert(
+  value: unknown
+): ChildMobileSosAlert | null {
   const row = asRecord(value);
 
   if (!row) {
@@ -281,29 +436,63 @@ function mapSosAlert(value: unknown): ChildMobileSosAlert | null {
 
   return {
     id: asText(row.id),
-    status: asText(row.status, "active"),
-    activationMethod: asNullableText(
-      readField(row, "activationMethod", "activation_method")
+
+    status: asText(
+      row.status,
+      "active"
     ),
+
+    activationMethod:
+      asNullableText(
+        readField(
+          row,
+          "activationMethod",
+          "activation_method"
+        )
+      ),
+
     triggeredAt: asText(
-      readField(row, "triggeredAt", "triggered_at")
+      readField(
+        row,
+        "triggeredAt",
+        "triggered_at"
+      )
     ),
-    acknowledgedAt: asNullableText(
-      readField(row, "acknowledgedAt", "acknowledged_at")
-    ),
+
+    acknowledgedAt:
+      asNullableText(
+        readField(
+          row,
+          "acknowledgedAt",
+          "acknowledged_at"
+        )
+      ),
+
     realertCount: asNumber(
-      readField(row, "realertCount", "realert_count")
+      readField(
+        row,
+        "realertCount",
+        "realert_count"
+      )
     ),
-    latitude: asNullableNumber(row.latitude),
-    longitude: asNullableNumber(row.longitude),
+
+    latitude: asNullableNumber(
+      row.latitude
+    ),
+
+    longitude: asNullableNumber(
+      row.longitude
+    ),
   };
 }
 
-function createInstallationId() {
+function createInstallationId(): string {
   return [
     Platform.OS,
     Date.now().toString(36),
-    Math.random().toString(36).slice(2, 12),
+    Math.random()
+      .toString(36)
+      .slice(2, 12),
   ].join("-");
 }
 
@@ -311,8 +500,11 @@ function createInstallationId() {
    CHILD SESSION
 ========================================================= */
 
-async function ensureChildDeviceSession() {
-  const { data, error } = await supabase.auth.getSession();
+async function ensureChildDeviceSession(): Promise<void> {
+  const {
+    data,
+    error,
+  } = await supabase.auth.getSession();
 
   if (error) {
     throw new Error(error.message);
@@ -330,7 +522,8 @@ async function ensureChildDeviceSession() {
   if (user) {
     const isAnonymous =
       user.is_anonymous === true ||
-      user.app_metadata?.provider === "anonymous";
+      user.app_metadata?.provider ===
+        "anonymous";
 
     if (isAnonymous) {
       return;
@@ -341,10 +534,16 @@ async function ensureChildDeviceSession() {
     );
   }
 
-  const { data: anonymousData, error: anonymousError } =
+  const {
+    data: anonymousData,
+    error: anonymousError,
+  } =
     await supabase.auth.signInAnonymously();
 
-  if (anonymousError || !anonymousData.session) {
+  if (
+    anonymousError ||
+    !anonymousData.session
+  ) {
     throw new Error(
       getErrorMessage(
         anonymousError,
@@ -361,7 +560,10 @@ async function ensureChildDeviceSession() {
 export async function createGuardianChildMobileLinkCode(
   childId: string
 ): Promise<ChildMobileLinkCode> {
-  const { data, error } = await supabase.rpc(
+  const {
+    data,
+    error,
+  } = await supabase.rpc(
     "create_child_mobile_link_code",
     {
       p_child_id: childId,
@@ -377,7 +579,10 @@ export async function createGuardianChildMobileLinkCode(
     );
   }
 
-  const row = Array.isArray(data) ? data[0] : data;
+  const row = Array.isArray(data)
+    ? data[0]
+    : data;
+
   const result = asRecord(row);
 
   if (!result) {
@@ -387,9 +592,20 @@ export async function createGuardianChildMobileLinkCode(
   }
 
   return {
-    childId: asText(result.child_id ?? result.childId),
-    linkCode: asText(result.link_code ?? result.linkCode),
-    expiresAt: asText(result.expires_at ?? result.expiresAt),
+    childId: asText(
+      result.child_id ??
+        result.childId
+    ),
+
+    linkCode: asText(
+      result.link_code ??
+        result.linkCode
+    ),
+
+    expiresAt: asText(
+      result.expires_at ??
+        result.expiresAt
+    ),
   };
 }
 
@@ -402,12 +618,21 @@ export async function linkChildMobileDevice(
 ): Promise<ChildMobileContext> {
   await ensureChildDeviceSession();
 
-  const { data, error } = await supabase.rpc(
+  const {
+    data,
+    error,
+  } = await supabase.rpc(
     "link_child_mobile_device",
     {
-      p_link_code: linkCode.trim().toUpperCase(),
-      p_installation_id: createInstallationId(),
-      p_platform: Platform.OS,
+      p_link_code: linkCode
+        .trim()
+        .toUpperCase(),
+
+      p_installation_id:
+        createInstallationId(),
+
+      p_platform:
+        Platform.OS,
     }
   );
 
@@ -423,8 +648,15 @@ export async function linkChildMobileDevice(
   return mapChildContext(data);
 }
 
-export async function fetchChildMobileContext(): Promise<ChildMobileContext | null> {
-  const { data, error } = await supabase.rpc(
+export async function fetchChildMobileContext(): Promise<
+  ChildMobileContext | null
+> {
+  await ensureChildDeviceSession();
+
+  const {
+    data,
+    error,
+  } = await supabase.rpc(
     "get_child_mobile_context"
   );
 
@@ -449,6 +681,8 @@ export async function fetchChildMobileContext(): Promise<ChildMobileContext | nu
 ========================================================= */
 
 export async function sendChildMobileLocation(): Promise<ChildMobileLocation> {
+  await ensureChildDeviceSession();
+
   const permission =
     await Location.requestForegroundPermissionsAsync();
 
@@ -458,16 +692,30 @@ export async function sendChildMobileLocation(): Promise<ChildMobileLocation> {
     );
   }
 
-  const currentLocation = await Location.getCurrentPositionAsync({
-    accuracy: Location.Accuracy.Balanced,
-  });
+  const currentLocation =
+    await Location.getCurrentPositionAsync(
+      {
+        accuracy:
+          Location.Accuracy.Balanced,
+      }
+    );
 
-  const { data, error } = await supabase.rpc(
+  const {
+    data,
+    error,
+  } = await supabase.rpc(
     "record_child_mobile_location",
     {
-      p_latitude: currentLocation.coords.latitude,
-      p_longitude: currentLocation.coords.longitude,
-      p_accuracy_meters: currentLocation.coords.accuracy ?? null,
+      p_latitude:
+        currentLocation.coords.latitude,
+
+      p_longitude:
+        currentLocation.coords.longitude,
+
+      p_accuracy_meters:
+        currentLocation.coords
+          .accuracy ?? null,
+
       p_location_label: null,
     }
   );
@@ -481,7 +729,8 @@ export async function sendChildMobileLocation(): Promise<ChildMobileLocation> {
     );
   }
 
-  const savedLocation = mapLocation(data);
+  const savedLocation =
+    mapLocation(data);
 
   if (!savedLocation) {
     throw new Error(
@@ -492,12 +741,17 @@ export async function sendChildMobileLocation(): Promise<ChildMobileLocation> {
   return savedLocation;
 }
 
-/* Compatibility export for older child-mobile code. */
+/* Compatibility export */
 export const publishChildMobileLocation =
   sendChildMobileLocation;
 
 export async function fetchChildSafeZoneStatus(): Promise<ChildSafeZoneStatus> {
-  const { data, error } = await supabase.rpc(
+  await ensureChildDeviceSession();
+
+  const {
+    data,
+    error,
+  } = await supabase.rpc(
     "get_child_mobile_safe_zone_status"
   );
 
@@ -518,7 +772,12 @@ export async function fetchChildSafeZoneStatus(): Promise<ChildSafeZoneStatus> {
 ========================================================= */
 
 export async function createChildMobileSosAlert(): Promise<ChildMobileSosAlert> {
-  const { data, error } = await supabase.rpc(
+  await ensureChildDeviceSession();
+
+  const {
+    data,
+    error,
+  } = await supabase.rpc(
     "create_child_mobile_sos_alert"
   );
 
@@ -531,7 +790,8 @@ export async function createChildMobileSosAlert(): Promise<ChildMobileSosAlert> 
     );
   }
 
-  const alert = mapSosAlert(data);
+  const alert =
+    mapSosAlert(data);
 
   if (!alert) {
     throw new Error(
@@ -542,8 +802,15 @@ export async function createChildMobileSosAlert(): Promise<ChildMobileSosAlert> 
   return alert;
 }
 
-export async function fetchChildMobileActiveSos(): Promise<ChildMobileSosAlert | null> {
-  const { data, error } = await supabase.rpc(
+export async function fetchChildMobileActiveSos(): Promise<
+  ChildMobileSosAlert | null
+> {
+  await ensureChildDeviceSession();
+
+  const {
+    data,
+    error,
+  } = await supabase.rpc(
     "get_child_mobile_active_sos"
   );
 
@@ -562,7 +829,12 @@ export async function fetchChildMobileActiveSos(): Promise<ChildMobileSosAlert |
 export async function recordChildMobileSosRealert(
   alertId: string
 ): Promise<ChildMobileSosAlert | null> {
-  const { data, error } = await supabase.rpc(
+  await ensureChildDeviceSession();
+
+  const {
+    data,
+    error,
+  } = await supabase.rpc(
     "realert_child_mobile_sos",
     {
       p_alert_id: alertId,
@@ -586,7 +858,11 @@ export async function recordChildMobileSosRealert(
 ========================================================= */
 
 export async function disconnectChildMobileDevice(): Promise<void> {
-  const { error } = await supabase.rpc(
+  await ensureChildDeviceSession();
+
+  const {
+    error,
+  } = await supabase.rpc(
     "unlink_current_child_mobile_device"
   );
 
@@ -599,9 +875,14 @@ export async function disconnectChildMobileDevice(): Promise<void> {
     );
   }
 
-  const { error: signOutError } = await supabase.auth.signOut();
+  const {
+    error: signOutError,
+  } =
+    await supabase.auth.signOut();
 
   if (signOutError) {
-    throw new Error(signOutError.message);
+    throw new Error(
+      signOutError.message
+    );
   }
 }
