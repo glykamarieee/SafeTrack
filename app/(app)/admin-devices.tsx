@@ -16,6 +16,7 @@ import { useRouter } from "expo-router";
 import {
   fetchAdminSmartwatchDevices,
   updateAdminSmartwatchDeviceStatus,
+  subscribeAdminUpdates,
   type AdminSmartwatchDevice,
 } from "../../services/adminService";
 import {
@@ -83,13 +84,31 @@ export default function AdminDevicesScreen() {
     [search]
   );
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      void loadDevices();
-    }, 300);
+useEffect(() => {
 
-    return () => clearTimeout(timer);
-  }, [loadDevices]);
+  const timer = setTimeout(() => {
+    void loadDevices();
+  }, 300);
+
+
+  const unsubscribe =
+    subscribeAdminUpdates(() => {
+
+      void loadDevices();
+
+    });
+
+
+  return () => {
+
+    clearTimeout(timer);
+
+    unsubscribe();
+
+  };
+
+
+}, [loadDevices]);
 
   const changeStatus = (device: AdminSmartwatchDevice) => {
     const nextStatus = device.isActive ? "inactive" : "active";

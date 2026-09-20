@@ -2,6 +2,7 @@ import type { ColorValue } from "react-native";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../store/authStore";
+import { useGuardianPushRegistration } from "../../hooks/useGuardianPushRegistration";
 import {
   safeTrackColors as colors,
   safeTrackShadow as shadow,
@@ -20,6 +21,11 @@ function createTabIcon(iconName: keyof typeof Ionicons.glyphMap) {
 export default function AppLayout() {
   const role = useAuthStore((state) => state.role);
   const isAdmin = role === "admin";
+
+  // SafeTrack FINAL: register Guardian push notifications only for an
+  // authenticated Guardian session. The hook itself handles permissions,
+  // Android channel creation, Expo token lookup, and backend registration.
+  useGuardianPushRegistration(role === "guardian");
 
   return (
     <Tabs
@@ -85,19 +91,8 @@ export default function AppLayout() {
         }}
       />
 
-      <Tabs.Screen
-        name="admin-guardian-details"
-        options={{
-          href: null,
-        }}
-      />
-
-      <Tabs.Screen
-        name="admin-device-details"
-        options={{
-          href: null,
-        }}
-      />
+      <Tabs.Screen name="admin-guardian-details" options={{ href: null }} />
+      <Tabs.Screen name="admin-device-details" options={{ href: null }} />
 
       <Tabs.Screen
         name="location"
@@ -135,54 +130,17 @@ export default function AppLayout() {
         }}
       />
 
-      <Tabs.Screen
-        name="reports"
-        options={{
-          href: null,
-        }}
-      />
+      <Tabs.Screen name="reports" options={{ href: null }} />
+      <Tabs.Screen name="history" options={{ href: null }} />
+      <Tabs.Screen name="safe-zones" options={{ href: null }} />
+      <Tabs.Screen name="manage-access" options={{ href: null }} />
+      <Tabs.Screen name="edit-child-profile" options={{ href: null }} />
+      <Tabs.Screen name="edit-guardian-profile" options={{ href: null }} />
+      <Tabs.Screen name="child-mobile-link" options={{ href: null }} />
 
-      <Tabs.Screen
-        name="history"
-        options={{
-          href: null,
-        }}
-      />
-
-      <Tabs.Screen
-        name="safe-zones"
-        options={{
-          href: null,
-        }}
-      />
-
-      <Tabs.Screen
-        name="manage-access"
-        options={{
-          href: null,
-        }}
-      />
-
-      <Tabs.Screen
-        name="edit-child-profile"
-        options={{
-          href: null,
-        }}
-      />
-
-      <Tabs.Screen
-        name="edit-guardian-profile"
-        options={{
-          href: null,
-        }}
-      />
-
-      <Tabs.Screen
-  name="child-mobile-link"
-  options={{
-    href: null,
-  }}
-/>
+      {/* SafeTrack FINAL: hidden route used to generate/regenerate the
+          one-time 6-digit child Watch connection code. */}
+      <Tabs.Screen name="device-connection-code" options={{ href: null }} />
     </Tabs>
   );
 }

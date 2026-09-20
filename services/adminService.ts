@@ -367,3 +367,81 @@ export async function fetchAdminReportSummary(
     sosRecords: toCount(row.sos_records),
   };
 }
+export function subscribeAdminUpdates(
+  callback: () => void
+) {
+
+  const channel =
+    supabase
+      .channel(
+  `admin-live-updates-${Date.now()}`
+)
+
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "guardian_profiles",
+        },
+        callback
+      )
+
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "child_profiles",
+        },
+        callback
+      )
+
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "smartwatch_devices",
+        },
+        callback
+      )
+
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "location_logs",
+        },
+        callback
+      )
+
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "geofence_events",
+        },
+        callback
+      )
+
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "sos_alerts",
+        },
+        callback
+      )
+
+      .subscribe();
+
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+
+}

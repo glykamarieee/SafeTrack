@@ -98,7 +98,7 @@ export default function AdminProfileScreen() {
         </View>
 
         <Pressable
-          onPress={handleLogout}
+          onPress={handleLogout}  
           style={({ pressed }) => [
             styles.logoutButton,
             pressed && styles.pressed,

@@ -1,88 +1,106 @@
 import { supabase } from "../lib/supabase";
 
-export type TrackingSource = "smartwatch" | "mobile" | "both";
+export type TrackingSource = "smartwatch" | "both";
 
-export type ChildRegistrationInput = {
+export type CompleteChildRegistrationInput = {
   fullName: string;
   age: number;
   relationship: string;
   trackingSource: TrackingSource;
-  watchId?: string;
+  watchId: string;
 };
 
-function getErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof Error && error.message) {
-    return error.message;
+export type ChildOnboardingResult = {
+  ok: true;
+  child: {
+    id: string;
+    guardian_id: string;
+    full_name: string;
+    age: number;
+    relationship: string;
+    tracking_source: TrackingSource;
+  };
+  device: {
+    id: string;
+    watch_id: string;
+    child_id: string;
+    is_active: boolean;
+  };
+  connectionCode: string;
+  expiresAt: string;
+};
+
+type FunctionErrorPayload = {
+  error?: string;
+  message?: string;
+};
+
+async function readFunctionError(
+  error: unknown,
+  fallback: string,
+): Promise<string> {
+  if (error && typeof error === "object" && "context" in error) {
+    const context = (error as { context?: unknown }).context;
+
+    if (
+      context &&
+      typeof context === "object" &&
+      "json" in context &&
+      typeof (context as { json?: unknown }).json === "function"
+    ) {
+      try {
+        const payload = (await (context as Response).json()) as FunctionErrorPayload;
+        const message = payload?.error ?? payload?.message;
+        if (message?.trim()) return message.trim();
+      } catch {
+        // Fall through to the normal error message.
+      }
+    }
   }
 
-  if (typeof error === "object" && error !== null) {
-    const databaseError = error as {
-      message?: unknown;
-      details?: unknown;
-      hint?: unknown;
-    };
-
-    const message =
-      typeof databaseError.message === "string" ? databaseError.message : "";
-
-    const details =
-      typeof databaseError.details === "string" ? databaseError.details : "";
-
-    const hint =
-      typeof databaseError.hint === "string" ? databaseError.hint : "";
-
-    return [message, details, hint].filter(Boolean).join(" ") || fallback;
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
   }
 
   return fallback;
 }
 
 export async function completeChildRegistration(
-  input: ChildRegistrationInput
-) {
-  const { data: sessionData, error: sessionError } =
-    await supabase.auth.getSession();
+  input: CompleteChildRegistrationInput,
+): Promise<ChildOnboardingResult> {
+  const normalizedWatchId = input.watchId.trim().toUpperCase();
 
-  if (sessionError) {
-    throw new Error(
-      getErrorMessage(
-        sessionError,
-        "Could not confirm the active Guardian session."
-      )
-    );
+  if (!normalizedWatchId) {
+    throw new Error("Enter the registered smartwatch connection ID.");
   }
 
-  if (!sessionData.session?.user) {
-    throw new Error(
-      "Your Guardian session has expired. Please log in again."
-    );
-  }
-
-  const { data, error } = await supabase.rpc(
-    "complete_child_registration",
+  const { data, error } = await supabase.functions.invoke(
+    "guardian-child-onboarding",
     {
-      p_full_name: input.fullName.trim(),
-      p_age: input.age,
-      p_relationship: input.relationship,
-      p_tracking_source: input.trackingSource,
-      p_watch_id: input.watchId?.trim() || null,
-    }
+      body: {
+        fullName: input.fullName.trim(),
+        age: input.age,
+        relationship: input.relationship,
+        trackingSource: input.trackingSource,
+        watchId: normalizedWatchId,
+      },
+    },
   );
 
   if (error) {
     throw new Error(
-      getErrorMessage(
+      await readFunctionError(
         error,
-        "Unable to register the child profile."
-      )
+        "Unable to complete child registration.",
+      ),
     );
   }
 
-  if (!data || typeof data !== "string") {
+  if (!data?.ok || !data?.child?.id || !data?.connectionCode) {
     throw new Error(
-      "SafeTrack did not receive the registered child profile."
+      data?.error || "SafeTrack could not finish child/device registration.",
     );
   }
 
-  return data;
+  return data as ChildOnboardingResult;
 }

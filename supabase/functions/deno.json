@@ -1,0 +1,14 @@
+{
+  "nodeModulesDir": "auto",
+  "compilerOptions": {
+    "strict": true
+  },
+  "lint": {
+    "rules": {
+      "exclude": [
+        "no-import-prefix",
+        "no-explicit-any"
+      ]
+    }
+  }
+}

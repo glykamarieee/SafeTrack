@@ -40,3 +40,8 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Supabase backups
+supabase-backup-before-integration/
+
+.vscode/

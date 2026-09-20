@@ -1,21 +1,44 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  Animated,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
+
 import { Ionicons } from "@expo/vector-icons";
+import {
+  useFocusEffect,
+  useRouter,
+} from "expo-router";
+
 
 import { useAuthStore } from "../../store/authStore";
 import { useLocationStore } from "../../store/locationStore";
 import { useSosStore } from "../../store/sosStore";
+
+
 import { supabase } from "../../lib/supabase";
+
+
+import {
+  fetchSmartwatchForChild,
+  type SmartwatchStatus,
+} from "../../services/smartwatchService";
+
+
 import { LocationMapCard } from "../location/LocationMapCard";
+
+
 import {
   safeTrackColors as colors,
   safeTrackRadius as radius,
@@ -23,1235 +46,1608 @@ import {
   safeTrackSpacing as spacing,
 } from "../../constants/safeTrackDesign";
 
-function firstName(value?: string) {
-  return value?.trim().split(/\s+/)[0] || "Guardian";
-}
 
-function relativeTime(value?: string | null) {
-  if (!value) {
-    return "No update recorded";
-  }
 
-  const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) {
-    return "No update recorded";
-  }
 
-  const difference = Math.max(0, Date.now() - date.getTime());
-  const minutes = Math.round(difference / 60_000);
+function firstName(
+  value?: string
+){
 
-  if (minutes < 1) {
-    return "Updated just now";
-  }
-
-  if (minutes < 60) {
-    return `Updated ${minutes} min ago`;
-  }
-
-  const hours = Math.round(minutes / 60);
-
-  if (hours < 24) {
-    return `Updated ${hours} hr ago`;
-  }
-
-  return `Updated ${Math.round(hours / 24)} day(s) ago`;
-}
-
-function getChildMobileAccessText(source?: string) {
-  const normalized = source?.trim().toLowerCase();
-
-  if (normalized === "both") {
-    return "Smartwatch and child phone access";
-  }
-
-  if (normalized === "mobile") {
-    return "Child phone access is available";
-  }
-
-  return "Mobile access requires Mobile or Both";
-}
-
-function QuickAction({
-  icon,
-  label,
-  onPress,
-  danger = false,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  onPress: () => void;
-  danger?: boolean;
-}) {
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.quickAction,
-        pressed && styles.pressed,
-      ]}
-    >
-      <View
-        style={[
-          styles.quickIcon,
-          danger && styles.quickIconDanger,
-        ]}
-      >
-        <Ionicons
-          name={icon}
-          size={23}
-          color={danger ? colors.danger : colors.primary}
-        />
-      </View>
-
-      <Text style={styles.quickText}>{label}</Text>
-    </Pressable>
+    value
+      ?.trim()
+      .split(/\s+/)[0]
+      ||
+    "Guardian"
   );
+
 }
 
-export function GuardianHome() {
-  const router = useRouter();
 
-  const guardian = useAuthStore((state) => state.guardian);
-  const linkedChildren = useAuthStore(
-    (state) => state.linkedChildren
-  );
 
-  const primaryChild = linkedChildren[0] ?? null;
 
-  const latest = useLocationStore((state) => state.latest);
 
-  const isLocationLoading = useLocationStore(
-    (state) => state.isLoading
-  );
+function formatTime(
+  value?: string | null
+){
 
-  const loadLocation = useLocationStore(
-    (state) => state.loadForChild
-  );
-
-  const alerts = useSosStore((state) => state.alerts);
-
-  const loadSos = useSosStore(
-    (state) => state.loadForChild
-  );
-
-  const [activeZones, setActiveZones] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
-  const [deletingChildId, setDeletingChildId] =
-    useState<string | null>(null);
-
-  const activeSos = useMemo(
-    () =>
-      alerts.filter(
-        (alert) => alert.status === "active"
-      ).length,
-    [alerts]
-  );
-
-  const hasActiveSos = activeSos > 0;
-
-  /*
-   * Refresh dashboard whenever the screen becomes active.
-   *
-   * IMPORTANT:
-   * AuthStore is refreshed by bootstrap/login.
-   * This screen also uses the current linkedChildren
-   * from the store, so deleted children disappear
-   * immediately after the local store update below.
-   */
-  useFocusEffect(
-    useCallback(() => {
-      if (!primaryChild?.id) {
-        return;
-      }
-
-      void loadLocation(primaryChild.id);
-      void loadSos(primaryChild.id);
-
-      return undefined;
-    }, [
-      primaryChild?.id,
-      loadLocation,
-      loadSos,
-    ])
-  );
-
-  /*
-   * Periodically refresh the current dashboard child.
-   */
-  useEffect(() => {
-    if (!primaryChild?.id) {
-      return;
-    }
-
-    const intervalId = setInterval(() => {
-      void loadLocation(primaryChild.id);
-      void loadSos(primaryChild.id);
-    }, 30_000);
-
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [
-    primaryChild?.id,
-    loadLocation,
-    loadSos,
-  ]);
-
-  /*
-   * Load active safe zones for the current child.
-   */
-  useEffect(() => {
-    if (!guardian?.id || !primaryChild?.id) {
-      setActiveZones(0);
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadSafeZones = async () => {
-      const { count, error } = await supabase
-        .from("geofences")
-        .select("id", {
-          count: "exact",
-          head: true,
-        })
-        .eq("guardian_id", guardian.id)
-        .eq("child_id", primaryChild.id)
-        .eq("is_enabled", true);
-
-      if (cancelled) {
-        return;
-      }
-
-      if (!error) {
-        setActiveZones(count ?? 0);
-      } else {
-        setActiveZones(0);
-      }
-    };
-
-    void loadSafeZones();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    guardian?.id,
-    primaryChild?.id,
-  ]);
-
-  /*
-   * MANUAL REFRESH
-   */
-  const refresh = async () => {
-    if (!primaryChild) {
-      return;
-    }
-
-    setRefreshing(true);
-
-    try {
-      await Promise.all([
-        loadLocation(primaryChild.id),
-        loadSos(primaryChild.id),
-      ]);
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  /*
-   * ADD CHILD
-   */
-  const handleAddChild = () => {
-    router.push("/(auth)/child-registration");
-  };
-
-  /*
-   * OPEN CHILD MOBILE CONNECTION
-   *
-   * The actual child ID is passed to the connection screen.
-   * This prevents one child's link code from being used
-   * for another child.
-   */
-  const handleChildConnection = (childId: string) => {
-    router.push({
-      pathname: "/child-mobile-link",
-      params: {
-        childId,
-      },
-    });
-  };
-
-  /*
-   * DELETE CHILD
-   *
-   * IMPORTANT:
-   *
-   * We intentionally DO NOT use:
-   *
-   *   .delete().select("*")
-   *
-   * because that requires Supabase to return the deleted
-   * record and can produce an empty returned array even
-   * though the DELETE itself succeeded.
-   *
-   * Instead:
-   *
-   * 1. Delete the exact child belonging to this Guardian.
-   * 2. If Supabase reports no error, immediately remove
-   *    that child from Zustand linkedChildren.
-   *
-   * This makes the deleted child disappear from the
-   * dashboard immediately.
-   */
-  const deleteChild = async (childId: string) => {
-    if (!childId) {
-      return;
-    }
-
-    if (!guardian?.id) {
-      Alert.alert(
-        "Unable to delete child",
-        "The Guardian account could not be identified."
-      );
-      return;
-    }
-
-    setDeletingChildId(childId);
-
-    try {
-      /*
-       * DELETE ONLY THE SELECTED CHILD.
-       *
-       * The guardian_id condition is important.
-       */
-      const { error } = await supabase
-        .from("child_profiles")
-        .delete()
-        .eq("id", childId)
-        .eq("guardian_id", guardian.id);
-
-      if (error) {
-        throw new Error(error.message);
-      }
-
-      /*
-       * IMPORTANT:
-       *
-       * Supabase successfully accepted the DELETE.
-       *
-       * Now immediately remove the child from the
-       * Guardian's local Zustand state.
-       *
-       * We intentionally filter by ID so only the selected
-       * child is removed.
-       */
-      useAuthStore.setState((state) => ({
-        linkedChildren: state.linkedChildren.filter(
-          (child) => child.id !== childId
-        ),
-        child:
-          state.child?.id === childId
-            ? null
-            : state.child,
-      }));
-
-      /*
-       * Clear any location/SOS UI state associated with
-       * the deleted child by simply allowing the dashboard
-       * to switch to the next remaining child.
-       *
-       * The primaryChild value will automatically recalculate
-       * from linkedChildren after the Zustand update.
-       */
-
-      Alert.alert(
-        "Child deleted",
-        "The child profile has been successfully removed from this Guardian account."
-      );
-    } catch (error) {
-      console.error(
-        "[GuardianHome.deleteChild]",
-        error
-      );
-
-      Alert.alert(
-        "Unable to delete child",
-        error instanceof Error
-          ? error.message
-          : "SafeTrack could not delete the child profile."
-      );
-    } finally {
-      setDeletingChildId(null);
-    }
-  };
-
-  /*
-   * DELETE CONFIRMATION
-   */
-  const confirmDeleteChild = (
-    childId: string,
-    childName: string
-  ) => {
-    Alert.alert(
-      "Delete child profile?",
-      `Are you sure you want to delete ${childName}?\n\nThis removes the child from this Guardian account. This action cannot be undone.`,
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            void deleteChild(childId);
-          },
-        },
-      ]
-    );
-  };
-
-  /*
-   * EMPTY STATE
-   *
-   * This appears when the Guardian has no remaining children.
-   */
-  if (!primaryChild) {
-    return (
-      <ScrollView
-        style={styles.flex}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.header}>
-          <View style={styles.headerCopy}>
-            <Text style={styles.greeting}>
-              Hello, {firstName(guardian?.fullName)}
-            </Text>
-
-            <Text style={styles.subtitle}>
-              Complete child setup to begin monitoring.
-            </Text>
-          </View>
-
-          <View style={styles.avatar}>
-            <Ionicons
-              name="person-outline"
-              size={25}
-              color={colors.white}
-            />
-          </View>
-        </View>
-
-        <Pressable
-          onPress={handleAddChild}
-          style={({ pressed }) => [
-            styles.setupCard,
-            pressed && styles.pressed,
-          ]}
-        >
-          <View style={styles.setupIcon}>
-            <Ionicons
-              name="person-add-outline"
-              size={24}
-              color={colors.primary}
-            />
-          </View>
-
-          <View style={styles.setupCopy}>
-            <Text style={styles.setupTitle}>
-              Register your child
-            </Text>
-
-            <Text style={styles.setupText}>
-              Add a child profile before using SafeTrack
-              location, safe-zone, SOS, and child-device
-              features.
-            </Text>
-          </View>
-
-          <Ionicons
-            name="arrow-forward"
-            size={20}
-            color={colors.primaryDark}
-          />
-        </Pressable>
-      </ScrollView>
-    );
+  if(!value){
+    return "No update";
   }
 
-  /*
-   * NORMAL GUARDIAN DASHBOARD
-   */
-  return (
-    <ScrollView
-      style={styles.flex}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* HEADER */}
 
-      <View style={styles.header}>
-        <View style={styles.headerCopy}>
-          <Text style={styles.greeting}>
-            Hello, {firstName(guardian?.fullName)}
-          </Text>
+  const date =
+    new Date(value);
 
-          <Text style={styles.subtitle}>
-            {primaryChild.fullName}
-            &apos;s latest safety information.
-          </Text>
-        </View>
 
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {primaryChild.fullName
-              .trim()
-              .charAt(0)
-              .toUpperCase()}
-          </Text>
-        </View>
-      </View>
 
-      {/* LOCATION MAP */}
+  if(
+    Number.isNaN(
+      date.getTime()
+    )
+  ){
+    return "No update";
+  }
 
-      <LocationMapCard
-        location={latest}
-        height={286}
-        loading={
-          refreshing || isLocationLoading
-        }
-        onRefresh={() => void refresh()}
-      />
 
-      {/* METRICS */}
 
-      <View style={styles.metrics}>
-        <View style={styles.metric}>
-          <Ionicons
-            name="shield-checkmark-outline"
-            color={colors.primary}
-            size={20}
-          />
+  const minutes =
+    Math.floor(
+      (
+        Date.now()
+        -
+        date.getTime()
+      )
+      /
+      60000
+    );
 
-          <Text style={styles.metricValue}>
-            {activeZones}
-          </Text>
 
-          <Text style={styles.metricLabel}>
-            Safe zones
-          </Text>
-        </View>
 
-        <View style={styles.metricDivider} />
+  if(minutes <= 0){
+    return "Just now";
+  }
 
-        <View style={styles.metric}>
-          <Ionicons
-            name="warning-outline"
-            color={
-              hasActiveSos
-                ? colors.danger
-                : colors.primary
-            }
-            size={20}
-          />
 
-          <Text style={styles.metricValue}>
-            {activeSos}
-          </Text>
 
-          <Text style={styles.metricLabel}>
-            Active SOS
-          </Text>
-        </View>
+  if(minutes < 60){
+    return `${minutes} min ago`;
+  }
 
-        <View style={styles.metricDivider} />
 
-        <View style={styles.metric}>
-          <Ionicons
-            name="location-outline"
-            color={colors.primary}
-            size={20}
-          />
 
-          <Text style={styles.metricValue}>
-            {latest ? "1" : "0"}
-          </Text>
+  return `${Math.floor(minutes / 60)} hr ago`;
 
-          <Text style={styles.metricLabel}>
-            Location record
-          </Text>
-        </View>
-      </View>
-
-      {/* SAFETY NOTICE */}
-
-      <View style={styles.notice}>
-        <Ionicons
-          name={
-            hasActiveSos
-              ? "alert-circle-outline"
-              : "checkmark-circle-outline"
-          }
-          size={19}
-          color={
-            hasActiveSos
-              ? colors.danger
-              : colors.primary
-          }
-        />
-
-        <Text
-          style={[
-            styles.noticeText,
-            hasActiveSos &&
-              styles.noticeDanger,
-          ]}
-        >
-          {hasActiveSos
-            ? "An SOS alert requires your acknowledgement."
-            : "No active safety alert needs your attention."}
-        </Text>
-      </View>
-
-      {/* QUICK ACCESS */}
-
-      <Text style={styles.sectionTitle}>
-        Quick access
-      </Text>
-
-      <View style={styles.quickActions}>
-        <QuickAction
-          icon="location-outline"
-          label="Location"
-          onPress={() =>
-            router.push("/location")
-          }
-        />
-
-        <QuickAction
-          icon="shield-checkmark-outline"
-          label="Safety"
-          onPress={() =>
-            router.push("/safety-center")
-          }
-        />
-
-        <QuickAction
-          icon="warning-outline"
-          label="SOS alerts"
-          danger={hasActiveSos}
-          onPress={() =>
-            router.push("/sos-alerts")
-          }
-        />
-      </View>
-
-      {/* CHILD CONNECTION */}
-
-      <View style={styles.childSectionHeader}>
-        <Text style={styles.sectionTitle}>
-          Child connection
-        </Text>
-
-        <Text style={styles.childCount}>
-          {linkedChildren.length}{" "}
-          {linkedChildren.length === 1
-            ? "child"
-            : "children"}
-        </Text>
-      </View>
-
-      {/* CHILDREN */}
-
-      {linkedChildren.map((child, index) => {
-        const childData = child as typeof child & {
-          age?: number;
-          relationship?: string;
-          trackingSource?: string;
-        };
-
-        const initial =
-          child.fullName
-            ?.trim()
-            .charAt(0)
-            .toUpperCase() || "?";
-
-        const isDeleting =
-          deletingChildId === child.id;
-
-        return (
-          <View
-            key={child.id}
-            style={[
-              styles.childRowContainer,
-              isDeleting &&
-                styles.childRowDeleting,
-            ]}
-          >
-            <Pressable
-              onPress={() =>
-                handleChildConnection(child.id)
-              }
-              disabled={isDeleting}
-              style={({ pressed }) => [
-                styles.childRow,
-                pressed && styles.pressed,
-              ]}
-            >
-              <View style={styles.childAvatar}>
-                <Text style={styles.childInitial}>
-                  {initial}
-                </Text>
-              </View>
-
-              <View style={styles.childCopy}>
-                <View style={styles.childNameRow}>
-                  <Text
-                    style={styles.childName}
-                    numberOfLines={1}
-                  >
-                    {child.fullName}
-                  </Text>
-
-                  {index === 0 ? (
-                    <View
-                      style={
-                        styles.primaryBadge
-                      }
-                    >
-                      <Text
-                        style={
-                          styles.primaryBadgeText
-                        }
-                      >
-                        ACTIVE
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-
-                <Text style={styles.childDetail}>
-                  {childData.age
-                    ? `${childData.age} years old · `
-                    : ""}
-                  {childData.relationship ||
-                    "Guardian"}
-                </Text>
-
-                <Text style={styles.watchText}>
-                  {getChildMobileAccessText(
-                    childData.trackingSource
-                  )}
-                </Text>
-              </View>
-
-              <View style={styles.childAction}>
-                <Ionicons
-                  name="phone-portrait-outline"
-                  size={18}
-                  color={colors.primaryDark}
-                />
-
-                <Ionicons
-                  name="chevron-forward"
-                  size={18}
-                  color={colors.primaryDark}
-                />
-              </View>
-            </Pressable>
-
-            {/* DELETE BUTTON */}
-
-            <Pressable
-              onPress={() =>
-                confirmDeleteChild(
-                  child.id,
-                  child.fullName
-                )
-              }
-              disabled={isDeleting}
-              style={({ pressed }) => [
-                styles.deleteChildButton,
-                pressed &&
-                  styles.deletePressed,
-                isDeleting &&
-                  styles.deleteDisabled,
-              ]}
-            >
-              {isDeleting ? (
-                <ActivityIndicator
-                  size="small"
-                  color={colors.danger}
-                />
-              ) : (
-                <Ionicons
-                  name="trash-outline"
-                  size={18}
-                  color={colors.danger}
-                />
-              )}
-
-              <Text style={styles.deleteChildText}>
-                {isDeleting
-                  ? "Deleting..."
-                  : "Delete child"}
-              </Text>
-            </Pressable>
-          </View>
-        );
-      })}
-
-      {/* ADD CHILD */}
-
-      <Pressable
-        onPress={handleAddChild}
-        style={({ pressed }) => [
-          styles.addChildButton,
-          pressed && styles.pressed,
-        ]}
-      >
-        <View style={styles.addChildIcon}>
-          <Ionicons
-            name="add"
-            size={25}
-            color={colors.primary}
-          />
-        </View>
-
-        <View style={styles.addChildCopy}>
-          <Text style={styles.addChildTitle}>
-            Add another child
-          </Text>
-
-          <Text style={styles.addChildDescription}>
-            Register another child under this guardian
-            account.
-          </Text>
-        </View>
-
-        <Ionicons
-          name="chevron-forward"
-          size={20}
-          color={colors.primaryDark}
-        />
-      </Pressable>
-
-      {/* INFORMATION */}
-
-      <View style={styles.connectionInfo}>
-        <Ionicons
-          name="information-circle-outline"
-          size={18}
-          color={colors.primary}
-        />
-
-        <Text style={styles.connectionInfoText}>
-          You can register multiple children using
-          the same guardian account. Each child has
-          a separate SafeTrack profile and device
-          connection.
-        </Text>
-      </View>
-
-      <Text style={styles.latestRecordText}>
-        Latest stored location:{" "}
-        {relativeTime(
-          latest?.recordedAt
-        )}
-      </Text>
-    </ScrollView>
-  );
 }
 
+
+
+
+
+
+function DeviceStatus({
+  watch,
+}:{
+  watch:SmartwatchStatus | null;
+}): {
+  title:string;
+  subtitle:string;
+  icon:keyof typeof Ionicons.glyphMap;
+  connected:boolean;
+}{
+
+
+  if(!watch){
+
+    return {
+
+      title:
+      "No smartwatch linked",
+
+      subtitle:
+      "Generate a connection code to pair the child watch",
+
+      icon:
+      "watch-outline" as keyof typeof Ionicons.glyphMap,
+
+      connected:false,
+
+    };
+
+  }
+
+
+
+
+  return {
+
+    title:
+      watch.connectionStatus === "connected"
+
+      ? "Smartwatch Connected"
+
+      :
+      watch.connectionStatus === "offline"
+
+      ? "Smartwatch Offline"
+
+      :
+      "Smartwatch Disabled",
+
+
+
+    subtitle:
+      `${watch.watchId} • ${
+        watch.lastSeenAt
+        ?
+        formatTime(watch.lastSeenAt)
+        :
+        "No signal"
+      }`,
+
+
+
+    icon:
+  watch.connectionStatus === "connected"
+
+  ?
+  ("watch" as keyof typeof Ionicons.glyphMap)
+
+  :
+  ("watch-outline" as keyof typeof Ionicons.glyphMap),
+
+
+
+    connected:
+      watch.connectionStatus === "connected",
+
+  };
+
+
+}
+
+
+
+
+
+
+
+
+export function GuardianHome(){
+
+
+const router =
+useRouter();
+
+
+
+
+const guardian =
+useAuthStore(
+ state=>state.guardian
+);
+
+
+
+const linkedChildren =
+useAuthStore(
+ state=>state.linkedChildren
+);
+
+
+
+const primaryChild =
+linkedChildren[0] ?? null;
+
+
+
+
+
+const latest =
+useLocationStore(
+ state=>state.latest
+);
+
+
+
+const loadLocation =
+useLocationStore(
+ state=>state.loadForChild
+);
+
+
+
+const locationLoading =
+useLocationStore(
+ state=>state.isLoading
+);
+
+
+
+
+
+const alerts =
+useSosStore(
+ state=>state.alerts
+);
+
+
+
+const loadSos =
+useSosStore(
+ state=>state.loadForChild
+);
+
+
+
+
+const [watch,setWatch] =
+useState<SmartwatchStatus | null>(
+ null
+);
+
+
+
+const [safeZones,setSafeZones] =
+useState(0);
+
+
+
+const [refreshing,setRefreshing] =
+useState(false);
+
+
+
+const pulse =
+useRef(
+ new Animated.Value(1)
+).current;
+const activeSosCount =
+useMemo(()=>{
+
+  return alerts.filter(
+    alert =>
+      alert.status !== "resolved"
+  ).length;
+
+
+},[
+  alerts
+]);
+
+
+
+
+
+const deviceStatus =
+useMemo(
+()=>DeviceStatus({
+  watch
+}),
+[
+ watch
+]
+);
+
+
+
+
+
+
+
+const loadDashboardData =
+useCallback(
+async()=>{
+
+
+if(!primaryChild){
+
+  return;
+
+}
+
+
+
+await Promise.all([
+
+
+loadLocation(
+ primaryChild.id,
+ primaryChild.fullName
+),
+
+
+
+loadSos(
+ primaryChild.id,
+ primaryChild.fullName
+),
+
+
+
+]);
+
+
+
+
+
+const smartwatch =
+await fetchSmartwatchForChild(
+ primaryChild.id
+);
+
+
+
+setWatch(
+ smartwatch
+);
+
+
+
+
+
+
+const {
+ data,
+ error
+}
+=
+await supabase
+.from("geofences")
+.select(
+"id",
+{
+ count:"exact",
+ head:true
+}
+)
+.eq(
+"guardian_person_id",
+guardian?.id
+)
+.eq(
+"child_person_id",
+primaryChild.id
+);
+
+
+
+if(!error){
+
+ setSafeZones(
+  data?.length ?? 0
+ );
+
+}
+
+
+
+},
+[
+primaryChild,
+guardian,
+loadLocation,
+loadSos
+]
+);
+
+
+
+
+
+
+useEffect(()=>{
+
+
+const animation =
+Animated.loop(
+
+Animated.sequence([
+
+
+Animated.timing(
+pulse,
+{
+toValue:1.05,
+duration:900,
+useNativeDriver:true,
+}
+),
+
+
+
+Animated.timing(
+pulse,
+{
+toValue:1,
+duration:900,
+useNativeDriver:true,
+}
+),
+
+
+
+])
+
+);
+
+
+
+animation.start();
+
+
+
+return()=>{
+
+animation.stop();
+
+};
+
+
+
+},[
+pulse
+]);
+
+
+
+
+
+
+
+useFocusEffect(
+
+useCallback(()=>{
+
+
+void loadDashboardData();
+
+
+
+
+if(!primaryChild){
+
+ return;
+
+}
+
+
+
+const channel =
+supabase
+.channel(
+`guardian-dashboard-${primaryChild.id}`
+)
+
+
+
+.on(
+
+"postgres_changes",
+
+{
+
+event:"*",
+
+schema:"public",
+
+table:"smartwatch_devices",
+
+filter:
+`child_id=eq.${primaryChild.id}`
+
+},
+
+
+()=>{
+
+ void loadDashboardData();
+
+}
+
+)
+
+
+
+.on(
+
+"postgres_changes",
+
+{
+
+event:"*",
+
+schema:"public",
+
+table:"sos_alerts",
+
+filter:
+`child_id=eq.${primaryChild.id}`
+
+},
+
+
+()=>{
+
+ void loadDashboardData();
+
+}
+
+)
+
+
+
+.on(
+
+"postgres_changes",
+
+{
+
+event:"*",
+
+schema:"public",
+
+table:"location_logs",
+
+filter:
+`child_id=eq.${primaryChild.id}`
+
+},
+
+
+()=>{
+
+ void loadDashboardData();
+
+}
+
+)
+
+
+
+.subscribe();
+
+
+
+
+
+return()=>{
+
+
+supabase.removeChannel(
+ channel
+);
+
+
+};
+
+
+
+},[
+primaryChild?.id,
+loadDashboardData
+])
+
+);
+
+
+
+
+
+
+
+async function refresh(){
+
+
+setRefreshing(true);
+
+
+await loadDashboardData();
+
+
+setRefreshing(false);
+
+
+}
+
+
+
+
+
+
+
+if(!primaryChild){
+
+
+return (
+
+<View
+style={styles.emptyContainer}
+>
+
+
+<Ionicons
+
+name="person-add-outline"
+
+size={45}
+
+color={colors.primary}
+
+/>
+
+
+
+<Text
+style={styles.emptyTitle}
+>
+No Child Registered
+</Text>
+
+
+
+<Text
+style={styles.emptyDescription}
+>
+Register a child profile before using SafeTrack monitoring.
+</Text>
+
+
+<Pressable
+
+style={styles.primaryButton}
+
+onPress={()=>{
+
+router.push(
+"/(auth)/child-registration"
+);
+
+}}
+
+>
+
+<Text
+style={styles.primaryButtonText}
+>
+Register Child
+</Text>
+
+
+</Pressable>
+
+
+</View>
+
+);
+
+
+}
+return (
+
+<ScrollView
+
+style={styles.container}
+
+contentContainerStyle={
+styles.content
+}
+
+showsVerticalScrollIndicator={false}
+
+refreshControl={undefined}
+
+>
+
+
+<View
+style={styles.header}
+>
+
+
+<View>
+
+<Text
+style={styles.greeting}
+>
+
+Hello, {
+firstName(
+ guardian?.fullName
+)
+}
+
+</Text>
+
+
+
+<Text
+style={styles.subtitle}
+>
+Guardian Dashboard
+</Text>
+
+
+</View>
+
+
+
+
+<Pressable
+
+style={styles.refreshButton}
+
+onPress={refresh}
+
+>
+
+<Ionicons
+
+name="refresh"
+
+size={22}
+
+color={colors.primary}
+
+/>
+
+
+</Pressable>
+
+
+
+</View>
+
+
+
+
+
+
+
+
+<View
+style={styles.childCard}
+>
+
+
+<View
+style={styles.childAvatar}
+>
+
+<Ionicons
+
+name="person"
+
+size={30}
+
+color={colors.primary}
+
+/>
+
+
+</View>
+
+
+
+<View
+style={styles.childInfo}
+>
+
+
+<Text
+style={styles.childName}
+>
+{
+primaryChild.fullName
+}
+</Text>
+
+
+
+<Text
+style={styles.childDetails}
+>
+Age {
+primaryChild.age
+}
+ • {
+primaryChild.relationship
+}
+</Text>
+
+
+
+</View>
+
+
+
+</View>
+
+
+
+
+
+
+
+
+
+<View
+style={styles.sectionTitleRow}
+>
+
+
+<Text
+style={styles.sectionTitle}
+>
+Live Safety Status
+</Text>
+
+
+</View>
+
+
+
+
+
+
+
+
+<View
+style={styles.statusGrid}
+>
+
+
+
+
+
+<View
+style={styles.statusCard}
+>
+
+
+<Ionicons
+
+name="location"
+
+size={24}
+
+color={colors.primary}
+
+/>
+
+
+
+<Text
+style={styles.statusValue}
+>
+
+{
+latest
+?
+"Active"
+:
+"Waiting"
+}
+
+</Text>
+
+
+
+<Text
+style={styles.statusLabel}
+>
+Location
+</Text>
+
+
+</View>
+
+
+
+
+
+
+
+
+<View
+style={styles.statusCard}
+>
+
+
+<Ionicons
+
+name={
+deviceStatus.icon
+}
+
+size={24}
+
+color={
+deviceStatus.connected
+?
+colors.primary
+:
+"#94A3B8"
+}
+
+/>
+
+
+
+<Text
+style={styles.statusValue}
+>
+
+{
+deviceStatus.connected
+?
+"Online"
+:
+"Offline"
+}
+
+</Text>
+
+
+
+<Text
+style={styles.statusLabel}
+>
+Watch
+</Text>
+
+
+</View>
+
+
+
+
+
+
+
+
+<View
+style={styles.statusCard}
+>
+
+
+<Animated.View
+
+style={{
+transform:[
+{
+scale:pulse
+}
+]
+}}
+
+>
+
+
+<Ionicons
+
+name={
+activeSosCount > 0
+?
+"alert-circle"
+:
+"shield-checkmark"
+}
+
+size={24}
+
+color={
+activeSosCount > 0
+?
+"#DC2626"
+:
+colors.primary
+}
+
+/>
+
+
+
+</Animated.View>
+
+
+
+
+
+<Text
+style={[
+styles.statusValue,
+activeSosCount > 0 &&
+styles.dangerText
+]}
+>
+
+{
+activeSosCount
+}
+
+</Text>
+
+
+
+<Text
+style={styles.statusLabel}
+>
+SOS
+</Text>
+
+
+
+</View>
+
+
+
+
+
+
+
+
+
+<View
+style={styles.statusCard}
+>
+
+
+<Ionicons
+
+name="map"
+
+size={24}
+
+color={colors.primary}
+
+/>
+
+
+
+<Text
+style={styles.statusValue}
+>
+
+{
+safeZones
+}
+
+</Text>
+
+
+
+<Text
+style={styles.statusLabel}
+>
+Safe Zones
+</Text>
+
+
+
+</View>
+
+
+
+
+
+</View>
+
+
+
+
+
+
+
+
+
+<View
+style={styles.sectionTitleRow}
+>
+
+
+<Text
+style={styles.sectionTitle}
+>
+Child Location
+</Text>
+
+
+</View>
+
+
+
+
+
+
+
+<View
+style={styles.mapCard}
+>
+
+
+<LocationMapCard
+
+location={latest}
+
+loading={
+locationLoading
+}
+
+/>
+
+
+
+</View>
+
+
+
+
+
+
+
+
+
+<View
+style={styles.watchCard}
+>
+
+
+<View
+style={styles.watchHeader}
+>
+
+
+<Ionicons
+
+name="watch-outline"
+
+size={25}
+
+color={colors.primary}
+
+/>
+
+
+<View
+style={styles.watchText}
+>
+
+
+<Text
+style={styles.watchTitle}
+>
+{
+deviceStatus.title
+}
+</Text>
+
+
+
+<Text
+style={styles.watchSubtitle}
+>
+{
+deviceStatus.subtitle
+}
+</Text>
+
+
+</View>
+
+
+</View>
+
+
+
+
+<Pressable
+
+style={styles.connectionButton}
+
+onPress={()=>{
+
+
+router.push({
+
+pathname:
+"/watch-connection",
+
+params:{
+childId:
+primaryChild.id
+}
+
+});
+
+
+}}
+
+>
+
+
+<Text
+style={styles.connectionButtonText}
+>
+Generate Device Connection Code
+</Text>
+
+
+</Pressable>
+
+
+
+</View>
+
+
+
+
+
+
+
+
+<View
+style={styles.aiCard}
+>
+
+
+<Ionicons
+
+name="analytics-outline"
+
+size={25}
+
+color={colors.primary}
+
+/>
+
+
+<View
+style={styles.aiText}
+>
+
+
+<Text
+style={styles.aiTitle}
+>
+AI Safety Monitoring
+</Text>
+
+
+
+<Text
+style={styles.aiDescription}
+>
+SafeTrack analyzes normal movement patterns and provides explainable anomaly notifications for unusual activity.
+</Text>
+
+
+
+</View>
+
+
+
+</View>
+
+
+
+
+
+
+</ScrollView>
+
+);
+
+
+}
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
 
-  content: {
-    padding: spacing.lg,
-    paddingTop: 44,
-    paddingBottom: 36,
-  },
+container:{
+  flex:1,
+  backgroundColor:colors.background,
+},
 
-  header: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    marginBottom: 18,
-  },
 
-  headerCopy: {
-    flex: 1,
-    marginRight: 14,
-  },
 
-  greeting: {
-    color: colors.ink,
-    fontSize: 30,
-    lineHeight: 37,
-    fontWeight: "900",
-    letterSpacing: -0.9,
-  },
+content:{
+  padding:spacing.lg,
+  paddingBottom:50,
+},
 
-  subtitle: {
-    color: colors.muted,
-    fontSize: 14.5,
-    lineHeight: 21,
-    marginTop: 4,
-  },
 
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 19,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
 
-  avatarText: {
-    color: colors.white,
-    fontSize: 23,
-    fontWeight: "900",
-  },
+emptyContainer:{
+  flex:1,
+  alignItems:"center",
+  justifyContent:"center",
+  padding:30,
+  backgroundColor:colors.background,
+},
 
-  metrics: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    borderRadius: radius.md,
-    backgroundColor: colors.white,
-    paddingVertical: 13,
-    marginTop: 18,
-    ...shadow.soft,
-  },
 
-  metric: {
-    flex: 1,
-    alignItems: "center",
-  },
 
-  metricValue: {
-    color: colors.ink,
-    fontSize: 18,
-    fontWeight: "900",
-    marginTop: 3,
-  },
+emptyTitle:{
+  marginTop:20,
+  fontSize:24,
+  fontWeight:"900",
+  color:colors.ink,
+},
 
-  metricLabel: {
-    color: colors.muted,
-    fontSize: 10.5,
-    fontWeight: "800",
-    marginTop: 2,
-    textAlign: "center",
-  },
 
-  metricDivider: {
-    width: 1,
-    backgroundColor: colors.border,
-    marginVertical: 4,
-  },
 
-  notice: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 14,
-    paddingHorizontal: 3,
-  },
+emptyDescription:{
+  marginTop:10,
+  textAlign:"center",
+  color:colors.muted,
+  lineHeight:20,
+},
 
-  noticeText: {
-    flex: 1,
-    color: colors.primaryDark,
-    fontSize: 12.5,
-    lineHeight: 18,
-    fontWeight: "800",
-    marginLeft: 8,
-  },
 
-  noticeDanger: {
-    color: colors.danger,
-  },
 
-  sectionTitle: {
-    color: colors.ink,
-    fontSize: 18,
-    fontWeight: "900",
-    marginTop: 21,
-    marginBottom: 10,
-  },
+primaryButton:{
+  marginTop:25,
+  backgroundColor:colors.primary,
+  paddingHorizontal:25,
+  paddingVertical:14,
+  borderRadius:radius.pill,
+},
 
-  childSectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
 
-  childCount: {
-    color: colors.primaryDark,
-    fontSize: 11.5,
-    fontWeight: "900",
-    marginTop: 11,
-  },
 
-  quickActions: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
+primaryButtonText:{
+  color:colors.white,
+  fontWeight:"900",
+},
 
-  quickAction: {
-    width: "30%",
-    alignItems: "center",
-  },
 
-  quickIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 19,
-    backgroundColor: colors.softMint,
-    alignItems: "center",
-    justifyContent: "center",
-  },
 
-  quickIconDanger: {
-    backgroundColor: colors.dangerSoft,
-  },
 
-  quickText: {
-    color: colors.ink,
-    fontSize: 11.5,
-    fontWeight: "800",
-    textAlign: "center",
-    marginTop: 8,
-  },
+header:{
+  flexDirection:"row",
+  alignItems:"center",
+  justifyContent:"space-between",
+  marginBottom:20,
+},
 
-  childRowContainer: {
-    borderRadius: radius.md,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 10,
-    overflow: "hidden",
-    ...shadow.soft,
-  },
 
-  childRowDeleting: {
-    opacity: 0.65,
-  },
 
-  childRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 15,
-  },
+greeting:{
+  fontSize:26,
+  fontWeight:"900",
+  color:colors.ink,
+},
 
-  childAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 17,
-    backgroundColor: colors.sage,
-    alignItems: "center",
-    justifyContent: "center",
-  },
 
-  childInitial: {
-    color: colors.white,
-    fontSize: 19,
-    fontWeight: "900",
-  },
 
-  childCopy: {
-    flex: 1,
-    marginLeft: 13,
-    marginRight: 8,
-  },
+subtitle:{
+  marginTop:5,
+  color:colors.muted,
+  fontSize:14,
+},
 
-  childNameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
 
-  childName: {
-    flexShrink: 1,
-    color: colors.ink,
-    fontSize: 15.5,
-    fontWeight: "900",
-  },
 
-  primaryBadge: {
-    marginLeft: 7,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 7,
-    backgroundColor: colors.softMint,
-  },
+refreshButton:{
+  width:45,
+  height:45,
+  borderRadius:22,
+  backgroundColor:colors.white,
+  alignItems:"center",
+  justifyContent:"center",
+  ...shadow.soft,
+},
 
-  primaryBadgeText: {
-    color: colors.primaryDark,
-    fontSize: 7.5,
-    fontWeight: "900",
-    letterSpacing: 0.4,
-  },
 
-  childDetail: {
-    color: colors.muted,
-    fontSize: 12.5,
-    marginTop: 2,
-  },
 
-  watchText: {
-    color: colors.primaryDark,
-    fontSize: 11,
-    fontWeight: "800",
-    marginTop: 5,
-  },
 
-  childAction: {
-    width: 45,
-    height: 45,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 15,
-    backgroundColor: colors.softMint,
-  },
+childCard:{
+  flexDirection:"row",
+  alignItems:"center",
+  backgroundColor:colors.white,
+  padding:18,
+  borderRadius:radius.lg,
+  ...shadow.card,
+},
 
-  deleteChildButton: {
-    minHeight: 46,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    backgroundColor: colors.dangerSoft,
-  },
 
-  deleteChildText: {
-    color: colors.danger,
-    fontSize: 12,
-    fontWeight: "900",
-    marginLeft: 7,
-  },
 
-  deletePressed: {
-    opacity: 0.7,
-  },
+childAvatar:{
+  width:55,
+  height:55,
+  borderRadius:20,
+  backgroundColor:colors.softMint,
+  alignItems:"center",
+  justifyContent:"center",
+},
 
-  deleteDisabled: {
-    opacity: 0.6,
-  },
 
-  addChildButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    minHeight: 70,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    borderRadius: radius.md,
-    backgroundColor: colors.white,
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-    borderStyle: "dashed",
-    marginTop: 2,
-  },
 
-  addChildIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 15,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.softMint,
-  },
+childInfo:{
+  marginLeft:15,
+},
 
-  addChildCopy: {
-    flex: 1,
-    marginLeft: 12,
-    marginRight: 8,
-  },
 
-  addChildTitle: {
-    color: colors.primaryDark,
-    fontSize: 14.5,
-    fontWeight: "900",
-  },
 
-  addChildDescription: {
-    color: colors.muted,
-    fontSize: 11,
-    lineHeight: 16,
-    marginTop: 2,
-  },
+childName:{
+  fontSize:19,
+  fontWeight:"900",
+  color:colors.ink,
+},
 
-  connectionInfo: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    paddingHorizontal: 3,
-    marginTop: 12,
-  },
 
-  connectionInfoText: {
-    flex: 1,
-    color: colors.muted,
-    fontSize: 10.5,
-    lineHeight: 16,
-    marginLeft: 7,
-  },
 
-  latestRecordText: {
-    color: colors.muted,
-    fontSize: 10.5,
-    fontWeight: "800",
-    textAlign: "center",
-    marginTop: 12,
-  },
+childDetails:{
+  marginTop:5,
+  color:colors.muted,
+},
 
-  setupCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 18,
-    borderRadius: radius.md,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginTop: 24,
-    ...shadow.card,
-  },
 
-  setupIcon: {
-    width: 47,
-    height: 47,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 16,
-    backgroundColor: colors.softMint,
-  },
 
-  setupCopy: {
-    flex: 1,
-    marginLeft: 12,
-    marginRight: 10,
-  },
 
-  setupTitle: {
-    color: colors.ink,
-    fontSize: 16,
-    fontWeight: "900",
-  },
 
-  setupText: {
-    color: colors.muted,
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 2,
-  },
+sectionTitleRow:{
+  marginTop:22,
+  marginBottom:12,
+},
 
-  pressed: {
-    opacity: 0.76,
-    transform: [{ scale: 0.985 }],
-  },
+
+
+sectionTitle:{
+  fontSize:18,
+  fontWeight:"900",
+  color:colors.ink,
+},
+
+
+
+
+
+statusGrid:{
+  flexDirection:"row",
+  flexWrap:"wrap",
+  justifyContent:"space-between",
+},
+
+
+
+statusCard:{
+  width:"48%",
+  backgroundColor:colors.white,
+  borderRadius:radius.md,
+  padding:18,
+  marginBottom:12,
+  alignItems:"center",
+  ...shadow.soft,
+},
+
+
+
+statusValue:{
+  marginTop:8,
+  fontSize:18,
+  fontWeight:"900",
+  color:colors.ink,
+},
+
+
+
+statusLabel:{
+  marginTop:4,
+  fontSize:12,
+  color:colors.muted,
+},
+
+
+
+dangerText:{
+  color:"#DC2626",
+},
+
+
+
+
+
+mapCard:{
+  backgroundColor:colors.white,
+  borderRadius:radius.lg,
+  overflow:"hidden",
+  ...shadow.card,
+},
+
+
+
+
+
+watchCard:{
+  backgroundColor:colors.white,
+  padding:18,
+  borderRadius:radius.lg,
+  ...shadow.card,
+},
+
+
+
+watchHeader:{
+  flexDirection:"row",
+  alignItems:"center",
+},
+
+
+
+watchText:{
+  flex:1,
+  marginLeft:14,
+},
+
+
+
+watchTitle:{
+  fontSize:16,
+  fontWeight:"900",
+  color:colors.ink,
+},
+
+
+
+watchSubtitle:{
+  marginTop:5,
+  color:colors.muted,
+  fontSize:13,
+},
+
+
+
+connectionButton:{
+  marginTop:18,
+  backgroundColor:colors.primary,
+  padding:14,
+  borderRadius:radius.pill,
+  alignItems:"center",
+},
+
+
+
+connectionButtonText:{
+  color:colors.white,
+  fontWeight:"900",
+},
+
+
+
+
+
+aiCard:{
+  marginTop:18,
+  flexDirection:"row",
+  backgroundColor:colors.softMint,
+  padding:18,
+  borderRadius:radius.lg,
+},
+
+
+
+aiText:{
+  flex:1,
+  marginLeft:12,
+},
+
+
+
+aiTitle:{
+  fontSize:16,
+  fontWeight:"900",
+  color:colors.ink,
+},
+
+
+
+aiDescription:{
+  marginTop:5,
+  color:colors.muted,
+  lineHeight:18,
+  fontSize:13,
+},
+
+
 });

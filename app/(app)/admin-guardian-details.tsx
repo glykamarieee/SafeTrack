@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import {
   fetchAdminGuardianDetail,
   updateAdminGuardianAccountStatus,
+  subscribeAdminUpdates,
   type AccountStatus,
   type AdminGuardianDetail,
 } from "../../services/adminService";
@@ -81,9 +82,23 @@ export default function AdminGuardianDetailsScreen() {
     }
   }, [guardianId]);
 
-  useEffect(() => {
-    void loadDetail();
-  }, [loadDetail]);
+useEffect(() => {
+
+  void loadDetail();
+
+
+  const unsubscribe =
+    subscribeAdminUpdates(() => {
+
+      void loadDetail();
+
+    });
+
+
+  return unsubscribe;
+
+
+}, [loadDetail]);
 
   const changeStatus = () => {
     if (!detail) {

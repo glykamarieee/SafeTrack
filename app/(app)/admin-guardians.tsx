@@ -16,6 +16,7 @@ import { useRouter } from "expo-router";
 import {
   fetchAdminGuardianAccounts,
   updateAdminGuardianAccountStatus,
+  subscribeAdminUpdates,
   type AdminGuardianAccount,
 } from "../../services/adminService";
 import {
@@ -87,12 +88,30 @@ export default function AdminGuardiansScreen() {
   );
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      void loadAccounts();
-    }, 300);
 
-    return () => clearTimeout(timer);
-  }, [loadAccounts]);
+  const timer = setTimeout(() => {
+    void loadAccounts();
+  }, 300);
+
+
+  const unsubscribe =
+    subscribeAdminUpdates(() => {
+
+      void loadAccounts();
+
+    });
+
+
+  return () => {
+
+    clearTimeout(timer);
+
+    unsubscribe();
+
+  };
+
+
+}, [loadAccounts]);
 
   const changeStatus = (account: AdminGuardianAccount) => {
     const nextStatus =

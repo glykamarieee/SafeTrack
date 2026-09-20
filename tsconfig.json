@@ -1,6 +1,37 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true
-  }
+    "strict": true,
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    }
+  },
+  "include": [
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "components/**/*.ts",
+    "components/**/*.tsx",
+    "constants/**/*.ts",
+    "constants/**/*.tsx",
+    "context/**/*.ts",
+    "context/**/*.tsx",
+    "hooks/**/*.ts",
+    "hooks/**/*.tsx",
+    "lib/**/*.ts",
+    "lib/**/*.tsx",
+    "services/**/*.ts",
+    "services/**/*.tsx",
+    "store/**/*.ts",
+    "store/**/*.tsx",
+    "types/**/*.ts",
+    "types/**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules",
+    "supabase/**/*",
+    "backend/**/*",
+    "android/**/*"
+  ]
 }

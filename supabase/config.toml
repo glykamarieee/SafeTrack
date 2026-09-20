@@ -1,0 +1,37 @@
+project_id = "safetrack"
+
+[functions.guardian-child-onboarding]
+verify_jwt = true
+
+[functions.watch-pairing-code]
+verify_jwt = true
+
+[functions.guardian-register-push]
+verify_jwt = true
+
+[functions.guardian-ack-sos]
+verify_jwt = true
+
+[functions.guardian-safety-timeline]
+verify_jwt = true
+
+[functions.admin-guardians]
+verify_jwt = true
+
+[functions.admin-devices]
+verify_jwt = true
+
+[functions.generate-report]
+verify_jwt = true
+
+[functions.watch-pair]
+verify_jwt = false
+
+[functions.watch-ingest]
+verify_jwt = false
+
+[functions.sos-realert]
+verify_jwt = false
+
+[functions.scheduled-safety-scan]
+verify_jwt = false

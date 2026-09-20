@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -48,13 +48,37 @@ function formatDateTime(value?: string) {
 }
 
 function getSourceLabel(source: unknown) {
-  const normalized = String(source ?? "").toLowerCase();
+  const normalized = String(source ?? "")
+    .toLowerCase()
+    .trim();
 
-  if (normalized === "mobile" || normalized === "phone") {
+
+  if (
+    [
+      "mobile",
+      "phone",
+      "child_mobile",
+      "android"
+    ].includes(normalized)
+  ) {
     return "Child mobile phone";
   }
 
-  return "Compatible smartwatch";
+
+  if (
+    [
+      "watch",
+      "smartwatch",
+      "wear_os",
+      "galaxy_watch",
+      "watch8"
+    ].includes(normalized)
+  ) {
+    return "Smartwatch device";
+  }
+
+
+  return "SafeTrack device";
 }
 
 function hasValidCoordinates(location: LocationLog | null) {
@@ -102,6 +126,18 @@ export function LocationMapCard({
 
   const displayHeight = large ? Math.max(460, height) : height;
   const validLocation = hasValidCoordinates(location);
+  
+  useEffect(() => {
+  if (!validLocation) {
+    return;
+  }
+
+  setRecenterSignal((value) => value + 1);
+}, [
+  validLocation,
+  location?.latitude,
+  location?.longitude,
+]);
 
   const latitude = validLocation ? Number(location?.latitude) : null;
   const longitude = validLocation ? Number(location?.longitude) : null;
@@ -149,8 +185,22 @@ export function LocationMapCard({
       <View pointerEvents="box-none" style={styles.overlay}>
         <View style={styles.mapTop}>
           <View style={styles.livePill}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveText}>Latest available location</Text>
+            <View
+  style={[
+    styles.liveDot,
+    {
+      backgroundColor:
+        validLocation
+          ? colors.primary
+          : "#94A3B8",
+    },
+  ]}
+/>
+            <Text style={styles.liveText}>
+  {location
+    ? getSourceLabel(location.source)
+    : "Waiting for location"}
+</Text>
           </View>
 
           <View style={styles.topActions}>

@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import {
   fetchAdminSmartwatchDeviceDetail,
   updateAdminSmartwatchDeviceStatus,
+  subscribeAdminUpdates,
   type AccountStatus,
   type AdminSmartwatchDeviceDetail,
 } from "../../services/adminService";
@@ -80,9 +81,23 @@ export default function AdminDeviceDetailsScreen() {
     }
   }, [deviceId]);
 
-  useEffect(() => {
-    void loadDetail();
-  }, [loadDetail]);
+useEffect(() => {
+
+  void loadDetail();
+
+
+  const unsubscribe =
+    subscribeAdminUpdates(() => {
+
+      void loadDetail();
+
+    });
+
+
+  return unsubscribe;
+
+
+}, [loadDetail]);
 
   const changeStatus = () => {
     if (!detail) {

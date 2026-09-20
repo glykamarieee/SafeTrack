@@ -1348,6 +1348,14 @@ export function SafeTrackInteractiveMap({
           html:
             mapHtml
         }}
+        onError={(error)=>{
+
+  console.log(
+    "SafeTrack Map WebView Error:",
+    error.nativeEvent
+  );
+
+}}
 
         originWhitelist={[
           "*"
