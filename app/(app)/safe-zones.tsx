@@ -1,32 +1,45 @@
-import { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import {
   Alert,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
-  RefreshControl,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
+  ActivityIndicator,
 } from "react-native";
 
-import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import {
+  SafeAreaView,
+} from "react-native-safe-area-context";
 
-import SafeZoneMap, {
-  type SafeZoneMapHandle,
-  type SafeZoneMapRegion,
-  type SafeZoneMapZone,
-} from "../../components/safe-zones/SafeZoneMap";
+import {
+  Ionicons,
+} from "@expo/vector-icons";
 
-import { supabase } from "../../lib/supabase";
-import { useAuthStore } from "../../store/authStore";
+import {
+  useAuthStore,
+} from "../../store/authStore";
+
+
+import {
+  useGeofenceStore,
+} from "../../store/geofenceStore";
+
+
+import {
+  SafeTrackInteractiveMap,
+  type SafeTrackMapMarker,
+} from "../../components/location/SafeTrackInteractiveMap";
+
 
 import {
   safeTrackColors as colors,
@@ -36,321 +49,172 @@ import {
 } from "../../constants/safeTrackDesign";
 
 
-type SafeZone = {
-  id: string;
-  name: string;
-  address: string | null;
-  latitude: number;
-  longitude: number;
-  radiusMeters: number;
-  isEnabled: boolean;
+
+
+
+type FormState = {
+
+  name:string;
+
+  address:string;
+
+  latitude:string;
+
+  longitude:string;
+
+  radius:string;
+
 };
 
 
-type ZoneForm = {
-  name: string;
-  address: string;
-  latitude: string;
-  longitude: string;
-  radiusMeters: string;
+
+const EMPTY_FORM:FormState = {
+
+  name:"",
+
+  address:"",
+
+  latitude:"10.000000",
+
+  longitude:"123.000000",
+
+  radius:"200",
+
 };
 
 
-const DEFAULT_REGION: SafeZoneMapRegion = {
-  latitude: 10.3103,
-  longitude: 123.9490,
-  latitudeDelta: 0.12,
-  longitudeDelta: 0.12,
-};
-
-
-function createForm(
-  latitude: number,
-  longitude: number
-): ZoneForm {
-  return {
-    name: "",
-    address: "",
-    latitude: latitude.toFixed(6),
-    longitude: longitude.toFixed(6),
-    radiusMeters: "200",
-  };
-}
-
-
-function mapZone(row: any): SafeZone {
-  return {
-    id: String(row.id),
-    name: row.name ?? "",
-    address: row.address ?? null,
-    latitude: Number(row.latitude),
-    longitude: Number(row.longitude),
-    radiusMeters: Number(row.radius_meters ?? 200),
-    isEnabled: row.is_enabled !== false,
-  };
-}
-
-
-function formatRadius(
-  meters: number
-) {
-  if (meters >= 1000) {
-    return `${(meters / 1000).toFixed(1)} km`;
-  }
-
-  return `${Math.round(meters)} m`;
-}
-
-
-function makeRegion(
-  latitude: number,
-  longitude: number
-): SafeZoneMapRegion {
-  return {
-    latitude,
-    longitude,
-    latitudeDelta: 0.015,
-    longitudeDelta: 0.015,
-  };
-}
 
 
 
-export default function SafeZones() {
-
-  const router = useRouter();
-
-  const mapRef = useRef<SafeZoneMapHandle | null>(null);
-
-
-  const guardian = useAuthStore(
-    (state) => state.guardian
-  );
-
-
-  const linkedChildren = useAuthStore(
-    (state) => state.linkedChildren
-  );
-
-
-  const child = linkedChildren[0] ?? null;
 
 
 
-  const [zones,setZones] =
-    useState<SafeZone[]>([]);
+export default function SafeZonesScreen(){
 
 
-  const [loading,setLoading] =
-    useState(true);
-
-
-  const [refreshing,setRefreshing] =
-    useState(false);
-
-
-  const [region,setRegion] =
-    useState(DEFAULT_REGION);
-
-
-  const [mapPoint,setMapPoint] =
-    useState({
-      latitude: DEFAULT_REGION.latitude,
-      longitude: DEFAULT_REGION.longitude,
-    });
-
-
-  const [modalVisible,setModalVisible] =
-    useState(false);
-
-
-  const [saving,setSaving] =
-    useState(false);
-
-
-  const [editing,setEditing] =
-    useState<SafeZone | null>(null);
-
-
-  const [form,setForm] =
-    useState(
-      createForm(
-        DEFAULT_REGION.latitude,
-        DEFAULT_REGION.longitude
-      )
+  const guardian =
+    useAuthStore(
+      state=>state.guardian
     );
 
 
-  const activeZones =
-    zones.filter(
-      (zone)=>zone.isEnabled
-    ).length;
-      const loadZones = async () => {
-    if (!guardian?.id || !child?.id) {
-      setZones([]);
-      setLoading(false);
-      return;
-    }
+  const child =
+useAuthStore(
+ state=>state.linkedChildren?.[0] ?? null
+);
 
-    setLoading(true);
-
-    const { data, error } =
-      await supabase
-        .from("geofences")
-        .select(
-          `
-          id,
-          name,
-          address,
-          latitude,
-          longitude,
-          radius_meters,
-          is_enabled
-          `
-        )
-        .eq(
-          "guardian_id",
-          guardian.id
-        )
-        .eq(
-          "child_id",
-          child.id
-        )
-        .order(
-          "created_at",
-          {
-            ascending:false,
-          }
-        );
+  const trackingSource =
+child?.trackingSource ?? "mobile";
 
 
-    if (error) {
 
-      Alert.alert(
-        "Safe zones error",
-        error.message
-      );
+  const {
 
-      setZones([]);
+    zones,
 
-    } else {
+    isLoading,
 
-      const mapped =
-        (data ?? []).map(
-          mapZone
-        );
+    isSaving,
 
+    error,
 
-      setZones(mapped);
+    load,
 
+    saveNew,
 
-      if(mapped.length > 0){
+    saveEdit,
 
-        const first =
-          mapped[0];
+    remove,
 
-        const next =
-          makeRegion(
-            first.latitude,
-            first.longitude
-          );
+  } =
+  useGeofenceStore();
 
 
-        setRegion(next);
 
-        setMapPoint({
-          latitude:first.latitude,
-          longitude:first.longitude,
-        });
 
+
+  const [
+    modalVisible,
+    setModalVisible
+  ] =
+  useState(false);
+
+
+
+  const [
+    editingId,
+    setEditingId
+  ] =
+  useState<string|null>(null);
+
+
+
+  const [
+    form,
+    setForm
+  ] =
+  useState<FormState>(
+    EMPTY_FORM
+  );
+
+
+
+
+
+
+
+
+  const loadZones =
+  useCallback(
+    async()=>{
+
+      if(
+        !guardian?.id ||
+        !child?.id
+      ){
+        return;
       }
 
-    }
+
+      await load(
+        guardian.id,
+        child.id
+      );
 
 
-    setLoading(false);
-  };
+    },
+    [
+      guardian?.id,
+      child?.id
+    ]
+  );
+
+
 
 
 
   useEffect(()=>{
 
-    loadZones();
+    void loadZones();
 
-  },[
-    guardian?.id,
-    child?.id
-  ]);
-
-
-
-  const updateForm = (
-    key:keyof ZoneForm,
-    value:string
-  )=>{
-
-    setForm(
-      current=>({
-        ...current,
-        [key]:value
-      })
-    );
-
-  };
-
-
-
-  const centerMap = (
-    latitude = mapPoint.latitude,
-    longitude = mapPoint.longitude
-  )=>{
-
-    const next =
-      makeRegion(
-        latitude,
-        longitude
-      );
-
-
-    setRegion(next);
-
-    setMapPoint({
-      latitude,
-      longitude,
-    });
-
-
-    mapRef.current?.animateToRegion(
-      next,
-      400
-    );
-
-  };
+  },[loadZones]);
 
 
 
 
-  const openAdd = ()=>{
-
-    if(!child){
-
-      Alert.alert(
-        "Child required",
-        "Register a child first."
-      );
-
-      return;
-    }
 
 
-    setEditing(null);
+
+
+
+  const openCreate = ()=>{
+
+
+    setEditingId(null);
 
 
     setForm(
-      createForm(
-        mapPoint.latitude,
-        mapPoint.longitude
-      )
+      EMPTY_FORM
     );
 
 
@@ -362,27 +226,38 @@ export default function SafeZones() {
 
 
 
+
+
+
   const openEdit = (
-    zone:SafeZone
+    zone:any
   )=>{
 
-    setEditing(zone);
+
+    setEditingId(
+      zone.id
+    );
 
 
     setForm({
 
-      name:zone.name,
+      name:
+        zone.name,
 
       address:
         zone.address ?? "",
 
       latitude:
-        zone.latitude.toFixed(6),
+        String(
+          zone.latitude
+        ),
 
       longitude:
-        zone.longitude.toFixed(6),
+        String(
+          zone.longitude
+        ),
 
-      radiusMeters:
+      radius:
         String(
           zone.radiusMeters
         ),
@@ -390,13 +265,8 @@ export default function SafeZones() {
     });
 
 
-    centerMap(
-      zone.latitude,
-      zone.longitude
-    );
-
-
     setModalVisible(true);
+
 
   };
 
@@ -404,27 +274,48 @@ export default function SafeZones() {
 
 
 
-  const saveZone = async()=>{
 
-    if(!guardian?.id || !child?.id)
+
+
+
+  const save = async()=>{
+
+
+    if(
+      !guardian?.id ||
+      !child?.id
+    ){
       return;
+    }
+
 
 
     const latitude =
-      Number(form.latitude);
+      Number(
+        form.latitude
+      );
+
 
     const longitude =
-      Number(form.longitude);
+      Number(
+        form.longitude
+      );
+
 
     const radiusMeters =
-      Number(form.radiusMeters);
+      Number(
+        form.radius
+      );
 
 
-    if(!form.name.trim()){
+
+    if(
+      !form.name.trim()
+    ){
 
       Alert.alert(
         "Missing name",
-        "Enter a safe zone name."
+        "Please enter a Safe Zone name."
       );
 
       return;
@@ -440,7 +331,7 @@ export default function SafeZones() {
 
       Alert.alert(
         "Invalid location",
-        "Enter valid coordinates."
+        "Please enter valid coordinates."
       );
 
       return;
@@ -449,110 +340,97 @@ export default function SafeZones() {
 
 
 
-    setSaving(true);
+    try{
+
+
+      if(editingId){
+
+
+        await saveEdit(
+          editingId,
+          {
+
+            name:
+              form.name,
+
+            address:
+              form.address,
+
+            latitude,
+
+            longitude,
+
+            radiusMeters,
+
+            isEnabled:true,
+
+          }
+        );
+
+
+      }
+      else{
+
+
+        await saveNew({
+
+          guardianId:
+            guardian.id,
+
+          childId:
+            child.id,
+
+
+          name:
+            form.name,
+
+          address:
+            form.address,
+
+
+          latitude,
+
+          longitude,
+
+
+          radiusMeters,
+
+
+          isEnabled:true,
+
+        });
+
+
+      }
 
 
 
-    const payload = {
+      setModalVisible(false);
 
-      name:
-        form.name.trim(),
-
-      address:
-        form.address.trim() ||
-        null,
-
-      latitude,
-
-      longitude,
-
-      radius_meters:
-        radiusMeters,
-
-      updated_at:
-        new Date().toISOString(),
-
-    };
+      await loadZones();
 
 
-
-    let error;
-
-
-
-    if(editing){
-
-      const result =
-        await supabase
-          .from("geofences")
-          .update(payload)
-          .eq(
-            "id",
-            editing.id
-          );
-
-      error =
-        result.error;
-
-
-    }else{
-
-
-      const result =
-        await supabase
-          .from("geofences")
-          .insert({
-
-            guardian_id:
-              guardian.id,
-
-            child_id:
-              child.id,
-
-            ...payload,
-
-            is_enabled:true,
-
-          });
-
-
-      error =
-        result.error;
 
     }
+    catch(error){
 
-
-
-    setSaving(false);
-
-
-
-    if(error){
 
       Alert.alert(
-        "Save failed",
+
+        "Unable to save Safe Zone",
+
+        error instanceof Error
+        ?
         error.message
+        :
+        "Please try again."
+
       );
 
-      return;
 
     }
 
 
-
-    setModalVisible(false);
-
-    setEditing(null);
-
-
-    await loadZones();
-
-
-
-    Alert.alert(
-      "Success",
-      "Safe zone saved."
-    );
 
   };
 
@@ -560,893 +438,420 @@ export default function SafeZones() {
 
 
 
-  const toggleZone =
-    async(zone:SafeZone)=>{
-
-      const next =
-        !zone.isEnabled;
 
 
-      await supabase
-        .from("geofences")
-        .update({
-          is_enabled:next
-        })
-        .eq(
-          "id",
-          zone.id
-        );
 
 
-      loadZones();
+  const toggle =
+  async(
+    zone:any
+  )=>{
 
-    };
+
+    try{
+
+
+      await saveEdit(
+
+        zone.id,
+
+        {
+
+          name:
+            zone.name,
+
+          address:
+            zone.address,
+
+          latitude:
+            zone.latitude,
+
+          longitude:
+            zone.longitude,
+
+          radiusMeters:
+            zone.radiusMeters,
+
+          isEnabled:
+            !zone.isEnabled,
+
+        }
+
+      );
+
+
+    }
+    catch(error){
+
+      Alert.alert(
+        "Update failed",
+        error instanceof Error
+        ?
+        error.message
+        :
+        "Unable to update."
+      );
+
+    }
+
+
+  };
+
+
+
+
 
 
 
 
 
   const deleteZone =
-    (zone:SafeZone)=>{
+  (
+    id:string
+  )=>{
 
 
-      Alert.alert(
-        "Delete safe zone?",
-        zone.name,
-        [
-          {
-            text:"Cancel",
-            style:"cancel"
-          },
+    Alert.alert(
 
-          {
-            text:"Delete",
-            style:"destructive",
+      "Delete Safe Zone",
 
-            onPress:
-              async()=>{
+      "Remove this Safe Zone?",
 
-
-                await supabase
-                  .from("geofences")
-                  .delete()
-                  .eq(
-                    "id",
-                    zone.id
-                  );
-
-
-                setModalVisible(false);
-
-                loadZones();
-
-              }
-
-          }
-
-        ]
-      );
-
-    };
-
-
-
-
-
-  const refresh = async()=>{
-
-    setRefreshing(true);
-
-    await loadZones();
-
-    setRefreshing(false);
-
-  };
-    return (
-    <SafeAreaView
-      style={styles.container}
-      edges={[
-        "top",
-        "left",
-        "right",
-      ]}
-    >
-
-      <View style={styles.mapContainer}>
-
-        <SafeZoneMap
-          ref={mapRef}
-
-          style={styles.map}
-
-          initialRegion={
-            DEFAULT_REGION
-          }
-
-          region={
-            region
-          }
-
-          zones={
-            zones as SafeZoneMapZone[]
-          }
-
-          primaryColor={
-            colors.primary
-          }
-
-          formatRadius={
-            formatRadius
-          }
-
-
-          onRegionChangeComplete={
-            (next)=>{
-
-              setRegion(next);
-
-              setMapPoint({
-
-                latitude:
-                  next.latitude,
-
-                longitude:
-                  next.longitude,
-
-              });
-
-            }
-          }
-
-
-          onPressCoordinate={
-            (
-              latitude,
-              longitude
-            )=>{
-
-              setMapPoint({
-
-                latitude,
-
-                longitude,
-
-              });
-
-            }
-          }
-
-
-          onZonePress={
-            (zone)=>{
-
-              const selected =
-                zones.find(
-                  item =>
-                    item.id === zone.id
-                );
-
-              if(selected){
-
-                openEdit(selected);
-
-              }
-
-            }
-          }
-
-        />
-
-
-
-        <View
-          style={styles.header}
-        >
-
-          <Pressable
-            onPress={()=>router.back()}
-            style={styles.circleButton}
-          >
-
-            <Ionicons
-              name="chevron-back"
-              size={26}
-              color={colors.ink}
-            />
-
-          </Pressable>
-
-
-
-          <View
-            style={styles.headerText}
-          >
-
-            <Text
-              style={styles.title}
-            >
-              Safe Zones
-            </Text>
-
-            <Text
-              style={styles.subtitle}
-            >
-              Guardian defined locations
-            </Text>
-
-
-          </View>
-
-
-
-          <Pressable
-            onPress={() =>
-              centerMap()
-            }
-
-            style={styles.circleButton}
-          >
-
-            <Ionicons
-              name="locate-outline"
-              size={22}
-              color={
-                colors.primaryDark
-              }
-            />
-
-          </Pressable>
-
-
-        </View>
-
-
-
-        <View
-          style={styles.summary}
-        >
-
-          <Ionicons
-            name="shield-checkmark-outline"
-            size={25}
-            color={
-              colors.primary
-            }
-          />
-
-
-          <View
-            style={{
-              flex:1,
-              marginLeft:12
-            }}
-          >
-
-            <Text
-              style={styles.summaryTitle}
-            >
-
-              {activeZones}
-              {" "}
-              Active Zone
-              {activeZones !== 1
-                ? "s"
-                : ""}
-
-            </Text>
-
-
-            <Text
-              style={styles.summaryText}
-            >
-
-              Tap a zone marker to edit
-              safe-zone settings.
-
-            </Text>
-
-
-          </View>
-
-
-        </View>
-
-
-      </View>
-
-
-
-
-      <ScrollView
-
-        style={
-          styles.scroll
-        }
-
-        contentContainerStyle={
-          styles.content
-        }
-
-        refreshControl={
-
-          <RefreshControl
-
-            refreshing={
-              refreshing
-            }
-
-            onRefresh={
-              refresh
-            }
-
-          />
-
-        }
-
-      >
-
-
-        <Text
-          style={styles.section}
-        >
-          SAVED SAFE ZONES
-        </Text>
-
-
+      [
 
         {
-          loading ? (
+          text:"Cancel",
+          style:"cancel"
+        },
 
-            <ActivityIndicator
-              size="large"
-              color={
-                colors.primary
-              }
-            />
+        {
 
-          ) : zones.length === 0 ? (
+          text:"Delete",
 
-            <View
-              style={styles.empty}
-            >
+          style:"destructive",
 
-              <Ionicons
-                name="location-outline"
-                size={48}
-                color={
-                  colors.primary
-                }
-              />
+          onPress:async()=>{
 
+            await remove(id);
 
-              <Text
-                style={styles.emptyTitle}
-              >
-                No safe zones yet
-              </Text>
-
-
-              <Text
-                style={styles.emptyText}
-              >
-                Add Home, School, or other
-                trusted locations.
-              </Text>
-
-            </View>
-
-
-          ) : (
-
-
-            zones.map(zone=>(
-
-
-              <View
-                key={zone.id}
-                style={styles.card}
-              >
-
-
-                <Pressable
-
-                  onPress={() =>
-                    openEdit(zone)
-                  }
-
-                  style={styles.cardMain}
-
-                >
-
-
-                  <View
-                    style={styles.iconBox}
-                  >
-
-                    <Ionicons
-                      name="shield-outline"
-                      size={24}
-                      color={
-                        colors.primary
-                      }
-                    />
-
-                  </View>
-
-
-
-                  <View
-                    style={styles.cardInfo}
-                  >
-
-                    <Text
-                      style={styles.zoneName}
-                    >
-                      {zone.name}
-                    </Text>
-
-
-                    <Text
-                      style={styles.zoneAddress}
-                    >
-                      {
-                        zone.address ??
-                        `${zone.latitude},
-${zone.longitude}`
-                      }
-                    </Text>
-
-
-                    <Text
-                      style={styles.radius}
-                    >
-                      {formatRadius(
-                        zone.radiusMeters
-                      )}
-                      {" "}
-                      radius
-                    </Text>
-
-
-                  </View>
-
-
-                  <Ionicons
-                    name="chevron-forward"
-                    size={20}
-                    color={
-                      colors.muted
-                    }
-                  />
-
-
-                </Pressable>
-
-
-
-                <View
-                  style={styles.cardFooter}
-                >
-
-                  <Text
-                    style={styles.enabledText}
-                  >
-                    {
-                      zone.isEnabled
-                      ? "Monitoring enabled"
-                      : "Paused"
-                    }
-                  </Text>
-
-
-                  <Switch
-
-                    value={
-                      zone.isEnabled
-                    }
-
-                    onValueChange={() =>
-                      toggleZone(zone)
-                    }
-
-                  />
-
-
-                </View>
-
-
-              </View>
-
-
-            ))
-
-          )
-        }
-
-
-
-      </ScrollView>
-
-
-
-
-      <View
-        style={styles.bottom}
-      >
-
-        <Pressable
-          onPress={
-            openAdd
           }
 
-          style={styles.addButton}
-
-        >
-
-          <Ionicons
-            name="add"
-            size={28}
-            color={
-              colors.white
-            }
-          />
-
-          <Text
-            style={styles.addText}
-          >
-            Add Safe Zone
-          </Text>
-
-
-        </Pressable>
-
-
-      </View>
-            <Modal
-        visible={modalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() =>
-          setModalVisible(false)
         }
-      >
 
-        <View
-          style={styles.modalOverlay}
-        >
+      ]
 
-          <Pressable
-            style={styles.dismiss}
-            onPress={() =>
-              setModalVisible(false)
-            }
-          />
+    );
 
-          <KeyboardAvoidingView
-            behavior={
-              Platform.OS === "ios"
-                ? "padding"
-                : undefined
-            }
 
-            style={styles.sheetWrapper}
-          >
+  };
 
-            <View
-              style={styles.sheet}
-            >
 
-              <View
-                style={styles.handle}
-              />
 
 
 
-              <View
-                style={styles.sheetHeader}
-              >
 
-                <Text
-                  style={styles.sheetTitle}
-                >
-                  {
-                    editing
-                    ? "Edit Safe Zone"
-                    : "Add Safe Zone"
-                  }
-                </Text>
 
 
-                <Pressable
-                  onPress={() =>
-                    setModalVisible(false)
-                  }
-                >
 
-                  <Ionicons
-                    name="close"
-                    size={28}
-                    color={colors.ink}
-                  />
+  const markers =
+  useMemo<SafeTrackMapMarker[]>(()=>{
 
-                </Pressable>
 
-              </View>
+    return zones.map(zone=>({
 
+      id:
+        zone.id,
 
 
-              <ScrollView
+      latitude:
+        zone.latitude,
 
-                contentContainerStyle={
-                  styles.form
-                }
 
-                keyboardShouldPersistTaps="handled"
+      longitude:
+        zone.longitude,
 
-                showsVerticalScrollIndicator={false}
 
-              >
+      title:
+        zone.name,
 
 
-                <Text
-                  style={styles.label}
-                >
-                  Zone Name
-                </Text>
+      detail:
+        `${zone.radiusMeters} meter radius`,
 
 
-                <TextInput
+      kind:
+        "zone",
 
-                  value={
-                    form.name
-                  }
 
-                  onChangeText={
-                    value =>
-                      updateForm(
-                        "name",
-                        value
-                      )
-                  }
+    }));
 
-                  placeholder="Example: Home"
 
-                  style={
-                    styles.input
-                  }
+  },[zones]);
 
-                />
 
 
 
-                <Text
-                  style={styles.label}
-                >
-                  Address
-                </Text>
 
 
-                <TextInput
 
-                  value={
-                    form.address
-                  }
 
-                  onChangeText={
-                    value =>
-                      updateForm(
-                        "address",
-                        value
-                      )
-                  }
 
-                  placeholder="Example: Babag II"
+  return (
 
-                  style={
-                    styles.input
-                  }
+<SafeAreaView style={styles.safe}>
 
-                />
 
+<ScrollView
+contentContainerStyle={styles.content}
+showsVerticalScrollIndicator={false}
+>
 
 
-                <View
-                  style={styles.row}
-                >
+<Text style={styles.title}>
+Safe Zones
+</Text>
 
-                  <TextInput
 
-                    value={
-                      form.latitude
-                    }
+<Text style={styles.subtitle}>
+Manage areas where your child is expected to stay.
+{trackingSource === "mobile"
+  ? " Location updates come from the child's mobile device."
+  : trackingSource === "both"
+  ? " Location updates come from smartwatch and mobile sources."
+  : " Location updates come from the child's smartwatch."}
+</Text>
 
-                    onChangeText={
-                      value =>
-                        updateForm(
-                          "latitude",
-                          value
-                        )
-                    }
 
-                    keyboardType="decimal-pad"
 
-                    placeholder="Latitude"
 
-                    style={[
-                      styles.input,
-                      styles.half
-                    ]}
 
-                  />
+<View style={styles.map}>
 
+<SafeTrackInteractiveMap
 
-                  <TextInput
+markers={markers}
 
-                    value={
-                      form.longitude
-                    }
+height={260}
 
-                    onChangeText={
-                      value =>
-                        updateForm(
-                          "longitude",
-                          value
-                        )
-                    }
+/>
 
-                    keyboardType="decimal-pad"
+</View>
 
-                    placeholder="Longitude"
 
-                    style={[
-                      styles.input,
-                      styles.half
-                    ]}
 
-                  />
 
-                </View>
 
+<Pressable
+style={styles.addButton}
+onPress={openCreate}
+>
 
+<Ionicons
+name="add-circle-outline"
+size={20}
+color="white"
+/>
 
 
-                <Text
-                  style={styles.label}
-                >
-                  Radius (meters)
-                </Text>
+<Text style={styles.addText}>
+Create Safe Zone
+</Text>
 
 
-                <TextInput
+</Pressable>
 
-                  value={
-                    form.radiusMeters
-                  }
 
-                  onChangeText={
-                    value =>
-                      updateForm(
-                        "radiusMeters",
-                        value
-                      )
-                  }
 
-                  keyboardType="number-pad"
 
-                  style={
-                    styles.input
-                  }
 
-                />
 
 
+{
+isLoading
+?
+<ActivityIndicator
+color={colors.primary}
+/>
 
-                <Pressable
+:
 
-                  onPress={
-                    saveZone
-                  }
+zones.map(zone=>(
 
-                  disabled={
-                    saving
-                  }
 
-                  style={
-                    styles.saveButton
-                  }
+<View
+key={zone.id}
+style={styles.card}
+>
 
-                >
 
-                  {
-                    saving ? (
+<Text style={styles.zoneName}>
+{zone.name}
+</Text>
 
-                      <ActivityIndicator
-                        color={
-                          colors.white
-                        }
-                      />
 
-                    ) : (
+<Text style={styles.detail}>
+Radius:
+{zone.radiusMeters} meters
+</Text>
 
-                      <Ionicons
-                        name="checkmark"
-                        size={25}
-                        color={
-                          colors.white
-                        }
-                      />
 
-                    )
-                  }
+<Text style={styles.status}>
+{
+zone.isEnabled
+?
+"Active monitoring"
+:
+"Disabled"
+}
+</Text>
 
 
-                  <Text
-                    style={styles.saveText}
-                  >
-                    {
-                      editing
-                      ? "Save Changes"
-                      : "Save Safe Zone"
-                    }
-                  </Text>
 
 
-                </Pressable>
+<View style={styles.actions}>
 
 
+<Pressable
+onPress={()=>openEdit(zone)}
+>
+<Text style={styles.action}>
+Edit
+</Text>
+</Pressable>
 
-                {
-                  editing && (
 
-                    <Pressable
+<Pressable
+onPress={()=>toggle(zone)}
+>
+<Text style={styles.action}>
+Toggle
+</Text>
+</Pressable>
 
-                      onPress={() =>
-                        deleteZone(
-                          editing
-                        )
-                      }
 
-                      style={styles.deleteButton}
+<Pressable
+onPress={()=>deleteZone(zone.id)}
+>
+<Text style={styles.delete}>
+Delete
+</Text>
+</Pressable>
 
-                    >
 
-                      <Ionicons
-                        name="trash-outline"
-                        size={18}
-                        color={
-                          colors.danger
-                        }
-                      />
+</View>
 
-                      <Text
-                        style={styles.deleteText}
-                      >
-                        Delete Safe Zone
-                      </Text>
 
+</View>
 
-                    </Pressable>
 
-                  )
-                }
+))
 
+}
 
-              </ScrollView>
 
 
-            </View>
 
 
-          </KeyboardAvoidingView>
+</ScrollView>
 
 
-        </View>
 
 
-      </Modal>
 
 
-    </SafeAreaView>
+
+
+
+<Modal
+visible={modalVisible}
+transparent
+animationType="slide"
+>
+
+
+<View style={styles.modal}>
+
+
+<View style={styles.sheet}>
+
+
+<Text style={styles.modalTitle}>
+Safe Zone
+</Text>
+
+
+
+{
+[
+["name","Name"],
+["address","Address"],
+["latitude","Latitude"],
+["longitude","Longitude"],
+["radius","Radius meters"],
+].map(([key,label])=>(
+
+
+<TextInput
+
+key={key}
+
+placeholder={label}
+
+value={
+form[key as keyof FormState]
+}
+
+onChangeText={
+text=>
+setForm({
+...form,
+[key]:
+text
+})
+}
+
+style={styles.input}
+
+/>
+
+
+))
+}
+
+
+
+
+
+<Pressable
+style={styles.saveButton}
+onPress={save}
+>
+
+<Text style={styles.saveText}>
+{
+isSaving
+?
+"Saving..."
+:
+"Save"
+}
+</Text>
+
+
+</Pressable>
+
+
+
+</View>
+
+</View>
+
+
+</Modal>
+
+
+
+</SafeAreaView>
 
   );
 
@@ -1454,351 +859,159 @@ ${zone.longitude}`
 
 
 
-const styles = StyleSheet.create({
 
-  container:{
-    flex:1,
-    backgroundColor:
-      colors.background,
-  },
 
 
-  mapContainer:{
-    height:300,
-    width:"100%",
-    overflow:"hidden",
-  },
 
 
-  map:{
-    width:"100%",
-    height:"100%",
-  },
 
+const styles =
+StyleSheet.create({
 
-  header:{
-    position:"absolute",
-    top:18,
-    left:18,
-    right:18,
-    flexDirection:"row",
-    justifyContent:"space-between",
-    alignItems:"center",
-  },
 
+safe:{
+flex:1,
+backgroundColor:colors.background,
+},
 
-  circleButton:{
-    width:50,
-    height:50,
-    borderRadius:25,
-    backgroundColor:
-      colors.white,
-    justifyContent:"center",
-    alignItems:"center",
-    ...shadow.card,
-  },
 
+content:{
+padding:spacing.lg,
+paddingBottom:50,
+},
 
-  headerText:{
-    flex:1,
-    marginHorizontal:12,
-  },
 
+title:{
+fontSize:30,
+fontWeight:"900",
+color:colors.ink,
+},
 
-  title:{
-    fontSize:24,
-    fontWeight:"900",
-    color:colors.ink,
-  },
 
+subtitle:{
+marginTop:8,
+color:colors.muted,
+},
 
-  subtitle:{
-    fontSize:12,
-    color:colors.muted,
-  },
 
+map:{
+marginTop:20,
+borderRadius:radius.lg,
+overflow:"hidden",
+},
 
-  summary:{
-    position:"absolute",
-    bottom:12,
-    left:16,
-    right:16,
-    flexDirection:"row",
-    padding:15,
-    borderRadius:22,
-    backgroundColor:
-      colors.white,
-    ...shadow.card,
-  },
 
+addButton:{
+marginTop:18,
+height:52,
+borderRadius:radius.pill,
+backgroundColor:colors.primary,
+flexDirection:"row",
+alignItems:"center",
+justifyContent:"center",
+},
 
-  summaryTitle:{
-    fontWeight:"900",
-    color:colors.ink,
-  },
 
+addText:{
+color:"white",
+fontWeight:"900",
+marginLeft:8,
+},
 
-  summaryText:{
-    color:colors.muted,
-    fontSize:12,
-    marginTop:3,
-  },
 
+card:{
+backgroundColor:"white",
+padding:16,
+borderRadius:radius.md,
+marginTop:14,
+...shadow.soft,
+},
 
-  scroll:{
-    flex:1,
-  },
 
+zoneName:{
+fontSize:16,
+fontWeight:"900",
+color:colors.ink,
+},
 
-  content:{
-    padding:spacing.lg,
-    paddingBottom:100,
-  },
 
+detail:{
+marginTop:5,
+color:colors.muted,
+},
 
-  section:{
-    fontWeight:"900",
-    color:colors.muted,
-    fontSize:11,
-    marginBottom:15,
-  },
 
+status:{
+marginTop:8,
+color:colors.primaryDark,
+fontWeight:"800",
+},
 
-  empty:{
-    alignItems:"center",
-    padding:30,
-  },
 
+actions:{
+flexDirection:"row",
+gap:18,
+marginTop:15,
+},
 
-  emptyTitle:{
-    fontSize:20,
-    fontWeight:"900",
-    marginTop:10,
-    color:colors.ink,
-  },
 
+action:{
+color:colors.primaryDark,
+fontWeight:"900",
+},
 
-  emptyText:{
-    textAlign:"center",
-    color:colors.muted,
-    marginTop:5,
-  },
 
+delete:{
+color:colors.danger,
+fontWeight:"900",
+},
 
-  card:{
-    backgroundColor:
-      colors.white,
-    borderRadius:20,
-    marginBottom:12,
-    ...shadow.soft,
-  },
 
+modal:{
+flex:1,
+backgroundColor:"rgba(0,0,0,.4)",
+justifyContent:"flex-end",
+},
 
-  cardMain:{
-    flexDirection:"row",
-    alignItems:"center",
-    padding:15,
-  },
 
+sheet:{
+backgroundColor:"white",
+padding:24,
+borderTopLeftRadius:30,
+borderTopRightRadius:30,
+},
 
-  iconBox:{
-    width:48,
-    height:48,
-    borderRadius:15,
-    backgroundColor:
-      colors.softMint,
-    justifyContent:"center",
-    alignItems:"center",
-  },
 
+modalTitle:{
+fontSize:22,
+fontWeight:"900",
+marginBottom:15,
+},
 
-  cardInfo:{
-    flex:1,
-    marginLeft:12,
-  },
 
+input:{
+height:48,
+borderWidth:1,
+borderColor:colors.border,
+borderRadius:14,
+paddingHorizontal:14,
+marginBottom:12,
+},
 
-  zoneName:{
-    fontWeight:"900",
-    color:colors.ink,
-  },
 
+saveButton:{
+height:50,
+backgroundColor:colors.primary,
+borderRadius:25,
+alignItems:"center",
+justifyContent:"center",
+},
 
-  zoneAddress:{
-    fontSize:12,
-    color:colors.muted,
-    marginTop:3,
-  },
 
-
-  radius:{
-    color:colors.primaryDark,
-    fontSize:12,
-    marginTop:3,
-  },
-
-
-  cardFooter:{
-    borderTopWidth:1,
-    borderTopColor:colors.border,
-    flexDirection:"row",
-    justifyContent:"space-between",
-    alignItems:"center",
-    padding:12,
-  },
-
-
-  enabledText:{
-    color:colors.muted,
-    fontSize:12,
-  },
-
-
-  bottom:{
-    padding:16,
-    backgroundColor:
-      colors.background,
-  },
-
-
-  addButton:{
-    height:60,
-    borderRadius:30,
-    backgroundColor:
-      colors.primary,
-    flexDirection:"row",
-    justifyContent:"center",
-    alignItems:"center",
-  },
-
-
-  addText:{
-    color:colors.white,
-    fontWeight:"900",
-    fontSize:17,
-    marginLeft:8,
-  },
-
-
-  modalOverlay:{
-    flex:1,
-    justifyContent:"flex-end",
-    backgroundColor:
-      "rgba(0,0,0,0.45)",
-  },
-
-
-  dismiss:{
-    flex:1,
-  },
-
-
-  sheetWrapper:{
-    width:"100%",
-  },
-
-
-  sheet:{
-    maxHeight:"85%",
-    backgroundColor:
-      colors.white,
-    borderTopLeftRadius:30,
-    borderTopRightRadius:30,
-    overflow:"hidden",
-  },
-
-
-  handle:{
-    width:45,
-    height:5,
-    borderRadius:5,
-    backgroundColor:"#D5DDD8",
-    alignSelf:"center",
-    marginTop:12,
-  },
-
-
-  sheetHeader:{
-    flexDirection:"row",
-    justifyContent:"space-between",
-    padding:20,
-  },
-
-
-  sheetTitle:{
-    fontSize:24,
-    fontWeight:"900",
-    color:colors.ink,
-  },
-
-
-  form:{
-    paddingHorizontal:20,
-    paddingBottom:40,
-  },
-
-
-  label:{
-    fontWeight:"800",
-    color:colors.ink,
-    marginBottom:6,
-    marginTop:12,
-  },
-
-
-  input:{
-    height:55,
-    borderRadius:16,
-    backgroundColor:"#F5F8F6",
-    paddingHorizontal:15,
-    color:colors.ink,
-  },
-
-
-  row:{
-    flexDirection:"row",
-    gap:10,
-  },
-
-
-  half:{
-    flex:1,
-  },
-
-
-  saveButton:{
-    height:60,
-    borderRadius:30,
-    marginTop:25,
-    backgroundColor:
-      colors.primary,
-    flexDirection:"row",
-    alignItems:"center",
-    justifyContent:"center",
-  },
-
-
-  saveText:{
-    color:colors.white,
-    fontWeight:"900",
-    marginLeft:8,
-    fontSize:16,
-  },
-
-
-  deleteButton:{
-    height:50,
-    justifyContent:"center",
-    alignItems:"center",
-    flexDirection:"row",
-  },
-
-
-  deleteText:{
-    color:colors.danger,
-    fontWeight:"900",
-    marginLeft:8,
-  },
+saveText:{
+color:"white",
+fontWeight:"900",
+},
 
 
 });

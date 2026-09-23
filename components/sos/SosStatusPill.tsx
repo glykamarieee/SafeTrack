@@ -1,35 +1,177 @@
-import { StyleSheet, Text, View } from "react-native";
-import { colors, radii, spacing } from "../../constants/theme";
-import type { SosAlertStatus } from "../../types/safetrack";
+import {
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
-interface SosStatusPillProps {
-  status: SosAlertStatus;
-}
 
-const STATUS_META: Record<SosAlertStatus, { label: string; bg: string; text: string }> = {
-  active: { label: "Active", bg: colors.dangerLight, text: colors.danger },
-  acknowledged: { label: "Acknowledged", bg: colors.warningLight, text: colors.warning },
-  resolved: { label: "Resolved", bg: colors.successLight, text: colors.success },
+import type {
+  SosAlertStatus,
+} from "../../types/safetrack";
+
+
+
+import {
+  safeTrackColors as colors,
+} from "../../constants/safeTrackDesign";
+
+
+
+
+
+
+
+const STATUS_META: Record<
+  SosAlertStatus,
+  {
+    label:string;
+    bg:string;
+    text:string;
+  }
+
+> = {
+
+
+  active:{
+
+    label:"ACTIVE",
+
+    bg:"#FBE7E3",
+
+    text:"#C0442E",
+
+  },
+
+
+
+  acknowledged:{
+
+    label:"ACKNOWLEDGED",
+
+    bg:"#FBF2E1",
+
+    text:"#B8863A",
+
+  },
+
+
+
+  resolved:{
+
+    label:"RESOLVED",
+
+    bg:"#E6F0E9",
+
+    text:"#2F6D4F",
+
+  },
+
+
+
+  canceled:{
+
+    label:"CANCELED",
+
+    bg:"#EEF1EF",
+
+    text:colors.muted,
+
+  },
+
+
 };
 
-export function SosStatusPill({ status }: SosStatusPillProps) {
-  const meta = STATUS_META[status];
+
+
+
+
+
+
+export default function SosStatusPill({
+
+  status,
+
+}:{
+
+  status:SosAlertStatus;
+
+}){
+
+
+  const meta =
+    STATUS_META[status];
+
+
+
   return (
-    <View style={[styles.pill, { backgroundColor: meta.bg }]}>
-      <Text style={[styles.text, { color: meta.text }]}>{meta.label}</Text>
+
+    <View
+
+      style={[
+        styles.container,
+        {
+          backgroundColor:
+            meta.bg,
+        }
+      ]}
+
+    >
+
+
+      <Text
+
+        style={[
+          styles.text,
+          {
+            color:
+              meta.text,
+          }
+        ]}
+
+      >
+
+        {meta.label}
+
+      </Text>
+
+
     </View>
+
   );
+
 }
 
+
+
+
+
+
+
 const styles = StyleSheet.create({
-  pill: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: radii.pill,
-    alignSelf: "flex-start",
-  },
-  text: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
+
+container:{
+
+  paddingHorizontal:12,
+
+  paddingVertical:6,
+
+  borderRadius:20,
+
+  alignSelf:"flex-start",
+
+},
+
+
+
+text:{
+
+  fontSize:10,
+
+  fontWeight:"900",
+
+  letterSpacing:.5,
+
+},
+
+
 });

@@ -11,6 +11,15 @@ export default function AuthLayout() {
         },
       }}
     >
+      {/* SafeTrack Introduction */}
+      <Stack.Screen
+        name="welcome"
+        options={{
+          animation: "fade",
+        }}
+      />
+
+      {/* Authentication */}
       <Stack.Screen
         name="login"
         options={{
@@ -18,13 +27,29 @@ export default function AuthLayout() {
         }}
       />
 
-      <Stack.Screen name="register" />
+      <Stack.Screen
+        name="register"
+        options={{
+          animation: "slide_from_right",
+        }}
+      />
 
-      <Stack.Screen name="forgot-password" />
+      <Stack.Screen
+        name="forgot-password"
+        options={{
+          animation: "slide_from_right",
+        }}
+      />
 
-      <Stack.Screen name="child-registration" />
 
-      <Stack.Screen name="child-device-link" />
+      {/* Guardian Child Setup */}
+      <Stack.Screen
+        name="child-registration"
+        options={{
+          animation: "slide_from_right",
+        }}
+      />
+
     </Stack>
   );
 }

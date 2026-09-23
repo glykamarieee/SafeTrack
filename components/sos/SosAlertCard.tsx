@@ -1,63 +1,255 @@
-import { StyleSheet, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { Card } from "../common/Card";
-import { Button } from "../common/Button";
-import { colors, spacing, typography } from "../../constants/theme";
-import type { SosAlert } from "../../types/safetrack";
+import {
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
-function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-}
+import {
+  Ionicons,
+} from "@expo/vector-icons";
 
-const STATUS_COLOR: Record<SosAlert["status"], string> = {
-  active: colors.danger,
-  acknowledged: colors.warning,
-  resolved: colors.emerald,
+import type {
+  SosAlert,
+} from "../../types/safetrack";
+
+import {
+  safeTrackColors as colors,
+  safeTrackRadius as radius,
+  safeTrackShadow as shadow,
+} from "../../constants/safeTrackDesign";
+
+
+const STATUS_COLOR: Record<
+  SosAlert["status"],
+  string
+> = {
+
+  active:
+    colors.danger,
+
+  acknowledged:
+    "#B8863A",
+
+  resolved:
+    "#2F6D4F",
+
+  canceled:
+    colors.muted,
+
 };
 
-interface SosAlertCardProps {
-  alert: SosAlert;
-  onAcknowledge?: () => void;
-  onResolve?: () => void;
-  showChildName?: boolean;
+
+
+
+function statusLabel(
+  status:SosAlert["status"]
+){
+
+  switch(status){
+
+    case "active":
+      return "ACTIVE";
+
+
+    case "acknowledged":
+      return "ACKNOWLEDGED";
+
+
+    case "resolved":
+      return "RESOLVED";
+
+
+    case "canceled":
+      return "CANCELED";
+
+
+    default:
+      return "UNKNOWN";
+
+  }
+
 }
 
-export function SosAlertCard({ alert, onAcknowledge, onResolve, showChildName = true }: SosAlertCardProps) {
+
+
+
+export default function SosAlertCard({
+  alert,
+}:{
+  alert:SosAlert;
+}){
+
+
   return (
-    <Card style={styles.card}>
+
+    <View style={styles.card}>
+
+
       <View style={styles.header}>
-        <View style={styles.titleRow}>
-          <View style={[styles.iconWrap, { backgroundColor: alert.status === "active" ? colors.dangerLight : colors.sageLight }]}>
-            <Ionicons name={alert.status === "active" ? "warning-outline" : "shield-checkmark-outline"} size={18} color={STATUS_COLOR[alert.status]} />
-          </View>
-          <View>
-            <Text style={styles.title}>{showChildName ? alert.childName : "SOS Alert"}</Text>
-            <Text style={styles.meta}>{formatDateTime(alert.triggeredAt)}{alert.isTestAlert ? " • Test alert" : ""}</Text>
-          </View>
-        </View>
-        <View style={[styles.statusPill, { backgroundColor: alert.status === "active" ? colors.dangerLight : alert.status === "acknowledged" ? colors.warningLight : colors.successLight }]}>
-          <Text style={[styles.statusText, { color: STATUS_COLOR[alert.status] }]}>{alert.status.toUpperCase()}</Text>
-        </View>
+
+
+        <Ionicons
+          name="warning-outline"
+          size={24}
+          color={
+            STATUS_COLOR[alert.status]
+          }
+        />
+
+
+        <Text
+          style={[
+            styles.status,
+            {
+              color:
+                STATUS_COLOR[alert.status]
+            }
+          ]}
+        >
+
+          {
+            statusLabel(
+              alert.status
+            )
+          }
+
+        </Text>
+
+
       </View>
 
-      <Text style={styles.detail}>Activation: {alert.activationMethod.replace(/_/g, " ")}</Text>
-      {alert.locationSource ? <Text style={styles.detail}>Location source: {alert.locationSource}</Text> : null}
 
-      {alert.status === "active" && onAcknowledge ? <Button label="Acknowledge" onPress={onAcknowledge} variant="outline" style={styles.action} /> : null}
-      {alert.status === "acknowledged" && onResolve ? <Button label="Resolve Alert" onPress={onResolve} style={styles.action} /> : null}
-    </Card>
+
+
+
+      {
+        alert.childName &&
+
+        <Text style={styles.title}>
+          {alert.childName}
+        </Text>
+
+      }
+
+
+
+
+
+
+      <Text style={styles.detail}>
+        Method: {alert.activationMethod}
+      </Text>
+
+
+
+
+
+      {
+        alert.latitude !== null &&
+        alert.latitude !== undefined &&
+        alert.longitude !== null &&
+        alert.longitude !== undefined &&
+
+        <Text style={styles.detail}>
+
+          Location:
+          {" "}
+          {alert.latitude.toFixed(5)},
+          {" "}
+          {alert.longitude.toFixed(5)}
+
+        </Text>
+
+      }
+
+
+
+
+
+
+      <Text style={styles.detail}>
+
+        Triggered:
+        {" "}
+        {
+          new Date(
+            alert.triggeredAt
+          ).toLocaleString()
+        }
+
+      </Text>
+
+
+
+
+    </View>
+
   );
+
 }
 
+
+
+
+
+
 const styles = StyleSheet.create({
-  card: { marginBottom: spacing.sm, padding: spacing.md },
-  header: { flexDirection: "row", justifyContent: "space-between", gap: 8 },
-  titleRow: { flexDirection: "row", alignItems: "center", gap: 9, flex: 1 },
-  iconWrap: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  title: { ...typography.bodyStrong, fontSize: 14 },
-  meta: { ...typography.caption, marginTop: 2 },
-  statusPill: { paddingHorizontal: 8, paddingVertical: 6, borderRadius: 999, alignSelf: "flex-start" },
-  statusText: { fontSize: 9, fontWeight: "900" },
-  detail: { color: colors.textSecondary, fontSize: 11, marginTop: 8 },
-  action: { marginTop: spacing.md },
+
+card:{
+
+  backgroundColor:colors.white,
+
+  borderRadius:radius.md,
+
+  padding:16,
+
+  ...shadow.soft,
+
+},
+
+
+header:{
+
+  flexDirection:"row",
+
+  alignItems:"center",
+
+},
+
+
+status:{
+
+  marginLeft:8,
+
+  fontSize:12,
+
+  fontWeight:"900",
+
+},
+
+
+title:{
+
+  marginTop:12,
+
+  color:colors.ink,
+
+  fontSize:16,
+
+  fontWeight:"900",
+
+},
+
+
+detail:{
+
+  marginTop:8,
+
+  color:colors.muted,
+
+  fontSize:12,
+
+},
+
+
 });

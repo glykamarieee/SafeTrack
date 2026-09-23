@@ -1,16 +1,921 @@
-import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
-import { SafeTrackBackButton } from "../../components/common/SafeTrackBackButton";
-import { SafeTrackButton } from "../../components/common/SafeTrackButton";
-import { useAuthStore } from "../../store/authStore";
-import { supabase } from "../../lib/supabase";
-import { safeTrackColors as colors, safeTrackRadius as radius, safeTrackSpacing as spacing } from "../../constants/safeTrackDesign";
+import {
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 
-type AlertRow={id:string;activation_method:string;status:"active"|"acknowledged"|"resolved";latitude:number|null;longitude:number|null;triggered_at:string;acknowledged_at:string|null;is_test:boolean};
-function displayTime(value:string){return new Date(value).toLocaleString("en-PH",{timeZone:"Asia/Manila",month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}
-function method(value:string){return value==="app_test"?"System test":value.replaceAll("_"," ").replace(/\b\w/g,letter=>letter.toUpperCase())}
-export default function SosAlertsScreen(){const router=useRouter();const guardian=useAuthStore(s=>s.guardian);const child=useAuthStore(s=>s.linkedChildren[0]);const [alerts,setAlerts]=useState<AlertRow[]>([]);const [loading,setLoading]=useState(true);const [acknowledging,setAcknowledging]=useState<string|null>(null);const load=useCallback(async()=>{if(!guardian?.id||!child?.id){setAlerts([]);setLoading(false);return;}setLoading(true);const {data,error}=await supabase.from("sos_alerts").select("id,activation_method,status,latitude,longitude,triggered_at,acknowledged_at,is_test").eq("guardian_id",guardian.id).eq("child_id",child.id).order("triggered_at",{ascending:false});if(error)Alert.alert("Unable to load SOS alerts",error.message);setAlerts((data??[]).map(row=>({...row,latitude:row.latitude===null?null:Number(row.latitude),longitude:row.longitude===null?null:Number(row.longitude)})));setLoading(false)},[guardian?.id,child?.id]);useEffect(()=>{void load();},[load]);const acknowledge=async(alert:AlertRow)=>{setAcknowledging(alert.id);try{const {data,error}=await supabase.rpc("acknowledge_my_sos_alert",{p_alert_id:alert.id});if(error)throw error;const payload=data as {ok?:boolean;message?:string}|null;if(payload?.ok===false)throw new Error(payload.message||"Unable to acknowledge SOS alert.");await load();Alert.alert("SOS acknowledged",payload?.message||"SOS alert acknowledged successfully.")}catch(reason){Alert.alert("Unable to acknowledge SOS",reason instanceof Error?reason.message:"Please try again.")}finally{setAcknowledging(null)}};const active=alerts.filter(item=>item.status==="active").length;return <SafeAreaView style={styles.safe} edges={["top","left","right"]}><ScrollView style={styles.flex} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}><View style={styles.header}><SafeTrackBackButton/><View style={styles.headerCopy}><Text style={styles.heading}>SOS alerts</Text><Text style={styles.subtitle}>Child-initiated SOS records remain active until acknowledged.</Text></View></View><View style={styles.notice}><View style={styles.noticeIcon}><Ionicons name="warning-outline" size={21} color={colors.danger}/></View><Text style={styles.noticeText}>{active?`${active} SOS alert${active===1?"":"s"} currently needs guardian acknowledgment.`:"No active SOS alert currently needs acknowledgment."}</Text></View><Text style={styles.sectionLabel}>ALERT HISTORY</Text>{loading?<View style={styles.loading}><ActivityIndicator size="large" color={colors.primary}/></View>:alerts.length?<View>{alerts.map(alert=>{const isActive=alert.status==="active";return <View key={alert.id} style={[styles.alert,isActive&&styles.alertActive]}><View style={styles.alertTop}><View style={[styles.alertIcon,isActive?styles.alertIconActive:styles.alertIconDone]}><Ionicons name={isActive?"warning-outline":"checkmark-circle-outline"} size={21} color={isActive?colors.danger:colors.primary}/></View><View style={styles.alertCopy}><Text style={styles.alertTitle}>{alert.is_test?"Test SOS alert":"SOS alert"}</Text><Text style={styles.alertTime}>{displayTime(alert.triggered_at)}</Text></View><Text style={[styles.status,isActive?styles.statusActive:styles.statusDone]}>{alert.status.toUpperCase()}</Text></View><Text style={styles.detail}>Location snapshot: {alert.latitude!==null&&alert.longitude!==null?`${alert.latitude.toFixed(5)}, ${alert.longitude.toFixed(5)}`:"No location snapshot stored"}</Text><View style={styles.meta}><Ionicons name="flash-outline" size={15} color={colors.primaryDark}/><Text style={styles.metaText}>{method(alert.activation_method)}</Text></View>{isActive?<SafeTrackButton label="Acknowledge alert" icon="checkmark-circle-outline" onPress={()=>void acknowledge(alert)} loading={acknowledging===alert.id} style={styles.ack}/>:<View style={styles.done}><Ionicons name="checkmark-circle-outline" size={17} color={colors.primary}/><Text style={styles.doneText}>This SOS record has been acknowledged.</Text></View>}</View>})}</View>:<View style={styles.empty}><Ionicons name="shield-checkmark-outline" size={33} color={colors.primary}/><Text style={styles.emptyTitle}>No SOS alerts</Text><Text style={styles.emptyText}>No confirmed SOS record has been received from the child device.</Text></View>}<Pressable onPress={()=>router.push("/safety-center")} style={({pressed})=>[styles.returnLink,pressed&&styles.pressed]}><Text style={styles.returnText}>Return to Safety Center</Text><Ionicons name="arrow-forward" size={17} color={colors.primaryDark}/></Pressable></ScrollView></SafeAreaView>}
-const styles=StyleSheet.create({safe:{flex:1,backgroundColor:colors.background},flex:{flex:1},content:{paddingHorizontal:spacing.lg,paddingTop:16,paddingBottom:36},header:{flexDirection:"row",alignItems:"center"},headerCopy:{flex:1,marginLeft:14},heading:{color:colors.ink,fontSize:27,fontWeight:"900",letterSpacing:-.8},subtitle:{color:colors.muted,fontSize:12.5,lineHeight:18,marginTop:3},notice:{flexDirection:"row",alignItems:"center",padding:13,borderRadius:radius.md,backgroundColor:"#FFF5F5",marginTop:20},noticeIcon:{width:39,height:39,borderRadius:14,alignItems:"center",justifyContent:"center",backgroundColor:colors.dangerSoft},noticeText:{flex:1,color:"#8E6060",fontSize:12.5,lineHeight:18,marginLeft:10},sectionLabel:{color:colors.muted,fontSize:10.5,fontWeight:"900",letterSpacing:1.2,marginTop:20,marginBottom:10},loading:{paddingVertical:35,alignItems:"center"},alert:{padding:16,borderRadius:radius.md,backgroundColor:colors.white,marginBottom:11},alertActive:{backgroundColor:"#FFFDFD"},alertTop:{flexDirection:"row",alignItems:"center"},alertIcon:{width:42,height:42,borderRadius:15,alignItems:"center",justifyContent:"center"},alertIconActive:{backgroundColor:colors.dangerSoft},alertIconDone:{backgroundColor:colors.softMint},alertCopy:{flex:1,marginLeft:10,marginRight:8},alertTitle:{color:colors.ink,fontSize:14.5,fontWeight:"900"},alertTime:{color:colors.muted,fontSize:11.5,marginTop:2},status:{fontSize:10,fontWeight:"900"},statusActive:{color:colors.danger},statusDone:{color:colors.primaryDark},detail:{color:colors.muted,fontSize:12.5,lineHeight:18,marginTop:13},meta:{flexDirection:"row",alignItems:"center",marginTop:11},metaText:{color:colors.primaryDark,fontSize:10.8,fontWeight:"800",marginLeft:5},ack:{marginTop:15},done:{flexDirection:"row",alignItems:"center",marginTop:14},doneText:{color:colors.primaryDark,fontSize:11.5,fontWeight:"800",marginLeft:6},empty:{alignItems:"center",paddingVertical:30,paddingHorizontal:24},emptyTitle:{color:colors.ink,fontSize:16,fontWeight:"900",marginTop:7},emptyText:{color:colors.muted,fontSize:12,lineHeight:18,textAlign:"center",marginTop:3},returnLink:{alignSelf:"center",flexDirection:"row",alignItems:"center",marginTop:12},returnText:{color:colors.primaryDark,fontSize:12.5,fontWeight:"900",marginRight:6},pressed:{opacity:.72}});
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+
+import {
+  SafeAreaView,
+} from "react-native-safe-area-context";
+
+import {
+  useRouter,
+} from "expo-router";
+
+import {
+  Ionicons,
+} from "@expo/vector-icons";
+
+
+import {
+  SafeTrackBackButton,
+} from "../../components/common/SafeTrackBackButton";
+
+
+import {
+  SafeTrackButton,
+} from "../../components/common/SafeTrackButton";
+
+
+import {
+  useAuthStore,
+} from "../../store/authStore";
+
+
+import {
+  supabase,
+} from "../../lib/supabase";
+
+
+import {
+  safeTrackColors as colors,
+  safeTrackRadius as radius,
+  safeTrackSpacing as spacing,
+} from "../../constants/safeTrackDesign";
+
+
+
+type AlertStatus =
+  | "active"
+  | "acknowledged"
+  | "resolved"
+  | string;
+
+
+
+type AlertRow = {
+
+  id:string;
+
+  activation_method:string;
+
+  status:AlertStatus;
+
+  latitude:number|null;
+
+  longitude:number|null;
+
+  triggered_at:string;
+
+  acknowledged_at:string|null;
+
+  is_test:boolean;
+
+};
+
+
+
+
+
+function displayTime(
+  value:string
+){
+
+  return new Date(
+    value
+  ).toLocaleString(
+    "en-PH",
+    {
+      timeZone:"Asia/Manila",
+      month:"short",
+      day:"numeric",
+      hour:"numeric",
+      minute:"2-digit",
+    }
+  );
+
+}
+
+
+
+
+
+function formatMethod(
+  value:string
+){
+
+  if(value==="app_test"){
+
+    return "System test";
+
+  }
+
+
+  return value
+    .replaceAll("_"," ")
+    .replace(
+      /\b\w/g,
+      letter=>letter.toUpperCase()
+    );
+
+}
+
+
+
+
+
+
+
+
+export default function SosAlertsScreen(){
+
+
+  const router =
+    useRouter();
+
+
+
+  const guardian =
+    useAuthStore(
+      state=>state.guardian
+    );
+
+
+  const child =
+    useAuthStore(
+      state=>state.linkedChildren[0]
+    );
+
+  const trackingSource =
+    child?.trackingSource ?? "smartwatch";
+
+
+
+  const [
+    alerts,
+    setAlerts
+  ] =
+  useState<AlertRow[]>([]);
+
+
+
+  const [
+    loading,
+    setLoading
+  ] =
+  useState(true);
+
+
+
+  const [
+    acknowledging,
+    setAcknowledging
+  ] =
+  useState<string|null>(null);
+
+
+
+
+
+
+
+  const loadAlerts =
+  useCallback(
+    async()=>{
+
+
+      if(
+        !guardian?.id ||
+        !child?.id
+      ){
+
+        setAlerts([]);
+
+        setLoading(false);
+
+        return;
+
+      }
+
+
+
+      try{
+
+
+        setLoading(true);
+
+
+
+        const {
+          data,
+          error
+        } = await supabase
+
+        .from("sos_alerts")
+
+        .select(
+          `
+          id,
+          activation_method,
+          status,
+          latitude,
+          longitude,
+          triggered_at,
+          acknowledged_at,
+          is_test
+          `
+        )
+
+        .eq(
+          "guardian_id",
+          guardian.id
+        )
+
+        .eq(
+          "child_id",
+          child.id
+        )
+
+        .order(
+          "triggered_at",
+          {
+            ascending:false
+          }
+        );
+
+
+
+        if(error){
+
+          throw error;
+
+        }
+
+
+
+        setAlerts(
+
+          (data ?? [])
+          .map(
+            row=>({
+
+              ...row,
+
+              latitude:
+              row.latitude === null
+              ?
+              null
+              :
+              Number(row.latitude),
+
+
+              longitude:
+              row.longitude === null
+              ?
+              null
+              :
+              Number(row.longitude),
+
+            })
+          )
+
+        );
+
+
+
+      }
+
+      catch(error){
+
+
+        Alert.alert(
+          "Unable to load SOS alerts",
+          error instanceof Error
+          ?
+          error.message
+          :
+          "Please try again."
+        );
+
+
+      }
+
+      finally{
+
+
+        setLoading(false);
+
+
+      }
+
+
+    },
+    [
+      guardian?.id,
+      child?.id
+    ]
+  );
+
+
+
+
+
+
+
+  useEffect(()=>{
+
+    void loadAlerts();
+
+  },[loadAlerts]);
+
+
+
+
+
+
+
+
+
+  const acknowledge =
+  async(
+    alert:AlertRow
+  )=>{
+
+
+    try{
+
+
+      setAcknowledging(
+        alert.id
+      );
+
+
+
+      const {
+        data,
+        error
+      } =
+      await supabase.rpc(
+        "acknowledge_my_sos_alert",
+        {
+          p_alert_id:
+          alert.id
+        }
+      );
+
+
+
+      if(error){
+
+        throw error;
+
+      }
+
+
+
+      const response =
+      data as
+      {
+        ok?:boolean;
+        message?:string;
+      }
+      |
+      null;
+
+
+
+      if(
+        response?.ok===false
+      ){
+
+        throw new Error(
+          response.message ||
+          "Unable to acknowledge alert."
+        );
+
+      }
+
+
+
+      await loadAlerts();
+
+
+
+      Alert.alert(
+        "SOS acknowledged",
+        response?.message ||
+        "SOS alert acknowledged successfully."
+      );
+
+
+
+    }
+
+    catch(error){
+
+
+      Alert.alert(
+        "Unable to acknowledge SOS",
+        error instanceof Error
+        ?
+        error.message
+        :
+        "Please try again."
+      );
+
+
+    }
+
+    finally{
+
+
+      setAcknowledging(
+        null
+      );
+
+
+    }
+
+
+  };
+
+
+
+
+
+
+
+  const activeCount =
+    alerts.filter(
+      item=>
+      item.status==="active"
+    ).length;
+
+
+
+
+
+
+
+
+  return (
+
+    <SafeAreaView
+      style={styles.safe}
+      edges={[
+        "top",
+        "left",
+        "right"
+      ]}
+    >
+
+
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={
+          styles.content
+        }
+        showsVerticalScrollIndicator={false}
+      >
+
+
+
+        <View style={styles.header}>
+
+
+          <SafeTrackBackButton/>
+
+
+          <View style={styles.headerCopy}>
+
+
+            <Text style={styles.heading}>
+              SOS Alerts
+            </Text>
+
+
+            <Text style={styles.subtitle}>
+              Child emergency alerts requiring guardian review.
+              {trackingSource === "mobile"
+                ? " Alerts are received from the child's mobile device."
+                : trackingSource === "both"
+                ? " Alerts may be received from smartwatch and mobile sources."
+                : " Alerts are received from the child's smartwatch."}
+            </Text>
+
+
+          </View>
+
+
+        </View>
+
+
+
+
+
+        <View style={styles.notice}>
+
+
+          <Ionicons
+            name="warning-outline"
+            size={22}
+            color={colors.danger}
+          />
+
+
+          <Text style={styles.noticeText}>
+
+            {
+              activeCount > 0
+              ?
+              `${activeCount} active SOS alert${activeCount>1?"s":""} needs acknowledgment.`
+              :
+              "No active SOS alert currently needs acknowledgment."
+            }
+
+          </Text>
+
+
+        </View>
+
+
+
+
+
+        {
+          loading
+          ?
+
+          <View style={styles.loading}>
+
+            <ActivityIndicator
+              size="large"
+              color={colors.primary}
+            />
+
+          </View>
+
+
+          :
+
+          alerts.length===0
+
+          ?
+
+          <View style={styles.empty}>
+
+
+            <Ionicons
+              name="shield-checkmark-outline"
+              size={35}
+              color={colors.primary}
+            />
+
+
+            <Text style={styles.emptyTitle}>
+              No SOS Alerts
+            </Text>
+
+
+            <Text style={styles.emptyText}>
+              No confirmed SOS record has been received.
+            </Text>
+
+
+          </View>
+
+
+
+          :
+
+
+          alerts.map(
+            alert=>{
+
+
+              const active =
+                alert.status==="active";
+
+
+              return (
+
+                <View
+                  key={alert.id}
+                  style={styles.card}
+                >
+
+
+                  <View style={styles.row}>
+
+
+                    <Ionicons
+                      name={
+                        active
+                        ?
+                        "warning-outline"
+                        :
+                        "checkmark-circle-outline"
+                      }
+                      size={25}
+                      color={
+                        active
+                        ?
+                        colors.danger
+                        :
+                        colors.primary
+                      }
+                    />
+
+
+                    <View style={styles.copy}>
+
+
+                      <Text style={styles.title}>
+                        {
+                          alert.is_test
+                          ?
+                          "Test SOS Alert"
+                          :
+                          "SOS Alert"
+                        }
+                      </Text>
+
+
+                      <Text style={styles.time}>
+                        {
+                          displayTime(
+                            alert.triggered_at
+                          )
+                        }
+                      </Text>
+
+
+                    </View>
+
+
+                  </View>
+
+
+
+
+                  <Text style={styles.detail}>
+
+                    Location ({trackingSource === "mobile"
+                      ? "Mobile"
+                      : trackingSource === "both"
+                      ? "Smartwatch + Mobile"
+                      : "Smartwatch"}):
+                    {
+                      alert.latitude!==null &&
+                      alert.longitude!==null
+                      ?
+                      ` ${alert.latitude.toFixed(5)}, ${alert.longitude.toFixed(5)}`
+                      :
+                      " unavailable"
+                    }
+
+                  </Text>
+
+
+
+
+                  <Text style={styles.method}>
+                    {formatMethod(alert.activation_method)}
+                  </Text>
+
+
+
+
+                  {
+                    active
+                    ?
+
+                    <SafeTrackButton
+                      label="Acknowledge SOS"
+                      icon="checkmark-circle-outline"
+                      loading={
+                        acknowledging===alert.id
+                      }
+                      onPress={()=>
+                        void acknowledge(alert)
+                      }
+                    />
+
+                    :
+
+                    <Text style={styles.done}>
+                      SOS acknowledged
+                    </Text>
+
+                  }
+
+
+                </View>
+
+              );
+
+
+            }
+          )
+
+        }
+
+
+
+
+        <Pressable
+          onPress={()=>
+            router.push("/safety-center")
+          }
+          style={styles.returnButton}
+        >
+
+          <Text style={styles.returnText}>
+            Return to Safety Center
+          </Text>
+
+
+          <Ionicons
+            name="arrow-forward"
+            size={17}
+            color={colors.primaryDark}
+          />
+
+        </Pressable>
+
+
+
+      </ScrollView>
+
+
+    </SafeAreaView>
+
+  );
+
+}
+
+
+
+
+
+
+const styles = StyleSheet.create({
+
+safe:{
+  flex:1,
+  backgroundColor:colors.background,
+},
+
+flex:{
+  flex:1,
+},
+
+content:{
+  padding:spacing.lg,
+  paddingBottom:40,
+},
+
+
+header:{
+  flexDirection:"row",
+  alignItems:"center",
+},
+
+headerCopy:{
+  marginLeft:14,
+},
+
+
+heading:{
+  fontSize:28,
+  fontWeight:"900",
+  color:colors.ink,
+},
+
+
+subtitle:{
+  marginTop:4,
+  color:colors.muted,
+},
+
+
+notice:{
+  flexDirection:"row",
+  alignItems:"center",
+  marginTop:20,
+  padding:14,
+  borderRadius:radius.md,
+  backgroundColor:"#FFF5F5",
+},
+
+
+noticeText:{
+  flex:1,
+  marginLeft:10,
+  color:colors.muted,
+},
+
+
+loading:{
+  padding:40,
+  alignItems:"center",
+},
+
+
+card:{
+  backgroundColor:colors.white,
+  padding:16,
+  borderRadius:radius.md,
+  marginTop:14,
+},
+
+
+row:{
+  flexDirection:"row",
+  alignItems:"center",
+},
+
+
+copy:{
+  marginLeft:10,
+},
+
+
+title:{
+  fontWeight:"900",
+  color:colors.ink,
+},
+
+
+time:{
+  color:colors.muted,
+  marginTop:3,
+},
+
+
+detail:{
+  marginTop:14,
+  color:colors.muted,
+},
+
+
+method:{
+  marginTop:8,
+  color:colors.primaryDark,
+  fontWeight:"800",
+},
+
+
+done:{
+  marginTop:15,
+  color:colors.primaryDark,
+  fontWeight:"900",
+},
+
+
+empty:{
+  alignItems:"center",
+  padding:40,
+},
+
+
+emptyTitle:{
+  marginTop:10,
+  fontSize:17,
+  fontWeight:"900",
+},
+
+
+emptyText:{
+  marginTop:5,
+  color:colors.muted,
+  textAlign:"center",
+},
+
+
+returnButton:{
+  flexDirection:"row",
+  alignItems:"center",
+  justifyContent:"center",
+  marginTop:20,
+},
+
+
+returnText:{
+  marginRight:5,
+  color:colors.primaryDark,
+  fontWeight:"900",
+},
+
+
+});

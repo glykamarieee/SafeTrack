@@ -32,6 +32,9 @@ export default function SafetyCenterScreen() {
 
   const child = children[0] ?? null;
 
+  const trackingSource =
+    child?.trackingSource ?? "smartwatch";
+
   const [activeZoneCount, setActiveZoneCount] = useState(0);
   const [loadingZones, setLoadingZones] = useState(true);
 
@@ -120,6 +123,11 @@ export default function SafetyCenterScreen() {
         <Text style={styles.subtitle}>
           Review safe-zone activity and notices that may need guardian
           attention.
+          {trackingSource === "mobile"
+            ? " Location monitoring uses the child's mobile device."
+            : trackingSource === "both"
+            ? " Location monitoring uses smartwatch and mobile sources."
+            : " Location monitoring uses the child's smartwatch."}
         </Text>
 
         <Pressable
@@ -232,7 +240,11 @@ export default function SafetyCenterScreen() {
             </Text>
 
             <Text style={styles.cardDescription}>
-              No possible unusual location pattern is awaiting review.
+              {trackingSource === "mobile"
+                ? "No possible unusual mobile-device location pattern is awaiting review."
+                : trackingSource === "both"
+                ? "No possible unusual smartwatch or mobile location pattern is awaiting review."
+                : "No possible unusual smartwatch location pattern is awaiting review."}
             </Text>
           </View>
 

@@ -31,12 +31,27 @@ export default function ReportsScreen() {
   const [filter, setFilter] = useState<ReportDateFilter>("all");
 
   useEffect(() => {
-    if (role === "admin") {
-      loadAll();
-    } else if (role === "guardian" && guardian) {
-      loadForGuardian(guardian.id);
-    }
-  }, [role, guardian?.id]);
+
+  if(role==="admin"){
+
+    void loadAll();
+
+  }
+  else if(
+    role==="guardian" &&
+    guardian
+  ){
+
+    void loadForGuardian(
+      guardian.id
+    );
+
+  }
+
+},[
+  role,
+  guardian?.id,
+]);
 
   const filtered = useMemo(() => reports.filter((r) => withinDateFilter(r.generatedAt, filter)), [reports, filter]);
 

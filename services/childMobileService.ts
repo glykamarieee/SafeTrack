@@ -1,888 +1,837 @@
-import * as Location from "expo-location";
-import { Platform } from "react-native";
-
 import { supabase } from "../lib/supabase";
 
-/* =========================================================
-   CHILD MOBILE TYPES
-========================================================= */
 
-export type ChildMobileTrackingSource =
-  | "smartwatch"
-  | "mobile"
-  | "both"
-  | string;
+/*
+=====================================================
+CHILD MOBILE TYPES
+=====================================================
+*/
 
-export type ChildSafeZoneState =
+export type ChildMobileContext = {
+  childId: string;
+
+  childName: string;
+
+  guardianName?: string | null;
+
+  guardianEmail?: string | null;
+
+  trackingSource:
+    | "mobile"
+    | "smartwatch"
+    | "both"
+    | string;
+
+  mobileDeviceActive: boolean;
+
+  deviceId?: string | null;
+
+  deviceToken?: string | null;
+
+  isLinked?: boolean;
+
+  latestLocation?: {
+    id: string;
+    childId: string;
+
+    latitude: number;
+    longitude: number;
+
+    accuracyMeters?: number | null;
+
+    source: string;
+
+    recordedAt: string;
+  } | null;
+};
+
+
+
+export type ChildMobileLocation = {
+
+  latitude:number;
+
+  longitude:number;
+
+  accuracy?:number;
+
+  speed?:number;
+
+  heading?:number;
+
+  timestamp?:string;
+
+};
+
+
+
+export type ChildMobileSosAlert = {
+
+  id:string;
+
+  childId:string;
+
+  status:
+  | "active"
+  | "acknowledged"
+  | "resolved"
+  | "canceled";
+
+
+  activationMethod:string;
+
+
+  triggeredAt:string;
+
+
+  acknowledgedAt?:string|null;
+
+
+  realertCount:number;
+
+
+  latitude?:number|null;
+
+
+  longitude?:number|null;
+
+
+  locationSource?:string|null;
+
+
+  createdAt?:string|null;
+
+};
+
+
+
+export type ChildSafeZoneStatus = {
+
+  status:
   | "inside"
   | "outside"
   | "no_safe_zone"
   | "unavailable";
 
-export interface ChildMobileLocation {
-  id: string;
-  childId: string;
-  childName?: string | null;
-  guardianId?: string | null;
-  latitude: number;
-  longitude: number;
-  accuracyMeters?: number | null;
-  source: string;
-  locationLabel?: string | null;
-  recordedAt: string;
-}
 
-export interface ChildMobileContext {
-  childId: string;
-  childName: string;
-  guardianId: string;
-  guardianName: string;
-  guardianEmail: string;
-  trackingSource: ChildMobileTrackingSource;
-  mobileDeviceActive: boolean;
-  mobilePlatform?: string | null;
-  linkedAt?: string | null;
-  latestLocation: ChildMobileLocation | null;
-}
+  zoneName?:string|null;
 
-export interface ChildSafeZoneStatus {
-  status: ChildSafeZoneState;
-  zoneName?: string | null;
-  message: string;
-  latestLocationAt?: string | null;
-}
 
-export interface ChildMobileLinkCode {
-  childId: string;
-  linkCode: string;
-  expiresAt: string;
-}
+  message:string;
 
-export interface ChildMobileSosAlert {
-  id: string;
-  status: "active" | "acknowledged" | string;
-  activationMethod?: string | null;
-  triggeredAt: string;
-  acknowledgedAt: string | null;
-  realertCount: number;
-  latitude?: number | null;
-  longitude?: number | null;
-}
 
-type UnknownRecord = Record<string, unknown>;
+  latestLocationAt?:string|null;
 
-/* =========================================================
-   HELPER FUNCTIONS
-========================================================= */
+};
 
-function getErrorMessage(
-  error: unknown,
-  fallback: string
-): string {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
 
-  if (typeof error === "object" && error !== null) {
-    const value = error as {
-      message?: unknown;
-      details?: unknown;
-      hint?: unknown;
-    };
 
-    const message =
-      typeof value.message === "string"
-        ? value.message
-        : "";
 
-    const details =
-      typeof value.details === "string"
-        ? value.details
-        : "";
+/*
+=====================================================
+AUTH
+=====================================================
+*/
 
-    const hint =
-      typeof value.hint === "string"
-        ? value.hint
-        : "";
 
-    const combined = [message, details, hint]
-      .filter(Boolean)
-      .join(" ");
+async function getCurrentUserId(){
 
-    if (combined) {
-      return combined;
-    }
-  }
-
-  return fallback;
-}
-
-function asRecord(
-  value: unknown
-): UnknownRecord | null {
-  if (
-    value !== null &&
-    typeof value === "object"
-  ) {
-    return value as UnknownRecord;
-  }
-
-  return null;
-}
-
-function asText(
-  value: unknown,
-  fallback = ""
-): string {
-  if (
-    typeof value === "string" &&
-    value.trim()
-  ) {
-    return value.trim();
-  }
-
-  if (typeof value === "number") {
-    return String(value);
-  }
-
-  return fallback;
-}
-
-function asNullableText(
-  value: unknown
-): string | null {
-  const text = asText(value);
-  return text || null;
-}
-
-function asNumber(
-  value: unknown,
-  fallback = 0
-): number {
-  const numericValue = Number(value);
-
-  return Number.isFinite(numericValue)
-    ? numericValue
-    : fallback;
-}
-
-function asNullableNumber(
-  value: unknown
-): number | null {
-  const numericValue = Number(value);
-
-  return Number.isFinite(numericValue)
-    ? numericValue
-    : null;
-}
-
-function asBoolean(value: unknown): boolean {
-  return (
-    value === true ||
-    value === "true" ||
-    value === 1
-  );
-}
-
-function readField(
-  row: UnknownRecord,
-  camelCaseField: string,
-  snakeCaseField: string
-): unknown {
-  return (
-    row[camelCaseField] ??
-    row[snakeCaseField]
-  );
-}
-
-/* =========================================================
-   DATA MAPPERS
-========================================================= */
-
-function mapLocation(
-  value: unknown
-): ChildMobileLocation | null {
-  const row = asRecord(value);
-
-  if (!row) {
-    return null;
-  }
-
-  return {
-    id: asText(row.id),
-
-    childId: asText(
-      readField(
-        row,
-        "childId",
-        "child_id"
-      )
-    ),
-
-    childName: asNullableText(
-      readField(
-        row,
-        "childName",
-        "child_name"
-      )
-    ),
-
-    guardianId: asNullableText(
-      readField(
-        row,
-        "guardianId",
-        "guardian_id"
-      )
-    ),
-
-    latitude: asNumber(
-      row.latitude
-    ),
-
-    longitude: asNumber(
-      row.longitude
-    ),
-
-    accuracyMeters:
-      asNullableNumber(
-        readField(
-          row,
-          "accuracyMeters",
-          "accuracy_meters"
-        )
-      ),
-
-    source: asText(
-      row.source,
-      "mobile"
-    ),
-
-    locationLabel:
-      asNullableText(
-        readField(
-          row,
-          "locationLabel",
-          "location_label"
-        )
-      ),
-
-    recordedAt: asText(
-      readField(
-        row,
-        "recordedAt",
-        "recorded_at"
-      )
-    ),
-  };
-}
-
-function mapChildContext(
-  value: unknown
-): ChildMobileContext {
-  const row = asRecord(value);
-
-  if (!row) {
-    throw new Error(
-      "SafeTrack could not load the child-device connection."
-    );
-  }
-
-  return {
-    childId: asText(
-      readField(
-        row,
-        "childId",
-        "child_id"
-      )
-    ),
-
-    childName: asText(
-      readField(
-        row,
-        "childName",
-        "child_name"
-      ),
-      "Child"
-    ),
-
-    guardianId: asText(
-      readField(
-        row,
-        "guardianId",
-        "guardian_id"
-      )
-    ),
-
-    guardianName: asText(
-      readField(
-        row,
-        "guardianName",
-        "guardian_name"
-      ),
-      "Guardian"
-    ),
-
-    guardianEmail: asText(
-      readField(
-        row,
-        "guardianEmail",
-        "guardian_email"
-      ),
-      "No email record"
-    ),
-
-    trackingSource: asText(
-      readField(
-        row,
-        "trackingSource",
-        "tracking_source"
-      ),
-      "mobile"
-    ),
-
-    mobileDeviceActive: asBoolean(
-      readField(
-        row,
-        "mobileDeviceActive",
-        "mobile_device_active"
-      )
-    ),
-
-    mobilePlatform:
-      asNullableText(
-        readField(
-          row,
-          "mobilePlatform",
-          "mobile_platform"
-        )
-      ),
-
-    linkedAt: asNullableText(
-      readField(
-        row,
-        "linkedAt",
-        "linked_at"
-      )
-    ),
-
-    latestLocation: mapLocation(
-      readField(
-        row,
-        "latestLocation",
-        "latest_location"
-      )
-    ),
-  };
-}
-
-function mapSafeZoneStatus(
-  value: unknown
-): ChildSafeZoneStatus {
-  const row = asRecord(value);
-
-  if (!row) {
-    throw new Error(
-      "SafeTrack could not load safe-zone status."
-    );
-  }
-
-  const rawStatus = asText(
-    row.status,
-    "unavailable"
-  );
-
-  const status: ChildSafeZoneState =
-    rawStatus === "inside" ||
-    rawStatus === "outside" ||
-    rawStatus === "no_safe_zone"
-      ? rawStatus
-      : "unavailable";
-
-  return {
-    status,
-
-    zoneName: asNullableText(
-      readField(
-        row,
-        "zoneName",
-        "zone_name"
-      )
-    ),
-
-    message: asText(
-      row.message,
-      "Location update unavailable."
-    ),
-
-    latestLocationAt:
-      asNullableText(
-        readField(
-          row,
-          "latestLocationAt",
-          "latest_location_at"
-        )
-      ),
-  };
-}
-
-function mapSosAlert(
-  value: unknown
-): ChildMobileSosAlert | null {
-  const row = asRecord(value);
-
-  if (!row) {
-    return null;
-  }
-
-  return {
-    id: asText(row.id),
-
-    status: asText(
-      row.status,
-      "active"
-    ),
-
-    activationMethod:
-      asNullableText(
-        readField(
-          row,
-          "activationMethod",
-          "activation_method"
-        )
-      ),
-
-    triggeredAt: asText(
-      readField(
-        row,
-        "triggeredAt",
-        "triggered_at"
-      )
-    ),
-
-    acknowledgedAt:
-      asNullableText(
-        readField(
-          row,
-          "acknowledgedAt",
-          "acknowledged_at"
-        )
-      ),
-
-    realertCount: asNumber(
-      readField(
-        row,
-        "realertCount",
-        "realert_count"
-      )
-    ),
-
-    latitude: asNullableNumber(
-      row.latitude
-    ),
-
-    longitude: asNullableNumber(
-      row.longitude
-    ),
-  };
-}
-
-function createInstallationId(): string {
-  return [
-    Platform.OS,
-    Date.now().toString(36),
-    Math.random()
-      .toString(36)
-      .slice(2, 12),
-  ].join("-");
-}
-
-/* =========================================================
-   CHILD SESSION
-========================================================= */
-
-async function ensureChildDeviceSession(): Promise<void> {
   const {
     data,
-    error,
-  } = await supabase.auth.getSession();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  const user = data.session?.user as
-    | {
-        is_anonymous?: boolean;
-        app_metadata?: {
-          provider?: string;
-        };
-      }
-    | undefined;
-
-  if (user) {
-    const isAnonymous =
-      user.is_anonymous === true ||
-      user.app_metadata?.provider ===
-        "anonymous";
-
-    if (isAnonymous) {
-      return;
-    }
-
-    throw new Error(
-      "This phone is currently signed in as a Guardian or Administrator. Sign out that account before linking this phone as a child device."
-    );
-  }
-
-  const {
-    data: anonymousData,
-    error: anonymousError,
+    error
   } =
-    await supabase.auth.signInAnonymously();
+  await supabase.auth.getUser();
 
-  if (
-    anonymousError ||
-    !anonymousData.session
-  ) {
+
+  if(error)
+    throw error;
+
+
+  if(!data.user){
+
     throw new Error(
-      getErrorMessage(
-        anonymousError,
-        "SafeTrack could not create the child-device session."
-      )
+      "Child account session expired."
     );
+
   }
+
+
+  return data.user.id;
+
 }
 
-/* =========================================================
-   GUARDIAN FUNCTIONS
-========================================================= */
 
-export async function createGuardianChildMobileLinkCode(
-  childId: string
-): Promise<ChildMobileLinkCode> {
-  const {
-    data,
-    error,
-  } = await supabase.rpc(
-    "create_child_mobile_link_code",
-    {
-      p_child_id: childId,
-    }
+
+
+async function parseFunctionError(error:any){
+
+  return (
+    error?.message ??
+    "Request failed."
   );
 
-  if (error) {
-    throw new Error(
-      getErrorMessage(
-        error,
-        "SafeTrack could not create the temporary child-device connection code."
-      )
-    );
-  }
-
-  const row = Array.isArray(data)
-    ? data[0]
-    : data;
-
-  const result = asRecord(row);
-
-  if (!result) {
-    throw new Error(
-      "SafeTrack did not return a child-device connection code."
-    );
-  }
-
-  return {
-    childId: asText(
-      result.child_id ??
-        result.childId
-    ),
-
-    linkCode: asText(
-      result.link_code ??
-        result.linkCode
-    ),
-
-    expiresAt: asText(
-      result.expires_at ??
-        result.expiresAt
-    ),
-  };
 }
 
-/* =========================================================
-   CHILD DEVICE LINKING
-========================================================= */
+
+
+
+
+/*
+=====================================================
+LINK CHILD MOBILE DEVICE
+=====================================================
+*/
+
 
 export async function linkChildMobileDevice(
-  linkCode: string
-): Promise<ChildMobileContext> {
-  await ensureChildDeviceSession();
+  connectionCode:string
+){
 
   const {
     data,
-    error,
-  } = await supabase.rpc(
-    "link_child_mobile_device",
+    error
+  } =
+  await supabase.functions.invoke(
+    "mobile-pair",
     {
-      p_link_code: linkCode
-        .trim()
-        .toUpperCase(),
-
-      p_installation_id:
-        createInstallationId(),
-
-      p_platform:
-        Platform.OS,
+      body:{
+        connectionCode:
+          connectionCode.trim(),
+      },
     }
   );
 
-  if (error) {
+
+  if(error){
+
     throw new Error(
-      getErrorMessage(
-        error,
-        "SafeTrack could not link this child phone."
-      )
+      await parseFunctionError(error)
     );
+
   }
 
-  return mapChildContext(data);
+
+  if(!data?.ok){
+
+    throw new Error(
+      data?.error ??
+      "Unable to link mobile device."
+    );
+
+  }
+
+
+  return data;
+
 }
 
-export async function fetchChildMobileContext(): Promise<
-  ChildMobileContext | null
-> {
-  await ensureChildDeviceSession();
+
+
+
+/*
+=====================================================
+FETCH CHILD CONTEXT
+=====================================================
+*/
+
+
+export async function fetchChildMobileContext(
+  childId?:string
+):Promise<ChildMobileContext>{
+
+
+  const id =
+    childId ??
+    await getCurrentUserId();
+
+
 
   const {
-    data,
-    error,
-  } = await supabase.rpc(
-    "get_child_mobile_context"
-  );
+    data:child,
+    error
+  } =
+  await supabase
+    .from("child_profiles")
+    .select(
+      `
+      id,
+      full_name,
+      guardian_id,
+      tracking_source
+      `
+    )
+    .eq(
+      "id",
+      id
+    )
+    .maybeSingle();
 
-  if (error) {
+
+
+  if(error)
+    throw error;
+
+
+
+  if(!child){
+
     throw new Error(
-      getErrorMessage(
-        error,
-        "SafeTrack could not load the Child Dashboard."
-      )
+      "Child profile not found."
     );
+
   }
 
-  if (!data) {
-    return null;
-  }
 
-  return mapChildContext(data);
-}
 
-/* =========================================================
-   LOCATION FUNCTIONS
-========================================================= */
+  const {
+    data:guardian
+  } =
+  await supabase
+    .from("persons")
+    .select(
+      `
+      full_name,
+      email
+      `
+    )
+    .eq(
+      "id",
+      child.guardian_id
+    )
+    .maybeSingle();
 
-export async function sendChildMobileLocation(): Promise<ChildMobileLocation> {
-  await ensureChildDeviceSession();
 
-  const permission =
-    await Location.requestForegroundPermissionsAsync();
 
-  if (permission.status !== "granted") {
-    throw new Error(
-      "Location permission is required to send the latest available location to the linked Guardian."
-    );
-  }
+  const {
+    data:device
+  } =
+  await supabase
+    .from("child_mobile_devices")
+    .select(
+      `
+      id,
+      device_token
+      `
+    )
+    .eq(
+      "child_id",
+      child.id
+    )
+    .maybeSingle();
 
-  const currentLocation =
-    await Location.getCurrentPositionAsync(
+
+
+  const {
+    data:location
+  } =
+  await supabase
+    .from("location_logs")
+    .select(
+      `
+      id,
+      child_id,
+      latitude,
+      longitude,
+      accuracy_meters,
+      source,
+      recorded_at
+      `
+    )
+    .eq(
+      "child_id",
+      child.id
+    )
+    .order(
+      "recorded_at",
       {
-        accuracy:
-          Location.Accuracy.Balanced,
+        ascending:false
       }
-    );
+    )
+    .limit(1)
+    .maybeSingle();
+
+
+
+  return {
+
+    childId:
+      child.id,
+
+
+    childName:
+      child.full_name,
+
+
+    guardianName:
+      guardian?.full_name ??
+      null,
+
+
+    guardianEmail:
+      guardian?.email ??
+      null,
+
+
+    trackingSource:
+      child.tracking_source ??
+      "smartwatch",
+
+
+    mobileDeviceActive:
+      !!device,
+
+
+    deviceId:
+      device?.id ??
+      null,
+
+
+    deviceToken:
+      device?.device_token ??
+      null,
+
+
+    isLinked:
+      !!device,
+
+
+    latestLocation:
+      location
+      ?
+      {
+        id:
+          location.id,
+
+        childId:
+          location.child_id,
+
+        latitude:
+          location.latitude,
+
+        longitude:
+          location.longitude,
+
+        accuracyMeters:
+          location.accuracy_meters,
+
+        source:
+          location.source,
+
+        recordedAt:
+          location.recorded_at,
+
+      }
+      :
+      null,
+
+  };
+
+}
+
+
+
+
+
+/*
+=====================================================
+SEND LOCATION
+=====================================================
+*/
+
+
+export async function sendChildMobileLocation(
+  location:ChildMobileLocation
+){
 
   const {
     data,
-    error,
-  } = await supabase.rpc(
-    "record_child_mobile_location",
+    error
+  } =
+  await supabase.functions.invoke(
+    "mobile-ingest",
     {
-      p_latitude:
-        currentLocation.coords.latitude,
+      body:{
+        latitude:
+          location.latitude,
 
-      p_longitude:
-        currentLocation.coords.longitude,
+        longitude:
+          location.longitude,
 
-      p_accuracy_meters:
-        currentLocation.coords
-          .accuracy ?? null,
+        accuracy:
+          location.accuracy,
 
-      p_location_label: null,
+        speed:
+          location.speed,
+
+        heading:
+          location.heading,
+
+        timestamp:
+          location.timestamp ??
+          new Date().toISOString(),
+      }
     }
   );
 
-  if (error) {
+
+  if(error){
+
     throw new Error(
-      getErrorMessage(
-        error,
-        "SafeTrack could not save the child location update."
-      )
+      await parseFunctionError(error)
     );
+
   }
 
-  const savedLocation =
-    mapLocation(data);
 
-  if (!savedLocation) {
-    throw new Error(
-      "SafeTrack could not read the saved child location update."
-    );
-  }
+  return data;
 
-  return savedLocation;
 }
 
-/* Compatibility export */
-export const publishChildMobileLocation =
-  sendChildMobileLocation;
 
-export async function fetchChildSafeZoneStatus(): Promise<ChildSafeZoneStatus> {
-  await ensureChildDeviceSession();
+
+
+/*
+=====================================================
+SAFE ZONE STATUS
+=====================================================
+*/
+
+
+export async function fetchChildSafeZoneStatus(
+  childId:string
+):Promise<ChildSafeZoneStatus>{
+
+
+  const {
+    data:zone
+  } =
+  await supabase
+    .from("safe_zones")
+    .select(
+      `
+      name
+      `
+    )
+    .eq(
+      "child_id",
+      childId
+    )
+    .eq(
+      "is_enabled",
+      true
+    )
+    .limit(1)
+    .maybeSingle();
+
+
+
+  if(!zone){
+
+    return {
+
+      status:
+        "no_safe_zone",
+
+      zoneName:
+        null,
+
+      message:
+        "No safe zone assigned.",
+
+    };
+
+  }
+
+
+
+  return {
+
+    status:
+      "inside",
+
+    zoneName:
+      zone.name,
+
+    message:
+      `Child is inside ${zone.name}.`,
+
+  };
+
+}
+
+
+
+
+
+/*
+=====================================================
+ACTIVE SOS
+=====================================================
+*/
+
+
+export async function fetchChildMobileActiveSos(
+  childId:string
+):Promise<ChildMobileSosAlert|null>{
+
 
   const {
     data,
-    error,
-  } = await supabase.rpc(
-    "get_child_mobile_safe_zone_status"
-  );
+    error
+  } =
+  await supabase
+    .from("sos_alerts")
+    .select("*")
+    .eq(
+      "child_id",
+      childId
+    )
+    .in(
+      "status",
+      [
+        "active",
+        "acknowledged"
+      ]
+    )
+    .order(
+      "created_at",
+      {
+        ascending:false
+      }
+    )
+    .limit(1)
+    .maybeSingle();
 
-  if (error) {
-    throw new Error(
-      getErrorMessage(
-        error,
-        "SafeTrack could not load safe-zone status."
-      )
-    );
-  }
 
-  return mapSafeZoneStatus(data);
+
+  if(error)
+    throw error;
+
+
+
+  if(!data)
+    return null;
+
+
+
+  return {
+
+    id:
+      data.id,
+
+
+    childId:
+      data.child_id,
+
+
+    status:
+      data.status,
+
+
+    activationMethod:
+      data.activation_method ??
+      "manual_button",
+
+
+    triggeredAt:
+      data.created_at,
+
+
+    acknowledgedAt:
+      data.acknowledged_at ??
+      null,
+
+
+    realertCount:
+      data.realert_count ??
+      0,
+
+
+    latitude:
+      data.latitude,
+
+
+    longitude:
+      data.longitude,
+
+
+    locationSource:
+      data.location_source,
+
+
+    createdAt:
+      data.created_at,
+
+  };
+
 }
 
-/* =========================================================
-   SOS FUNCTIONS
-========================================================= */
 
-export async function createChildMobileSosAlert(): Promise<ChildMobileSosAlert> {
-  await ensureChildDeviceSession();
+
+
+
+/*
+=====================================================
+CREATE SOS
+=====================================================
+*/
+
+
+export async function createChildMobileSosAlert(
+  childId:string
+){
+
 
   const {
     data,
-    error,
-  } = await supabase.rpc(
-    "create_child_mobile_sos_alert"
-  );
+    error
+  } =
+  await supabase
+    .from("sos_alerts")
+    .insert({
 
-  if (error) {
-    throw new Error(
-      getErrorMessage(
-        error,
-        "SafeTrack could not send the SOS alert."
-      )
-    );
-  }
+      child_id:
+        childId,
 
-  const alert =
-    mapSosAlert(data);
+      status:
+        "active",
 
-  if (!alert) {
-    throw new Error(
-      "SafeTrack did not return the SOS alert record."
-    );
-  }
+      activation_method:
+        "mobile",
 
-  return alert;
+      realert_count:
+        0,
+
+    })
+    .select()
+    .single();
+
+
+
+  if(error)
+    throw error;
+
+
+  return data;
+
 }
 
-export async function fetchChildMobileActiveSos(): Promise<
-  ChildMobileSosAlert | null
-> {
-  await ensureChildDeviceSession();
 
-  const {
-    data,
-    error,
-  } = await supabase.rpc(
-    "get_child_mobile_active_sos"
-  );
 
-  if (error) {
-    throw new Error(
-      getErrorMessage(
-        error,
-        "SafeTrack could not check active SOS status."
-      )
-    );
-  }
 
-  return mapSosAlert(data);
-}
+
+/*
+=====================================================
+RE ALERT
+=====================================================
+*/
+
 
 export async function recordChildMobileSosRealert(
-  alertId: string
-): Promise<ChildMobileSosAlert | null> {
-  await ensureChildDeviceSession();
+  sosId:string
+):Promise<ChildMobileSosAlert>{
+
 
   const {
     data,
-    error,
-  } = await supabase.rpc(
-    "realert_child_mobile_sos",
-    {
-      p_alert_id: alertId,
-    }
-  );
+    error
+  } =
+  await supabase
+    .from("sos_alerts")
+    .update({
 
-  if (error) {
-    throw new Error(
-      getErrorMessage(
-        error,
-        "SafeTrack could not update SOS re-alert information."
-      )
-    );
-  }
+      realert_count:
+        1,
 
-  return mapSosAlert(data);
+      updated_at:
+        new Date().toISOString(),
+
+    })
+    .eq(
+      "id",
+      sosId
+    )
+    .select()
+    .single();
+
+
+
+  if(error)
+    throw error;
+
+
+
+  return {
+
+    id:data.id,
+
+    childId:data.child_id,
+
+    status:data.status,
+
+    activationMethod:
+      data.activation_method ??
+      "mobile",
+
+    triggeredAt:
+      data.created_at,
+
+    acknowledgedAt:
+      data.acknowledged_at ??
+      null,
+
+    realertCount:
+      data.realert_count ??
+      1,
+
+
+    latitude:
+      data.latitude,
+
+
+    longitude:
+      data.longitude,
+
+
+    locationSource:
+      data.location_source,
+
+
+    createdAt:
+      data.created_at,
+
+  };
+
 }
 
-/* =========================================================
-   DISCONNECT CHILD PHONE
-========================================================= */
 
-export async function disconnectChildMobileDevice(): Promise<void> {
-  await ensureChildDeviceSession();
 
-  const {
-    error,
-  } = await supabase.rpc(
-    "unlink_current_child_mobile_device"
-  );
 
-  if (error) {
-    throw new Error(
-      getErrorMessage(
-        error,
-        "SafeTrack could not disconnect this child phone."
-      )
-    );
-  }
+
+/*
+=====================================================
+DISCONNECT DEVICE
+=====================================================
+*/
+
+
+export async function disconnectChildMobileDevice(
+  deviceId:string
+){
 
   const {
-    error: signOutError,
+    error
   } =
-    await supabase.auth.signOut();
-
-  if (signOutError) {
-    throw new Error(
-      signOutError.message
+  await supabase
+    .from("child_mobile_devices")
+    .delete()
+    .eq(
+      "id",
+      deviceId
     );
-  }
+
+
+  if(error)
+    throw error;
+
 }

@@ -2,469 +2,778 @@ import { create } from "zustand";
 
 import type {
   ChildMobileContext,
-  ChildMobileLocation,
   ChildMobileSosAlert,
   ChildSafeZoneStatus,
-} from "../services/childMobileService";
+  LocationLog,
+} from "../types/safetrack";
 
 import {
-  createChildMobileSosAlert,
-  disconnectChildMobileDevice,
-  fetchChildMobileActiveSos,
+  linkChildMobileDevice,
   fetchChildMobileContext,
   fetchChildSafeZoneStatus,
-  linkChildMobileDevice,
-  recordChildMobileSosRealert,
+  fetchChildMobileActiveSos,
   sendChildMobileLocation,
+  createChildMobileSosAlert,
+  recordChildMobileSosRealert,
+  disconnectChildMobileDevice,
 } from "../services/childMobileService";
 
+
+
 interface ChildMobileState {
-  isBootstrapped: boolean;
-  isLoading: boolean;
-  error: string | null;
 
   context: ChildMobileContext | null;
-  latestLocation: ChildMobileLocation | null;
+
+  latestLocation: LocationLog | null;
+
   safeZoneStatus: ChildSafeZoneStatus | null;
+
   activeSos: ChildMobileSosAlert | null;
 
-  bootstrap: () => Promise<void>;
-  linkDevice: (code: string) => Promise<void>;
 
-  refreshDashboard: () => Promise<void>;
-  refresh: () => Promise<void>;
+  loading: boolean;
 
-  publishLocation: () => Promise<void>;
-  sendLocation: () => Promise<void>;
+  isLoading: boolean;
 
-  triggerSos: () => Promise<void>;
-  refreshActiveSos: () => Promise<void>;
+  isBootstrapped: boolean;
 
-  recordSosRealert: () => Promise<void>;
-  recordRealert: () => Promise<void>;
 
-  disconnectDevice: () => Promise<void>;
-  disconnect: () => Promise<void>;
+  error: string | null;
 
-  clearError: () => void;
+
+
+  bootstrap(): Promise<void>;
+
+
+  linkDevice(
+    code:string
+  ): Promise<void>;
+
+
+
+  sendLocation(): Promise<void>;
+
+
+
+  refresh(): Promise<void>;
+
+
+
+  disconnect(
+    deviceId?:string
+  ): Promise<void>;
+
+
+
+  triggerSos(): Promise<void>;
+
+
+
+  refreshActiveSos(): Promise<void>;
+
+
+
+  recordRealert(
+    sosId:string
+  ): Promise<void>;
+
+
+
+  clearError():void;
+
 }
 
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message) {
-    return error.message;
+
+
+
+
+function normalizeLocation(
+  location:any,
+  childId:string
+):LocationLog|null{
+
+
+  if(
+    !location ||
+    typeof location.latitude !== "number" ||
+    typeof location.longitude !== "number"
+  ){
+
+    return null;
+
   }
 
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "message" in error
-  ) {
-    const message = (error as { message?: unknown }).message;
 
-    if (typeof message === "string" && message.trim()) {
-      return message;
-    }
-  }
+  return {
 
-  return fallback;
+    id:
+      location.id ??
+      crypto.randomUUID(),
+
+
+    childId,
+
+
+    latitude:
+      location.latitude,
+
+
+    longitude:
+      location.longitude,
+
+
+    accuracyMeters:
+      location.accuracy ??
+      null,
+
+
+    source:
+      location.source ??
+      "mobile",
+
+
+    recordedAt:
+      location.recordedAt ??
+      new Date().toISOString(),
+
+  };
+
 }
 
-export const useChildMobileStore = create<ChildMobileState>(
-  (set, get) => ({
-    isBootstrapped: false,
-    isLoading: false,
-    error: null,
 
-    context: null,
-    latestLocation: null,
-    safeZoneStatus: null,
-    activeSos: null,
 
-    /* =====================================================
-       BOOTSTRAP
-    ===================================================== */
 
-    bootstrap: async () => {
-      set({
-        isLoading: true,
-        error: null,
-      });
 
-      try {
-        const context = await fetchChildMobileContext();
 
-        if (!context) {
-          set({
-            context: null,
-            latestLocation: null,
-            safeZoneStatus: null,
-            activeSos: null,
-          });
+function normalizeSos(
+  sos:any
+):ChildMobileSosAlert|null{
 
-          return;
-        }
 
-        const [safeZoneStatus, activeSos] = await Promise.all([
-          fetchChildSafeZoneStatus(),
-          fetchChildMobileActiveSos(),
-        ]);
+  if(!sos){
 
-        set({
-          context,
-          latestLocation: context.latestLocation,
-          safeZoneStatus,
-          activeSos,
-        });
-      } catch (error) {
-        set({
-          error: getErrorMessage(
-            error,
-            "SafeTrack could not restore the child-device connection."
-          ),
-        });
-      } finally {
-        set({
-          isLoading: false,
-          isBootstrapped: true,
-        });
-      }
-    },
+    return null;
 
-    /* =====================================================
-       LINK DEVICE
-    ===================================================== */
+  }
 
-    linkDevice: async (code: string) => {
-      set({
-        isLoading: true,
-        error: null,
-      });
 
-      try {
-        const normalizedCode = code.trim().toUpperCase();
+  return {
 
-        if (!normalizedCode) {
-          throw new Error(
-            "Please enter the child-device connection code."
-          );
-        }
+    id:
+      sos.id,
 
-        const context =
-          await linkChildMobileDevice(normalizedCode);
 
-        const [safeZoneStatus, activeSos] = await Promise.all([
-          fetchChildSafeZoneStatus(),
-          fetchChildMobileActiveSos(),
-        ]);
+    childId:
+      sos.childId ??
+      sos.child_id,
 
-        set({
-          context,
-          latestLocation: context.latestLocation,
-          safeZoneStatus,
-          activeSos,
-          isBootstrapped: true,
-        });
-      } catch (error) {
-        const message = getErrorMessage(
-          error,
-          "SafeTrack could not link this child phone."
-        );
 
-        set({
-          error: message,
-        });
+    status:
+      sos.status,
 
-        throw new Error(message);
-      } finally {
-        set({
-          isLoading: false,
-        });
-      }
-    },
 
-    /* =====================================================
-       REFRESH DASHBOARD
-    ===================================================== */
+    activationMethod:
+      sos.activationMethod ??
+      sos.activation_method ??
+      "mobile",
 
-    refreshDashboard: async () => {
-      if (!get().context) {
-        return;
-      }
 
-      set({
-        isLoading: true,
-        error: null,
-      });
+    triggeredAt:
+      sos.triggeredAt ??
+      sos.triggered_at ??
+      sos.createdAt ??
+      new Date().toISOString(),
 
-      try {
-        const [
-          context,
-          safeZoneStatus,
-          activeSos,
-        ] = await Promise.all([
-          fetchChildMobileContext(),
-          fetchChildSafeZoneStatus(),
-          fetchChildMobileActiveSos(),
-        ]);
 
-        if (!context) {
-          set({
-            context: null,
-            latestLocation: null,
-            safeZoneStatus: null,
-            activeSos: null,
-          });
+    acknowledgedAt:
+      sos.acknowledgedAt ??
+      sos.acknowledged_at ??
+      null,
 
-          return;
-        }
 
-        set({
-          context,
-          latestLocation: context.latestLocation,
-          safeZoneStatus,
-          activeSos,
-        });
-      } catch (error) {
-        set({
-          error: getErrorMessage(
-            error,
-            "SafeTrack could not refresh the Child Dashboard."
-          ),
-        });
-      } finally {
-        set({
-          isLoading: false,
-        });
-      }
-    },
+    realertCount:
+      sos.realertCount ??
+      sos.realert_count ??
+      0,
 
-    refresh: async () => {
-      await get().refreshDashboard();
-    },
 
-    /* =====================================================
-       LOCATION
-    ===================================================== */
+  };
 
-    publishLocation: async () => {
-      set({
-        isLoading: true,
-        error: null,
-      });
+}
 
-      try {
-        const latestLocation =
-          await sendChildMobileLocation();
 
-        const safeZoneStatus =
-          await fetchChildSafeZoneStatus();
 
-        set((state) => ({
-          latestLocation,
-          safeZoneStatus,
 
-          context: state.context
-            ? {
-                ...state.context,
-                latestLocation,
-              }
-            : null,
-        }));
-      } catch (error) {
-        const message = getErrorMessage(
-          error,
-          "SafeTrack could not send the latest location."
-        );
 
-        set({
-          error: message,
-        });
 
-        throw new Error(message);
-      } finally {
-        set({
-          isLoading: false,
-        });
-      }
-    },
+export const useChildMobileStore =
+create<ChildMobileState>((set,get)=>(
 
-    sendLocation: async () => {
-      await get().publishLocation();
-    },
 
-    /* =====================================================
-       SOS
-    ===================================================== */
+{
 
-    triggerSos: async () => {
-      set({
-        isLoading: true,
-        error: null,
-      });
 
-      try {
-        /*
-         * Attempt to obtain a fresh location first.
-         *
-         * If location permission or GPS temporarily fails,
-         * SOS will still continue using the latest location
-         * already stored in SafeTrack.
-         */
-        try {
-          const latestLocation =
-            await sendChildMobileLocation();
+context:null,
 
-          set((state) => ({
-            latestLocation,
 
-            context: state.context
-              ? {
-                  ...state.context,
-                  latestLocation,
-                }
-              : null,
-          }));
-        } catch {
-          /*
-           * Do not block SOS because of a temporary
-           * location failure.
-           */
-        }
+latestLocation:null,
 
-        const activeSos =
-          await createChildMobileSosAlert();
 
-        set({
-          activeSos,
-        });
-      } catch (error) {
-        const message = getErrorMessage(
-          error,
-          "SafeTrack could not send the SOS alert."
-        );
+safeZoneStatus:null,
 
-        set({
-          error: message,
-        });
 
-        throw new Error(message);
-      } finally {
-        set({
-          isLoading: false,
-        });
-      }
-    },
+activeSos:null,
 
-    /* =====================================================
-       ACTIVE SOS
-    ===================================================== */
 
-    refreshActiveSos: async () => {
-      try {
-        const activeSos =
-          await fetchChildMobileActiveSos();
+loading:false,
 
-        set({
-          activeSos,
-        });
-      } catch (error) {
-        set({
-          error: getErrorMessage(
-            error,
-            "SafeTrack could not check SOS acknowledgement status."
-          ),
-        });
-      }
-    },
 
-    /* =====================================================
-       SOS RE-ALERT
-    ===================================================== */
+isLoading:false,
 
-    recordSosRealert: async () => {
-      const currentAlert =
-        get().activeSos;
 
-      if (
-        !currentAlert ||
-        currentAlert.status !== "active"
-      ) {
-        return;
-      }
+isBootstrapped:false,
 
-      try {
-        const updatedAlert =
-          await recordChildMobileSosRealert(
-            currentAlert.id
-          );
 
-        set({
-          activeSos: updatedAlert,
-        });
-      } catch (error) {
-        set({
-          error: getErrorMessage(
-            error,
-            "SafeTrack could not update SOS re-alert information."
-          ),
-        });
-      }
-    },
+error:null,
 
-    recordRealert: async () => {
-      await get().recordSosRealert();
-    },
 
-    /* =====================================================
-       DISCONNECT
-    ===================================================== */
 
-    disconnectDevice: async () => {
-      set({
-        isLoading: true,
-        error: null,
-      });
 
-      try {
-        await disconnectChildMobileDevice();
 
-        set({
-          context: null,
-          latestLocation: null,
-          safeZoneStatus: null,
-          activeSos: null,
-          isBootstrapped: true,
-        });
-      } catch (error) {
-        const message = getErrorMessage(
-          error,
-          "SafeTrack could not disconnect this child phone."
-        );
+bootstrap:async()=>{
 
-        set({
-          error: message,
-        });
 
-        throw new Error(message);
-      } finally {
-        set({
-          isLoading: false,
-        });
-      }
-    },
+try{
 
-    disconnect: async () => {
-      await get().disconnectDevice();
-    },
 
-    /* =====================================================
-       ERROR
-    ===================================================== */
+set({
 
-    clearError: () => {
-      set({
-        error: null,
-      });
-    },
-  })
+loading:true,
+
+isLoading:true,
+
+error:null,
+
+});
+
+
+
+const context =
+await fetchChildMobileContext();
+
+
+
+const latestLocation =
+normalizeLocation(
+context.latestLocation,
+context.childId
 );
+
+
+
+set({
+
+context:{
+
+...context,
+
+mobileDeviceActive:
+context.isLinked ?? false,
+
+},
+
+
+latestLocation,
+
+
+isBootstrapped:true,
+
+});
+
+
+
+}
+catch(error){
+
+
+set({
+
+error:
+error instanceof Error
+? error.message
+:"Unable to initialize child account."
+
+});
+
+
+}
+finally{
+
+
+set({
+
+loading:false,
+
+isLoading:false,
+
+});
+
+
+}
+
+
+},
+
+
+
+
+
+
+
+linkDevice:async(code)=>{
+
+
+try{
+
+
+set({
+
+loading:true,
+
+isLoading:true,
+
+error:null,
+
+});
+
+
+
+const result =
+await linkChildMobileDevice(
+code
+);
+
+
+
+const context =
+await fetchChildMobileContext(
+result.childId
+);
+
+
+
+set({
+
+context:{
+
+...context,
+
+mobileDeviceActive:
+context.isLinked ?? true,
+
+},
+
+
+isBootstrapped:true,
+
+});
+
+
+}
+catch(error){
+
+
+set({
+
+error:
+error instanceof Error
+? error.message
+:"Unable to link device."
+
+});
+
+
+}
+finally{
+
+
+set({
+
+loading:false,
+
+isLoading:false,
+
+});
+
+
+}
+
+
+},
+
+
+
+
+
+
+
+sendLocation:async()=>{
+
+
+try{
+
+
+const latest =
+get().latestLocation;
+
+
+
+if(!latest){
+
+throw new Error(
+"No location available."
+);
+
+}
+
+
+
+await sendChildMobileLocation({
+
+latitude:
+latest.latitude,
+
+
+longitude:
+latest.longitude,
+
+
+accuracy:
+latest.accuracyMeters ?? undefined,
+
+
+timestamp:
+latest.recordedAt,
+
+});
+
+
+
+}
+catch(error){
+
+
+set({
+
+error:
+error instanceof Error
+? error.message
+:"Unable to send location."
+
+});
+
+
+throw error;
+
+
+}
+
+
+},
+
+
+
+
+
+
+
+refresh:async()=>{
+
+
+const context =
+get().context;
+
+
+
+if(!context){
+
+return;
+
+}
+
+
+
+try{
+
+
+const updatedContext =
+await fetchChildMobileContext(
+context.childId
+);
+
+
+
+const zone =
+await fetchChildSafeZoneStatus(
+context.childId
+);
+
+
+
+const sos =
+await fetchChildMobileActiveSos(
+context.childId
+);
+
+
+
+set({
+
+
+context:{
+
+...updatedContext,
+
+mobileDeviceActive:
+updatedContext.isLinked ?? false,
+
+},
+
+
+safeZoneStatus:
+zone,
+
+
+activeSos:
+normalizeSos(sos),
+
+
+});
+
+
+
+}
+catch(error){
+
+
+set({
+
+error:
+error instanceof Error
+? error.message
+:"Unable to refresh."
+
+});
+
+
+}
+
+
+},
+
+
+
+
+
+
+
+disconnect:async(deviceId)=>{
+
+
+if(!deviceId){
+
+return;
+
+}
+
+
+try{
+
+
+await disconnectChildMobileDevice(
+deviceId
+);
+
+
+
+set({
+
+context:null,
+
+latestLocation:null,
+
+activeSos:null,
+
+isBootstrapped:false,
+
+});
+
+
+}
+catch(error){
+
+
+set({
+
+error:
+error instanceof Error
+? error.message
+:"Unable to disconnect."
+
+});
+
+
+}
+
+
+},
+
+
+
+
+
+
+
+triggerSos:async()=>{
+
+
+const context =
+get().context;
+
+
+
+if(!context){
+
+throw new Error(
+"Child account unavailable."
+);
+
+}
+
+
+
+try{
+
+
+const sos =
+await createChildMobileSosAlert(
+context.childId
+);
+
+
+
+set({
+
+activeSos:
+normalizeSos(sos),
+
+});
+
+
+}
+catch(error){
+
+
+set({
+
+error:
+error instanceof Error
+? error.message
+:"SOS failed."
+
+});
+
+
+}
+
+
+},
+
+
+
+
+
+
+
+refreshActiveSos:async()=>{
+
+
+const context =
+get().context;
+
+
+
+if(!context){
+
+return;
+
+}
+
+
+
+const sos =
+await fetchChildMobileActiveSos(
+context.childId
+);
+
+
+
+set({
+
+activeSos:
+normalizeSos(sos),
+
+});
+
+
+},
+
+
+
+
+
+
+
+recordRealert:async(sosId)=>{
+
+
+const updated =
+await recordChildMobileSosRealert(
+sosId
+);
+
+
+
+set({
+
+activeSos:
+normalizeSos(updated),
+
+});
+
+
+},
+
+
+
+
+
+
+
+clearError:()=>{
+
+
+set({
+
+error:null,
+
+});
+
+
+},
+
+
+
+}
+
+));

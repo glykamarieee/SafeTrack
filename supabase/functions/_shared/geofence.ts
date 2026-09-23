@@ -1,9 +1,12 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+
 import { sendGuardianPush } from "./push.ts";
+
 
 function toRadians(value: number) {
   return (value * Math.PI) / 180;
 }
+
 
 function distanceMeters(
   lat1: number,
@@ -11,7 +14,8 @@ function distanceMeters(
   lat2: number,
   lon2: number,
 ) {
-  const earthRadius = 6_371_000;
+  const earthRadius = 6371000;
+
   const dLat = toRadians(lat2 - lat1);
   const dLon = toRadians(lon2 - lon1);
 
@@ -21,17 +25,30 @@ function distanceMeters(
       Math.cos(toRadians(lat2)) *
       Math.sin(dLon / 2) ** 2;
 
-  return 2 * earthRadius * Math.asin(Math.sqrt(a));
+  return (
+    2 *
+    earthRadius *
+    Math.asin(Math.sqrt(a))
+  );
 }
+
+
 
 export async function processGeofences(args: {
   supabase: SupabaseClient;
+
   childId: string;
+
   guardianId: string;
+
   locationLogId: string;
+
   latitude: number;
+
   longitude: number;
+
 }) {
+
   const {
     supabase,
     childId,
@@ -41,98 +58,246 @@ export async function processGeofences(args: {
     longitude,
   } = args;
 
-  const { data: zones, error } = await supabase
+
+
+  const {
+    data: zones,
+    error: zoneError,
+  } = await supabase
     .from("geofences")
-    .select("id, name, latitude, longitude, radius_meters, is_enabled")
+    .select(
+      `
+      id,
+      name,
+      latitude,
+      longitude,
+      radius_meters,
+      is_enabled
+      `,
+    )
     .eq("child_id", childId)
     .eq("is_enabled", true);
 
-  if (error) throw error;
+
+
+  if (zoneError) {
+    throw zoneError;
+  }
+
+
 
   if (!zones || zones.length === 0) {
     return "No safe zone configured";
   }
 
-  const insideNames: string[] = [];
+
+
+  const insideZones: string[] = [];
+
+
 
   for (const zone of zones) {
+
+
+    const zoneLatitude = Number(zone.latitude);
+
+    const zoneLongitude = Number(zone.longitude);
+
+    const radius = Number(zone.radius_meters);
+
+
+
     const distance = distanceMeters(
       latitude,
       longitude,
-      Number(zone.latitude),
-      Number(zone.longitude),
+      zoneLatitude,
+      zoneLongitude,
     );
 
-    const inside = distance <= Number(zone.radius_meters);
 
-    if (inside) insideNames.push(zone.name);
 
-    const { data: lastEvent } = await supabase
+    const isInside =
+      distance <= radius;
+
+
+
+    if (isInside) {
+      insideZones.push(zone.name);
+    }
+
+
+
+    /*
+      Get previous safe-zone state.
+
+      entry = previously inside
+      exit  = previously outside
+    */
+
+    const {
+      data: lastEvent,
+    } = await supabase
       .from("geofence_events")
-      .select("event_type")
-      .eq("child_id", childId)
-      .eq("geofence_id", zone.id)
-      .in("event_type", ["entry", "exit"])
-      .order("occurred_at", { ascending: false })
+      .select(
+        "event_type",
+      )
+      .eq(
+        "child_id",
+        childId,
+      )
+      .eq(
+        "geofence_id",
+        zone.id,
+      )
+      .in(
+        "event_type",
+        [
+          "entry",
+          "exit",
+        ],
+      )
+      .order(
+        "occurred_at",
+        {
+          ascending: false,
+        },
+      )
       .limit(1)
       .maybeSingle();
 
-    const previousInside =
-      lastEvent?.event_type === "entry"
-        ? true
-        : lastEvent?.event_type === "exit"
-        ? false
-        : null;
 
-    const changed =
-      previousInside === null ? inside : previousInside !== inside;
 
-    if (!changed) continue;
+    let previousInside:
+      | boolean
+      | null = null;
 
-    const eventType = inside ? "entry" : "exit";
-    const title = inside
-      ? `Entered ${zone.name}`
-      : `Exited ${zone.name}`;
 
-    const details = inside
-      ? `The registered smartwatch entered the ${zone.name} safe zone.`
-      : `The registered smartwatch exited the ${zone.name} safe zone.`;
 
-    const { error: insertError } = await supabase
-      .from("geofence_events")
-      .insert({
-        child_id: childId,
-        geofence_id: zone.id,
-        location_log_id: locationLogId,
-        event_type: eventType,
-        title,
-        details,
-        latitude,
-        longitude,
-        occurred_at: new Date().toISOString(),
-      });
+    if (lastEvent?.event_type === "entry") {
 
-    if (insertError) {
-      console.error("geofence event insert failed", insertError);
+      previousInside = true;
+
+    } else if (
+      lastEvent?.event_type === "exit"
+    ) {
+
+      previousInside = false;
+
+    }
+
+
+
+    /*
+      If there is no previous event,
+      create an event only when child
+      is initially inside the zone.
+    */
+
+    const stateChanged =
+      previousInside === null
+        ? isInside
+        : previousInside !== isInside;
+
+
+
+    if (!stateChanged) {
       continue;
     }
 
+
+
+    const eventType =
+      isInside
+        ? "entry"
+        : "exit";
+
+
+
+    const title =
+      isInside
+        ? `Entered ${zone.name}`
+        : `Exited ${zone.name}`;
+
+
+
+    const details =
+      isInside
+        ? `The child entered the ${zone.name} safe zone.`
+        : `The child exited the ${zone.name} safe zone.`;
+
+
+
+    const {
+      error: insertError,
+    } = await supabase
+      .from("geofence_events")
+      .insert({
+
+        child_id: childId,
+
+        geofence_id: zone.id,
+
+        location_log_id: locationLogId,
+
+        event_type: eventType,
+
+        title,
+
+        details,
+
+        latitude,
+
+        longitude,
+
+        occurred_at:
+          new Date().toISOString(),
+
+      });
+
+
+
+    if (insertError) {
+
+      console.error(
+        "Failed to insert geofence event:",
+        insertError,
+      );
+
+      continue;
+
+    }
+
+
+
     await sendGuardianPush(
       supabase,
+
       guardianId,
+
       title,
+
       details,
+
       {
         type: "geofence",
+
         eventType,
+
         childId,
+
         geofenceId: zone.id,
+
         locationLogId,
+
       },
     );
+
   }
 
-  return insideNames.length > 0
-    ? `Inside ${insideNames.join(", ")}`
+
+
+  return insideZones.length > 0
+    ? `Inside ${insideZones.join(", ")}`
     : "Outside safe zones";
+
 }

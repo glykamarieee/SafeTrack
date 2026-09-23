@@ -12,27 +12,34 @@ import {
   serviceClient,
 } from "../_shared/supabase.ts";
 
-Deno.serve(async (request) => {
+
+Deno.serve(async (request: Request) => {
+
   if (request.method === "OPTIONS") {
     return options();
   }
 
+
   try {
+
     /*
-     * =====================================================
-     * 1. VERIFY THE GUARDIAN SESSION
-     * =====================================================
-     */
+    =========================================
+    1. VERIFY GUARDIAN SESSION
+    =========================================
+    */
 
     const authHeader =
-      request.headers.get("Authorization") ??
-      "";
+      request.headers.get("Authorization") ?? "";
 
-    const accessToken = authHeader
-      .replace(/^Bearer\s+/i, "")
-      .trim();
+
+    const accessToken =
+      authHeader
+        .replace(/^Bearer\s+/i, "")
+        .trim();
+
 
     if (!accessToken) {
+
       return json(
         {
           error:
@@ -40,18 +47,30 @@ Deno.serve(async (request) => {
         },
         401,
       );
+
     }
+
+
 
     const supabase = serviceClient();
 
+
+
     const {
-      data: { user },
+      data: {
+        user,
+      },
+
       error: userError,
+
     } = await supabase.auth.getUser(
       accessToken,
     );
 
+
+
     if (userError || !user) {
+
       return json(
         {
           error:
@@ -59,31 +78,44 @@ Deno.serve(async (request) => {
         },
         401,
       );
+
     }
 
+
+
     /*
-     * =====================================================
-     * 2. GET WATCH IDENTIFIER
-     * =====================================================
-     */
+    =========================================
+    2. GET WATCH INFORMATION
+    =========================================
+    */
+
 
     const body =
       await request.json();
 
-    const smartwatchDeviceId = String(
-      body.smartwatchDeviceId ?? "",
-    ).trim();
 
-    const watchId = String(
-      body.watchId ?? "",
-    )
+
+    const smartwatchDeviceId =
+      String(
+        body.smartwatchDeviceId ?? "",
+      ).trim();
+
+
+
+    const watchId =
+      String(
+        body.watchId ?? "",
+      )
       .trim()
       .toUpperCase();
+
+
 
     if (
       !smartwatchDeviceId &&
       !watchId
     ) {
+
       return json(
         {
           error:
@@ -91,54 +123,71 @@ Deno.serve(async (request) => {
         },
         400,
       );
+
     }
 
-    /*
-     * =====================================================
-     * 3. LOAD SMARTWATCH DEVICE
-     * =====================================================
-     */
 
-    let deviceQuery = supabase
-      .from("smartwatch_devices")
-      .select(
-        `
-        id,
-        watch_id,
-        child_id,
-        child_person_id,
-        is_active,
-        paired_at,
-        device_token_hash
-        `,
-      );
+
+    /*
+    =========================================
+    3. FIND SMARTWATCH
+    =========================================
+    */
+
+
+    let query =
+      supabase
+        .from("smartwatch_devices")
+        .select(
+          `
+          id,
+          watch_id,
+          child_id,
+          is_active
+          `,
+        );
+
+
 
     if (smartwatchDeviceId) {
-      deviceQuery =
-        deviceQuery.eq(
+
+      query =
+        query.eq(
           "id",
           smartwatchDeviceId,
         );
+
     } else {
-      deviceQuery =
-        deviceQuery.eq(
+
+      query =
+        query.eq(
           "watch_id",
           watchId,
         );
+
     }
+
+
 
     const {
       data: device,
       error: deviceError,
-    } = await deviceQuery
-      .limit(1)
+
+    } = await query
       .maybeSingle();
 
+
+
     if (deviceError) {
+
       throw deviceError;
+
     }
 
+
+
     if (!device) {
+
       return json(
         {
           error:
@@ -146,37 +195,50 @@ Deno.serve(async (request) => {
         },
         404,
       );
+
     }
+
+
 
     if (!device.is_active) {
+
       return json(
         {
           error:
-            "This smartwatch is currently inactive.",
+            "This smartwatch is inactive.",
         },
         400,
       );
+
     }
+
+
 
     if (!device.child_id) {
+
       return json(
         {
           error:
-            "The smartwatch has not yet been linked to a child.",
+            "Smartwatch is not linked to a child.",
         },
         400,
       );
+
     }
 
+
+
     /*
-     * =====================================================
-     * 4. VERIFY THAT THE CHILD BELONGS TO THIS GUARDIAN
-     * =====================================================
-     */
+    =========================================
+    4. VERIFY CHILD OWNERSHIP
+    =========================================
+    */
+
 
     const {
       data: child,
       error: childError,
+
     } = await supabase
       .from("child_profiles")
       .select(
@@ -192,130 +254,165 @@ Deno.serve(async (request) => {
       )
       .maybeSingle();
 
+
+
     if (childError) {
+
       throw childError;
+
     }
 
+
+
     if (!child) {
+
       return json(
         {
           error:
-            "The linked child profile could not be found.",
+            "Child profile not found.",
         },
         404,
       );
+
     }
 
-    if (
-      child.guardian_id !== user.id
-    ) {
+
+
+    if (child.guardian_id !== user.id) {
+
       return json(
         {
           error:
-            "You are not authorized to generate a connection code for this smartwatch.",
+            "Unauthorized smartwatch access.",
         },
         403,
       );
+
     }
 
+
+
     /*
-     * =====================================================
-     * 5. GENERATE TEMPORARY 6-DIGIT CONNECTION CODE
-     * =====================================================
-     */
+    =========================================
+    5. CREATE CONNECTION CODE
+    =========================================
+    */
+
 
     const connectionCode =
       randomSixDigitCode();
 
-    /*
-     * Code remains valid for 10 minutes.
-     */
-    const expiresAtMs =
+
+
+    const expiresAt =
       Date.now() +
       10 * 60 * 1000;
 
-    /*
-     * Never save the plain 6-digit code in the database.
-     *
-     * Only its SHA-256 hash is stored.
-     */
+
+
     const codeHash =
       await sha256(
         connectionCode,
       );
 
-    /*
-     * Temporary challenge format:
-     *
-     * pair:v1:<expiry timestamp>:<code hash>
-     *
-     * watch-pair/index.ts reads this challenge.
-     */
-    const challenge =
-      `pair:v1:${expiresAtMs}:${codeHash}`;
+
 
     const now =
       new Date().toISOString();
 
+
+
     /*
-     * During first-time pairing,
-     * device_token_hash temporarily holds the pairing challenge.
-     *
-     * After the watch successfully enters the code,
-     * watch-pair replaces this with the real hashed device token.
-     */
+    Store only hashed code.
+    Never store the plain code.
+    */
+
+
     const {
       error: updateError,
+
     } = await supabase
-      .from(
-        "smartwatch_devices",
-      )
+      .from("smartwatch_devices")
       .update({
-        device_token_hash:
-          challenge,
+
+        pairing_code_hash:
+          codeHash,
+
+
+        pairing_code_expires_at:
+          new Date(
+            expiresAt,
+          ).toISOString(),
+
+
+        pairing_code_created_at:
+          now,
+
 
         updated_at:
           now,
+
       })
       .eq(
         "id",
         device.id,
       );
 
+
+
     if (updateError) {
+
       throw updateError;
+
     }
 
+
+
     /*
-     * =====================================================
-     * 6. RETURN CODE TO GUARDIAN APP
-     * =====================================================
-     */
+    =========================================
+    6. RETURN CODE
+    =========================================
+    */
+
 
     return json({
-      ok: true,
+
+      ok:true,
+
 
       connectionCode,
 
+
       expiresAt:
         new Date(
-          expiresAtMs,
+          expiresAt,
         ).toISOString(),
+
 
       watchId:
         device.watch_id,
 
+
       childId:
         child.id,
 
+
       childName:
         child.full_name,
+
     });
-  } catch (error) {
+
+
+
+  } catch(error) {
+
+
     console.error(
       "[watch-pairing-code]",
       error,
     );
+
+
 
     return json(
       {
@@ -326,5 +423,7 @@ Deno.serve(async (request) => {
       },
       500,
     );
+
   }
+
 });
