@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase";
+import { generateSmartwatchPairingCode } from "./smartwatchPairingService";
 
 export type WatchConnectionCode = {
   connectionCode: string;
@@ -8,41 +9,10 @@ export type WatchConnectionCode = {
   childName: string;
 };
 
-type FunctionErrorPayload = {
-  error?: string;
-  message?: string;
-};
-
-async function readFunctionError(
-  error: unknown,
-  fallback: string,
-): Promise<string> {
-  if (error && typeof error === "object" && "context" in error) {
-    const context = (error as { context?: unknown }).context;
-
-    if (
-      context &&
-      typeof context === "object" &&
-      "json" in context &&
-      typeof (context as { json?: unknown }).json === "function"
-    ) {
-      try {
-        const payload = (await (context as Response).json()) as FunctionErrorPayload;
-        const message = payload?.error ?? payload?.message;
-        if (message?.trim()) return message.trim();
-      } catch {
-        // Fall through to the normal error message.
-      }
-    }
-  }
-
-  if (error instanceof Error && error.message.trim()) {
-    return error.message;
-  }
-
-  return fallback;
-}
-
+/**
+ * Generate a connection code for a watch identified by its device row or
+ * Watch ID. The Guardian can only read watches linked to their children.
+ */
 export async function generateWatchConnectionCode(args: {
   smartwatchDeviceId?: string;
   watchId?: string;
@@ -53,30 +23,35 @@ export async function generateWatchConnectionCode(args: {
     throw new Error("A smartwatch device ID or Watch ID is required.");
   }
 
-  const { data, error } = await supabase.functions.invoke(
-    "watch-pairing-code",
-    {
-      body: {
-        smartwatchDeviceId: args.smartwatchDeviceId,
-        watchId: normalizedWatchId,
-      },
-    },
-  );
+  let query = supabase
+    .from("smartwatch_devices")
+    .select("child_id");
+
+  query = args.smartwatchDeviceId
+    ? query.eq("id", args.smartwatchDeviceId)
+    : query.eq("watch_id", normalizedWatchId!);
+
+  const { data: device, error } = await query.maybeSingle();
 
   if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!device?.child_id) {
     throw new Error(
-      await readFunctionError(
-        error,
-        "Unable to generate the smartwatch connection code.",
-      ),
+      "This smartwatch is not linked to one of your children. Add the Watch ID in Edit Child Profile first.",
     );
   }
 
-  if (!data?.ok || !data?.connectionCode) {
-    throw new Error(
-      data?.error || "SafeTrack did not return a smartwatch connection code.",
-    );
-  }
+  const code = await generateSmartwatchPairingCode({
+    childId: device.child_id,
+  });
 
-  return data as WatchConnectionCode;
+  return {
+    connectionCode: code.connectionCode,
+    expiresAt: code.expiresAt,
+    watchId: code.watchId,
+    childId: code.childId,
+    childName: code.childName,
+  };
 }

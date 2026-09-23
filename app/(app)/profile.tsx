@@ -231,7 +231,7 @@ export default function ProfileScreen(){
 
         supabase
 
-        .from("guardian_profiles")
+        .from("persons")
 
         .select(
           "id,full_name,email,avatar_path"
@@ -250,7 +250,7 @@ export default function ProfileScreen(){
 
         supabase
 
-        .from("child_profiles")
+        .from("children")
 
         .select(
           "id,full_name,age,relationship,tracking_source,avatar_path"
@@ -264,7 +264,7 @@ export default function ProfileScreen(){
         .order(
           "created_at",
           {
-            ascending:false
+            ascending:true
           }
         )
 
@@ -671,7 +671,7 @@ export default function ProfileScreen(){
 
               ?
 
-              "/edit-child-profile"
+              { pathname:"/edit-child-profile", params:{ childId:child.id } }
 
               :
 
@@ -752,7 +752,7 @@ export default function ProfileScreen(){
               child
               ?
 
-              "/edit-child-profile"
+              { pathname:"/edit-child-profile", params:{ childId:child.id } }
 
               :
 

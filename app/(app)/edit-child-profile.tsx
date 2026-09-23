@@ -11,7 +11,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -43,7 +43,7 @@ const RELATIONSHIPS = [
   "Other",
 ];
 
-type TrackingSource = "smartwatch" | "both";
+type TrackingSource = "smartwatch" | "mobile" | "both";
 
 const TRACKING_SOURCES: Array<{
   value: TrackingSource;
@@ -58,6 +58,12 @@ const TRACKING_SOURCES: Array<{
     description: "Galaxy Watch is the primary tracking device.",
   },
   {
+    value: "mobile",
+    label: "Phone",
+    icon: "phone-portrait-outline",
+    description: "The child's phone is the only tracking device.",
+  },
+  {
     value: "both",
     label: "Both",
     icon: "git-compare-outline",
@@ -65,8 +71,18 @@ const TRACKING_SOURCES: Array<{
   },
 ];
 
+function usesWatch(source: TrackingSource) {
+  return source === "smartwatch" || source === "both";
+}
+
+function usesPhone(source: TrackingSource) {
+  return source === "mobile" || source === "both";
+}
+
 export default function EditChildProfileScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ childId?: string }>();
+  const requestedChildId = String(params.childId ?? "").trim();
 
   const [childId, setChildId] = useState("");
 
@@ -107,11 +123,13 @@ export default function EditChildProfileScreen() {
 
       const guardianId = authData.user.id;
 
-      const {
-        data: child,
-        error: childError,
-      } = await supabase
-        .from("child_profiles")
+      /**
+       * Edit the child passed by the caller; otherwise the
+       * first registered child, the same one the Guardian
+       * home screen generates connection codes for.
+       */
+      let childQuery = supabase
+        .from("children")
         .select(
           `
           id,
@@ -122,9 +140,18 @@ export default function EditChildProfileScreen() {
           avatar_path
         `
         )
-        .eq("guardian_id", guardianId)
+        .eq("guardian_id", guardianId);
+
+      if (requestedChildId) {
+        childQuery = childQuery.eq("id", requestedChildId);
+      }
+
+      const {
+        data: child,
+        error: childError,
+      } = await childQuery
         .order("created_at", {
-          ascending: false,
+          ascending: true,
         })
         .limit(1)
         .maybeSingle();
@@ -143,15 +170,10 @@ export default function EditChildProfileScreen() {
       setAge(String(child.age ?? ""));
       setRelationship(child.relationship ?? "Guardian");
 
-      /**
-       * SafeTrack final architecture does not allow mobile-only.
-       *
-       * If an older database record still contains "mobile",
-       * normalize it back to smartwatch.
-       */
       const normalizedTrackingSource: TrackingSource =
+        child.tracking_source === "mobile" ||
         child.tracking_source === "both"
-          ? "both"
+          ? child.tracking_source
           : "smartwatch";
 
       setTrackingSource(normalizedTrackingSource);
@@ -166,9 +188,6 @@ export default function EditChildProfileScreen() {
 
       /**
        * Find the smartwatch associated with this child.
-       *
-       * SafeTrack maintains both child_id and child_person_id
-       * for compatibility with the existing database.
        */
       const {
         data: watch,
@@ -180,14 +199,11 @@ export default function EditChildProfileScreen() {
           id,
           watch_id,
           child_id,
-          child_person_id,
           is_active,
           paired_at
         `
         )
-        .or(
-          `child_id.eq.${child.id},child_person_id.eq.${child.id}`
-        )
+        .eq("child_id", child.id)
         .eq("is_active", true)
         .limit(1)
         .maybeSingle();
@@ -210,7 +226,7 @@ export default function EditChildProfileScreen() {
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, [router, requestedChildId]);
 
   useEffect(() => {
     void loadChildProfile();
@@ -272,10 +288,10 @@ export default function EditChildProfileScreen() {
       .trim()
       .toUpperCase();
 
-    if (!normalizedWatchId) {
+    if (usesWatch(trackingSource) && !normalizedWatchId) {
       Alert.alert(
         "Watch ID required",
-        "SafeTrack requires a registered smartwatch for every child."
+        "Enter the Watch ID, or choose Phone as the tracking source."
       );
 
       return null;
@@ -301,100 +317,26 @@ export default function EditChildProfileScreen() {
       );
     }
 
-    const {
-      data: watch,
-      error: watchError,
-    } = await supabase
-      .from("smartwatch_devices")
-      .select(
-        `
-        id,
-        watch_id,
-        child_id,
-        child_person_id,
-        is_active,
-        paired_at
-      `
-      )
-      .eq("watch_id", normalizedWatchId)
-      .maybeSingle();
-
-    if (watchError) {
-      throw watchError;
-    }
-
-    if (!watch) {
-      throw new Error(
-        "Smartwatch connection ID was not found. " +
-          "Check the Watch ID shown in the SafeTrack Watch app."
-      );
-    }
-
     /**
-     * Prevent one physical Watch from being assigned
-     * to two different children.
-     */
-    const linkedChildId =
-      watch.child_id ??
-      watch.child_person_id ??
-      null;
-
-    if (
-      linkedChildId &&
-      linkedChildId !== childId
-    ) {
-      throw new Error(
-        "This smartwatch is already linked to another child profile."
-      );
-    }
-
-    /**
-     * Disable any other smartwatch previously connected
-     * to this child.
-     */
-    const {
-      error: unlinkError,
-    } = await supabase
-      .from("smartwatch_devices")
-      .update({
-        child_id: null,
-        child_person_id: null,
-        is_active: false,
-      })
-      .or(
-        `child_id.eq.${childId},child_person_id.eq.${childId}`
-      )
-      .neq("id", watch.id);
-
-    if (unlinkError) {
-      throw unlinkError;
-    }
-
-    /**
-     * Link this physical Watch to the child.
-     *
-     * IMPORTANT:
-     * Do NOT set paired_at here.
-     *
-     * paired_at should represent successful Watch-side
-     * verification using the temporary 6-digit code.
+     * Runs server-side: guardians cannot update
+     * smartwatch_devices directly. The server checks
+     * the Watch exists, is active and is not linked to
+     * another child, and releases this child's previous
+     * Watch.
      */
     const {
       error: linkError,
-    } = await supabase
-      .from("smartwatch_devices")
-      .update({
-        child_id: childId,
-        child_person_id: childId,
-        is_active: true,
-      })
-      .eq("id", watch.id);
+    } = await supabase.rpc(
+      "link_watch_to_my_child",
+      {
+        p_child_id: childId,
+        p_watch_id: normalizedWatchId,
+      }
+    );
 
     if (linkError) {
-      throw linkError;
+      throw new Error(linkError.message);
     }
-
-    return watch;
   };
 
   /**
@@ -404,7 +346,8 @@ export default function EditChildProfileScreen() {
    */
   const saveChildProfile = async (
     options?: {
-      openWatchConnection?: boolean;
+      /** After saving, open the connection-code screen for this device. */
+      openConnection?: "watch" | "phone";
     }
   ) => {
     const validated = validateForm();
@@ -419,7 +362,7 @@ export default function EditChildProfileScreen() {
     } = validated;
 
     const shouldOpenConnection =
-      options?.openWatchConnection === true;
+      options?.openConnection !== undefined;
 
     if (shouldOpenConnection) {
       setOpeningConnectionCode(true);
@@ -458,33 +401,36 @@ export default function EditChildProfileScreen() {
 
       /**
        * Confirm and link the physical Watch first.
+       * A phone-only child keeps any watch linked
+       * earlier, in case the Guardian switches back.
        */
-      await linkWatchToChild(
-        normalizedWatchId
-      );
+      if (usesWatch(trackingSource)) {
+        await linkWatchToChild(
+          normalizedWatchId
+        );
+
+        setWatchId(normalizedWatchId);
+      }
 
       /**
        * Update child profile.
        */
       const {
         error: updateError,
-      } = await supabase
-        .from("child_profiles")
-        .update({
-          full_name: name.trim(),
-          age: numericAge,
-          relationship,
-          tracking_source: trackingSource,
-          avatar_path: nextAvatarPath,
-        })
-        .eq("id", childId)
-        .eq(
-          "guardian_id",
-          authData.user.id
-        );
+      } = await supabase.rpc(
+        "update_my_child_profile",
+        {
+          p_child_id: childId,
+          p_full_name: name.trim(),
+          p_age: numericAge,
+          p_relationship: relationship,
+          p_tracking_source: trackingSource,
+          p_avatar_path: nextAvatarPath,
+        }
+      );
 
       if (updateError) {
-        throw updateError;
+        throw new Error(updateError.message);
       }
 
       setAvatarPath(nextAvatarPath);
@@ -499,18 +445,15 @@ export default function EditChildProfileScreen() {
         setSelectedAvatar(null);
       }
 
-      setWatchId(normalizedWatchId);
-
       /**
        * ------------------------------------------------------
-       * WATCH CONNECTION CODE
+       * CONNECTION CODES
        * ------------------------------------------------------
        *
-       * This is the correct Watch pairing screen.
-       *
-       * It is completely separate from Child Mobile Access.
+       * Opened only after saving, so the server sees the
+       * tracking source the Guardian just chose.
        */
-      if (shouldOpenConnection) {
+      if (options?.openConnection === "watch") {
         router.push({
           pathname:
             "/(app)/device-connection-code",
@@ -518,6 +461,18 @@ export default function EditChildProfileScreen() {
             childId,
             childName: name.trim(),
             watchId: normalizedWatchId,
+          },
+        });
+
+        return;
+      }
+
+      if (options?.openConnection === "phone") {
+        router.push({
+          pathname: "/(app)/connection-code",
+          params: {
+            childId,
+            device: "phone",
           },
         });
 
@@ -800,13 +755,16 @@ export default function EditChildProfileScreen() {
             />
 
             <Text style={styles.trackingNoticeText}>
-              {trackingSource ===
-              "both"
+              {trackingSource === "both"
                 ? "The smartwatch remains the primary child safety device. The child's phone is optional."
-                : "The registered smartwatch is the child's required primary SafeTrack device."}
+                : trackingSource === "mobile"
+                  ? "The child's phone shares location and sends SOS alerts. No smartwatch is required."
+                  : "The registered smartwatch is the child's primary SafeTrack device."}
             </Text>
           </View>
 
+          {usesWatch(trackingSource) ? (
+          <>
           {/* WATCH ID */}
 
           <Text style={styles.label}>
@@ -882,8 +840,7 @@ export default function EditChildProfileScreen() {
               }
               onPress={() =>
                 void saveChildProfile({
-                  openWatchConnection:
-                    true,
+                  openConnection: "watch",
                 })
               }
               style={({ pressed }) => [
@@ -928,6 +885,82 @@ export default function EditChildProfileScreen() {
               Child Mobile Access.
             </Text>
           </View>
+          </>
+          ) : null}
+
+          {/* PHONE CONNECTION */}
+
+          {usesPhone(trackingSource) ? (
+            <View style={styles.watchCard}>
+              <View style={styles.watchCardHeader}>
+                <View style={styles.watchIcon}>
+                  <Ionicons
+                    name="phone-portrait-outline"
+                    size={24}
+                    color={colors.primary}
+                  />
+                </View>
+
+                <View style={styles.watchCardCopy}>
+                  <Text style={styles.watchCardTitle}>
+                    Child phone
+                  </Text>
+
+                  <Text style={styles.watchCardText}>
+                    Generate the temporary
+                    connection code that must be
+                    entered on the child&apos;s
+                    phone under &quot;Link child
+                    device&quot;.
+                  </Text>
+                </View>
+              </View>
+
+              <Pressable
+                disabled={
+                  saving ||
+                  openingConnectionCode
+                }
+                onPress={() =>
+                  void saveChildProfile({
+                    openConnection: "phone",
+                  })
+                }
+                style={({ pressed }) => [
+                  styles.connectionButton,
+                  pressed &&
+                    styles.connectionButtonPressed,
+                  (saving ||
+                    openingConnectionCode) &&
+                    styles.connectionButtonDisabled,
+                ]}
+              >
+                {openingConnectionCode ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={colors.white}
+                  />
+                ) : (
+                  <>
+                    <Ionicons
+                      name="key-outline"
+                      size={20}
+                      color={colors.white}
+                    />
+
+                    <Text
+                      style={
+                        styles.connectionButtonText
+                      }
+                    >
+                      Generate Child Phone
+                      Connection Code
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+          ) : null}
 
           {/* SAVE */}
 

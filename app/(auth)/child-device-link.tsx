@@ -10,10 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import {
-  useRouter,
-  type Href,
-} from "expo-router";
+import { useRouter, type Href } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -30,39 +27,26 @@ import {
 export default function ChildDeviceLinkScreen() {
   const router = useRouter();
 
-  const linkDevice = useChildMobileStore(
-    (state) => state.linkDevice
-  );
+  const linkDevice = useChildMobileStore((state) => state.linkDevice);
 
-  const isLoading = useChildMobileStore(
-    (state) => state.isLoading
-  );
+  const isLoading = useChildMobileStore((state) => state.isLoading);
 
-  const storeError = useChildMobileStore(
-    (state) => state.error
-  );
+  const storeError = useChildMobileStore((state) => state.error);
 
-  const clearError = useChildMobileStore(
-    (state) => state.clearError
-  );
+  const clearError = useChildMobileStore((state) => state.clearError);
 
   const [code, setCode] = useState("");
-  const [localError, setLocalError] = useState<string | null>(
-    null
-  );
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const linkChildDevice = async () => {
     clearError();
     setLocalError(null);
 
-    const normalizedCode = code
-      .trim()
-      .toUpperCase()
-      .replace(/[^A-F0-9]/g, "");
+    const normalizedCode = code.replace(/\D/g, "");
 
-    if (!/^[A-F0-9]{8}$/.test(normalizedCode)) {
+    if (!/^\d{6}$/.test(normalizedCode)) {
       setLocalError(
-        "Enter the eight-character child-device connection code provided by the Guardian."
+        "Enter the six-digit child-device connection code provided by the Guardian.",
       );
       return;
     }
@@ -81,7 +65,7 @@ export default function ChildDeviceLinkScreen() {
         "Unable to link child phone",
         error instanceof Error
           ? error.message
-          : "SafeTrack could not link this child phone."
+          : "SafeTrack could not link this child phone.",
       );
     }
   };
@@ -89,10 +73,7 @@ export default function ChildDeviceLinkScreen() {
   const displayError = localError ?? storeError;
 
   return (
-    <SafeAreaView
-      style={styles.safe}
-      edges={["top", "left", "right"]}
-    >
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -111,14 +92,10 @@ export default function ChildDeviceLinkScreen() {
               color={colors.primaryDark}
             />
 
-            <Text style={styles.badgeText}>
-              CHILD DEVICE ACCESS
-            </Text>
+            <Text style={styles.badgeText}>CHILD DEVICE ACCESS</Text>
           </View>
 
-          <Text style={styles.title}>
-            Link this child phone
-          </Text>
+          <Text style={styles.title}>Link this child phone</Text>
 
           <Text style={styles.subtitle}>
             Enter the temporary connection code provided by the child&apos;s
@@ -136,9 +113,7 @@ export default function ChildDeviceLinkScreen() {
             </View>
 
             <View style={styles.infoCopy}>
-              <Text style={styles.infoTitle}>
-                For the child&apos;s phone
-              </Text>
+              <Text style={styles.infoTitle}>For the child&apos;s phone</Text>
 
               <Text style={styles.infoText}>
                 Do not use this screen while logged in as a Guardian or
@@ -148,43 +123,31 @@ export default function ChildDeviceLinkScreen() {
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>
-              Device connection code
-            </Text>
+            <Text style={styles.cardTitle}>Device connection code</Text>
 
             <Text style={styles.cardText}>
               Ask the Guardian to open Child Mobile Access and generate a new
               temporary code.
             </Text>
 
-            <Text style={styles.label}>
-              Eight-character code
-            </Text>
+            <Text style={styles.label}>Six-digit code</Text>
 
             <View style={styles.inputShell}>
-              <Ionicons
-                name="key-outline"
-                size={22}
-                color={colors.primary}
-              />
+              <Ionicons name="key-outline" size={22} color={colors.primary} />
 
               <TextInput
                 value={code}
                 onChangeText={(value) => {
-                  setCode(
-                    value
-                      .toUpperCase()
-                      .replace(/[^A-F0-9]/g, "")
-                  );
+                  setCode(value.replace(/\D/g, ""));
 
                   setLocalError(null);
                   clearError();
                 }}
-                placeholder="EXAMPLE: A1B2C3D4"
+                placeholder="EXAMPLE: 123456"
                 placeholderTextColor="#9AA6A1"
-                autoCapitalize="characters"
+                keyboardType="number-pad"
                 autoCorrect={false}
-                maxLength={8}
+                maxLength={6}
                 style={styles.input}
               />
             </View>
@@ -197,9 +160,7 @@ export default function ChildDeviceLinkScreen() {
                   color={colors.danger}
                 />
 
-                <Text style={styles.errorText}>
-                  {displayError}
-                </Text>
+                <Text style={styles.errorText}>{displayError}</Text>
               </View>
             ) : null}
 
@@ -212,16 +173,10 @@ export default function ChildDeviceLinkScreen() {
                 isLoading && styles.disabled,
               ]}
             >
-              <Ionicons
-                name="link-outline"
-                size={21}
-                color={colors.white}
-              />
+              <Ionicons name="link-outline" size={21} color={colors.white} />
 
               <Text style={styles.linkButtonText}>
-                {isLoading
-                  ? "Linking child device..."
-                  : "Link child device"}
+                {isLoading ? "Linking child device..." : "Link child device"}
               </Text>
             </Pressable>
           </View>

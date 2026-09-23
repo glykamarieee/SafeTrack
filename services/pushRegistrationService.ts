@@ -160,29 +160,20 @@ export async function registerGuardianPushToken(): Promise<string | null> {
   }
 
   /**
-   * Store/update the token through the protected SafeTrack backend.
+   * Store/update the token for the signed-in Guardian.
    */
-  const { data, error } = await supabase.functions.invoke(
-    "guardian-register-push",
+  const { error } = await supabase.rpc(
+    "register_my_push_token",
     {
-      body: {
-        pushToken,
-        platform: Platform.OS,
-        deviceName: Device.modelName ?? null,
-      },
+      p_push_token: pushToken,
+      p_platform: Platform.OS,
+      p_device_name: Device.modelName ?? null,
     }
   );
 
   if (error) {
     throw new Error(
       error.message ||
-        "SafeTrack could not register this device for notifications."
-    );
-  }
-
-  if (!data?.ok) {
-    throw new Error(
-      data?.error ||
         "SafeTrack could not register this device for notifications."
     );
   }

@@ -26,7 +26,7 @@ export async function fetchGuardianProfile(
 
 
   const {data,error}=await supabase
-    .from("guardian_profiles")
+    .from("persons")
     .select(`
       id,
       full_name,
@@ -79,7 +79,7 @@ export async function fetchGuardianChildren(
 
 
 const {data,error}=await supabase
-.from("child_profiles")
+.from("children")
 .select(`
  id,
  full_name,

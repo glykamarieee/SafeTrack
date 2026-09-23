@@ -26,12 +26,14 @@ function localDayBounds(dateISO?: string) {
 export async function loadSafetyTimeline(childId: string, dateISO?: string) {
   const { startAt, endAt } = localDayBounds(dateISO);
 
-  const { data, error } = await supabase.functions.invoke("guardian-safety-timeline", {
-    body: { childId, startAt, endAt },
+  const { data, error } = await supabase.rpc("get_my_child_safety_timeline", {
+    p_child_id: childId,
+    p_start_at: startAt ?? null,
+    p_end_at: endAt ?? null,
   });
 
   if (error) throw new Error(error.message || "Unable to load SafeTrack history.");
-  if (!data?.ok) throw new Error(data?.error || "Unable to load SafeTrack history.");
+  if (!data) throw new Error("Unable to load SafeTrack history.");
 
   const events: SafetyTimelineItem[] = (data.events ?? []).map((row: any) => ({
     id: row.id,
@@ -75,10 +77,9 @@ export async function loadSafetyTimeline(childId: string, dateISO?: string) {
 }
 
 export async function acknowledgeSos(sosAlertId: string) {
-  const { data, error } = await supabase.functions.invoke("guardian-ack-sos", {
-    body: { sosAlertId },
+  const { data, error } = await supabase.rpc("acknowledge_my_sos_alert", {
+    p_alert_id: sosAlertId,
   });
   if (error) throw new Error(error.message || "Unable to acknowledge SOS.");
-  if (!data?.ok) throw new Error(data?.error || "Unable to acknowledge SOS.");
   return data;
 }

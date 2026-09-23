@@ -8,772 +8,189 @@ import type {
 } from "../types/safetrack";
 
 import {
-  linkChildMobileDevice,
-  fetchChildMobileContext,
-  fetchChildSafeZoneStatus,
-  fetchChildMobileActiveSos,
-  sendChildMobileLocation,
-  createChildMobileSosAlert,
-  recordChildMobileSosRealert,
-  disconnectChildMobileDevice,
+  ChildPhoneUnlinkedError,
+  fetchChildPhoneState,
+  hasChildPhoneCredentials,
+  linkChildPhone,
+  realertChildPhoneSos,
+  sendCurrentChildPhoneLocation,
+  triggerChildPhoneSos,
+  unlinkChildPhone,
 } from "../services/childMobileService";
 
 
-
 interface ChildMobileState {
-
   context: ChildMobileContext | null;
-
   latestLocation: LocationLog | null;
-
   safeZoneStatus: ChildSafeZoneStatus | null;
-
   activeSos: ChildMobileSosAlert | null;
 
-
   loading: boolean;
-
   isLoading: boolean;
-
   isBootstrapped: boolean;
-
-
   error: string | null;
 
-
-
   bootstrap(): Promise<void>;
-
-
-  linkDevice(
-    code:string
-  ): Promise<void>;
-
-
-
+  linkDevice(code: string): Promise<void>;
   sendLocation(): Promise<void>;
-
-
-
   refresh(): Promise<void>;
-
-
-
-  disconnect(
-    deviceId?:string
-  ): Promise<void>;
-
-
-
+  disconnect(deviceId?: string): Promise<void>;
   triggerSos(): Promise<void>;
-
-
-
   refreshActiveSos(): Promise<void>;
-
-
-
-  recordRealert(
-    sosId:string
-  ): Promise<void>;
-
-
-
-  clearError():void;
-
+  recordRealert(sosId: string): Promise<void>;
+  clearError(): void;
 }
 
 
+const signedOutState = {
+  context: null,
+  latestLocation: null,
+  safeZoneStatus: null,
+  activeSos: null,
+};
+
+function messageOf(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
 
 
+export const useChildMobileStore = create<ChildMobileState>((set, get) => {
+  /**
+   * Run a request; if the server says this phone is no longer linked,
+   * drop the child state so the layout returns to the link screen.
+   */
+  async function run<T>(
+    request: () => Promise<T>,
+    fallbackMessage: string,
+    options: { busy?: boolean } = {}
+  ): Promise<T> {
+    if (options.busy) {
+      set({ loading: true, isLoading: true, error: null });
+    }
 
-function normalizeLocation(
-  location:any,
-  childId:string
-):LocationLog|null{
+    try {
+      return await request();
+    } catch (error) {
+      if (error instanceof ChildPhoneUnlinkedError) {
+        set(signedOutState);
+      }
 
-
-  if(
-    !location ||
-    typeof location.latitude !== "number" ||
-    typeof location.longitude !== "number"
-  ){
-
-    return null;
-
+      set({ error: messageOf(error, fallbackMessage) });
+      throw error;
+    } finally {
+      if (options.busy) {
+        set({ loading: false, isLoading: false });
+      }
+    }
   }
 
+  async function loadState() {
+    const state = await fetchChildPhoneState();
 
-  return {
-
-    id:
-      location.id ??
-      crypto.randomUUID(),
-
-
-    childId,
-
-
-    latitude:
-      location.latitude,
-
-
-    longitude:
-      location.longitude,
-
-
-    accuracyMeters:
-      location.accuracy ??
-      null,
-
-
-    source:
-      location.source ??
-      "mobile",
-
-
-    recordedAt:
-      location.recordedAt ??
-      new Date().toISOString(),
-
-  };
-
-}
-
-
-
-
-
-
-function normalizeSos(
-  sos:any
-):ChildMobileSosAlert|null{
-
-
-  if(!sos){
-
-    return null;
-
+    set({
+      context: state.context,
+      latestLocation: state.latestLocation,
+      safeZoneStatus: state.safeZoneStatus,
+      activeSos: state.activeSos,
+    });
   }
 
-
   return {
+    ...signedOutState,
 
-    id:
-      sos.id,
-
-
-    childId:
-      sos.childId ??
-      sos.child_id,
+    loading: false,
+    isLoading: false,
+    isBootstrapped: false,
+    error: null,
 
 
-    status:
-      sos.status,
+    bootstrap: async () => {
+      try {
+        if (await hasChildPhoneCredentials()) {
+          await run(loadState, "Unable to load the child dashboard.", { busy: true });
+        } else {
+          set(signedOutState);
+        }
+      } catch {
+        // Error is in state; an unlinked phone lands on the link screen.
+      } finally {
+        set({ isBootstrapped: true });
+      }
+    },
 
 
-    activationMethod:
-      sos.activationMethod ??
-      sos.activation_method ??
-      "mobile",
+    linkDevice: async (code) => {
+      await run(
+        async () => {
+          await linkChildPhone(code);
+          await loadState();
+        },
+        "Unable to link this child phone.",
+        { busy: true }
+      );
+
+      set({ isBootstrapped: true });
+    },
 
 
-    triggeredAt:
-      sos.triggeredAt ??
-      sos.triggered_at ??
-      sos.createdAt ??
-      new Date().toISOString(),
+    sendLocation: async () => {
+      const result = await run(
+        sendCurrentChildPhoneLocation,
+        "Unable to send location.",
+        { busy: true }
+      );
+
+      set({
+        latestLocation: result.location,
+        safeZoneStatus: result.safeZoneStatus,
+      });
+    },
 
 
-    acknowledgedAt:
-      sos.acknowledgedAt ??
-      sos.acknowledged_at ??
-      null,
+    refresh: async () => {
+      if (!get().context) return;
+
+      try {
+        await run(loadState, "Unable to refresh.");
+      } catch {
+        // Error is in state.
+      }
+    },
 
 
-    realertCount:
-      sos.realertCount ??
-      sos.realert_count ??
-      0,
+    disconnect: async () => {
+      await run(unlinkChildPhone, "Unable to disconnect this phone.", { busy: true });
+      set(signedOutState);
+    },
 
 
+    triggerSos: async () => {
+      const sos = await run(triggerChildPhoneSos, "SOS failed.", { busy: true });
+      set({ activeSos: sos });
+    },
+
+
+    refreshActiveSos: async () => {
+      await get().refresh();
+    },
+
+
+    recordRealert: async (sosId) => {
+      try {
+        const sos = await run(
+          () => realertChildPhoneSos(sosId),
+          "Unable to repeat the SOS alert."
+        );
+
+        set({ activeSos: sos?.status === "active" ? sos : null });
+      } catch {
+        // Error is in state; the next interval retries.
+      }
+    },
+
+
+    clearError: () => {
+      set({ error: null });
+    },
   };
-
-}
-
-
-
-
-
-
-export const useChildMobileStore =
-create<ChildMobileState>((set,get)=>(
-
-
-{
-
-
-context:null,
-
-
-latestLocation:null,
-
-
-safeZoneStatus:null,
-
-
-activeSos:null,
-
-
-loading:false,
-
-
-isLoading:false,
-
-
-isBootstrapped:false,
-
-
-error:null,
-
-
-
-
-
-bootstrap:async()=>{
-
-
-try{
-
-
-set({
-
-loading:true,
-
-isLoading:true,
-
-error:null,
-
 });
-
-
-
-const context =
-await fetchChildMobileContext();
-
-
-
-const latestLocation =
-normalizeLocation(
-context.latestLocation,
-context.childId
-);
-
-
-
-set({
-
-context:{
-
-...context,
-
-mobileDeviceActive:
-context.isLinked ?? false,
-
-},
-
-
-latestLocation,
-
-
-isBootstrapped:true,
-
-});
-
-
-
-}
-catch(error){
-
-
-set({
-
-error:
-error instanceof Error
-? error.message
-:"Unable to initialize child account."
-
-});
-
-
-}
-finally{
-
-
-set({
-
-loading:false,
-
-isLoading:false,
-
-});
-
-
-}
-
-
-},
-
-
-
-
-
-
-
-linkDevice:async(code)=>{
-
-
-try{
-
-
-set({
-
-loading:true,
-
-isLoading:true,
-
-error:null,
-
-});
-
-
-
-const result =
-await linkChildMobileDevice(
-code
-);
-
-
-
-const context =
-await fetchChildMobileContext(
-result.childId
-);
-
-
-
-set({
-
-context:{
-
-...context,
-
-mobileDeviceActive:
-context.isLinked ?? true,
-
-},
-
-
-isBootstrapped:true,
-
-});
-
-
-}
-catch(error){
-
-
-set({
-
-error:
-error instanceof Error
-? error.message
-:"Unable to link device."
-
-});
-
-
-}
-finally{
-
-
-set({
-
-loading:false,
-
-isLoading:false,
-
-});
-
-
-}
-
-
-},
-
-
-
-
-
-
-
-sendLocation:async()=>{
-
-
-try{
-
-
-const latest =
-get().latestLocation;
-
-
-
-if(!latest){
-
-throw new Error(
-"No location available."
-);
-
-}
-
-
-
-await sendChildMobileLocation({
-
-latitude:
-latest.latitude,
-
-
-longitude:
-latest.longitude,
-
-
-accuracy:
-latest.accuracyMeters ?? undefined,
-
-
-timestamp:
-latest.recordedAt,
-
-});
-
-
-
-}
-catch(error){
-
-
-set({
-
-error:
-error instanceof Error
-? error.message
-:"Unable to send location."
-
-});
-
-
-throw error;
-
-
-}
-
-
-},
-
-
-
-
-
-
-
-refresh:async()=>{
-
-
-const context =
-get().context;
-
-
-
-if(!context){
-
-return;
-
-}
-
-
-
-try{
-
-
-const updatedContext =
-await fetchChildMobileContext(
-context.childId
-);
-
-
-
-const zone =
-await fetchChildSafeZoneStatus(
-context.childId
-);
-
-
-
-const sos =
-await fetchChildMobileActiveSos(
-context.childId
-);
-
-
-
-set({
-
-
-context:{
-
-...updatedContext,
-
-mobileDeviceActive:
-updatedContext.isLinked ?? false,
-
-},
-
-
-safeZoneStatus:
-zone,
-
-
-activeSos:
-normalizeSos(sos),
-
-
-});
-
-
-
-}
-catch(error){
-
-
-set({
-
-error:
-error instanceof Error
-? error.message
-:"Unable to refresh."
-
-});
-
-
-}
-
-
-},
-
-
-
-
-
-
-
-disconnect:async(deviceId)=>{
-
-
-if(!deviceId){
-
-return;
-
-}
-
-
-try{
-
-
-await disconnectChildMobileDevice(
-deviceId
-);
-
-
-
-set({
-
-context:null,
-
-latestLocation:null,
-
-activeSos:null,
-
-isBootstrapped:false,
-
-});
-
-
-}
-catch(error){
-
-
-set({
-
-error:
-error instanceof Error
-? error.message
-:"Unable to disconnect."
-
-});
-
-
-}
-
-
-},
-
-
-
-
-
-
-
-triggerSos:async()=>{
-
-
-const context =
-get().context;
-
-
-
-if(!context){
-
-throw new Error(
-"Child account unavailable."
-);
-
-}
-
-
-
-try{
-
-
-const sos =
-await createChildMobileSosAlert(
-context.childId
-);
-
-
-
-set({
-
-activeSos:
-normalizeSos(sos),
-
-});
-
-
-}
-catch(error){
-
-
-set({
-
-error:
-error instanceof Error
-? error.message
-:"SOS failed."
-
-});
-
-
-}
-
-
-},
-
-
-
-
-
-
-
-refreshActiveSos:async()=>{
-
-
-const context =
-get().context;
-
-
-
-if(!context){
-
-return;
-
-}
-
-
-
-const sos =
-await fetchChildMobileActiveSos(
-context.childId
-);
-
-
-
-set({
-
-activeSos:
-normalizeSos(sos),
-
-});
-
-
-},
-
-
-
-
-
-
-
-recordRealert:async(sosId)=>{
-
-
-const updated =
-await recordChildMobileSosRealert(
-sosId
-);
-
-
-
-set({
-
-activeSos:
-normalizeSos(updated),
-
-});
-
-
-},
-
-
-
-
-
-
-
-clearError:()=>{
-
-
-set({
-
-error:null,
-
-});
-
-
-},
-
-
-
-}
-
-));

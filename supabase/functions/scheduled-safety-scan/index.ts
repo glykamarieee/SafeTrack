@@ -1,5 +1,4 @@
 import { json, options } from "../_shared/response.ts";
-import { sendGuardianPush } from "../_shared/push.ts";
 import { serviceClient } from "../_shared/supabase.ts";
 
 function seconds(value: string | undefined, fallback: number) {
@@ -25,10 +24,10 @@ async function hasRecentEvent(
   return Boolean(data);
 }
 
+// The Guardian is notified by the geofence_events_notify_guardian trigger.
 async function createSafetyEvent(args: {
   supabase: any;
   childId: string;
-  guardianId: string;
   eventType: string;
   title: string;
   details: string;
@@ -37,7 +36,6 @@ async function createSafetyEvent(args: {
   const {
     supabase,
     childId,
-    guardianId,
     eventType,
     title,
     details,
@@ -48,12 +46,10 @@ async function createSafetyEvent(args: {
     return false;
   }
 
-  const occurredAt = new Date().toISOString();
-  const { data: event, error } = await supabase
+  const { error } = await supabase
     .from("geofence_events")
     .insert({
       child_id: childId,
-      child_person_id: childId,
       geofence_id: null,
       location_log_id: null,
       event_type: eventType,
@@ -61,18 +57,10 @@ async function createSafetyEvent(args: {
       details,
       latitude: null,
       longitude: null,
-      occurred_at: occurredAt,
-    })
-    .select("id")
-    .single();
+      occurred_at: new Date().toISOString(),
+    });
 
   if (error) throw error;
-
-  await sendGuardianPush(supabase, guardianId, title, details, {
-    type: eventType,
-    childId,
-    eventId: event.id,
-  });
 
   return true;
 }
@@ -117,7 +105,7 @@ Deno.serve(async (request: Request) => {
 
     for (const device of devices ?? []) {
       const { data: child, error: childError } = await supabase
-        .from("child_profiles")
+        .from("children")
         .select("id, full_name, guardian_id")
         .eq("id", device.child_id)
         .maybeSingle();
@@ -138,7 +126,6 @@ Deno.serve(async (request: Request) => {
         const created = await createSafetyEvent({
           supabase,
           childId: child.id,
-          guardianId: child.guardian_id,
           eventType: "watch_disconnected",
           title: "Smartwatch connection unavailable",
           details:
@@ -160,7 +147,6 @@ Deno.serve(async (request: Request) => {
         const created = await createSafetyEvent({
           supabase,
           childId: child.id,
-          guardianId: child.guardian_id,
           eventType: "prolonged_inactivity",
           title: "Prolonged inactivity notice",
           details:

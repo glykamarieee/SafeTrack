@@ -10,91 +10,11 @@ export type MobilePairingCode = {
 };
 
 
-type FunctionErrorResponse = {
-  error?: string;
-  message?: string;
-};
 
-
-
-async function extractFunctionError(
-  error: unknown
-): Promise<string> {
-
-  if (
-    error &&
-    typeof error === "object" &&
-    "context" in error
-  ) {
-
-    const context = (
-      error as {
-        context?: unknown;
-      }
-    ).context;
-
-
-    if (
-      context &&
-      typeof context === "object" &&
-      "json" in context &&
-      typeof (
-        context as {
-          json?: unknown;
-        }
-      ).json === "function"
-    ) {
-
-      try {
-
-        const response =
-          context as Response;
-
-
-        const body =
-          await response.json();
-
-
-        const parsed =
-          body as FunctionErrorResponse;
-
-
-        return (
-          parsed.error ??
-          parsed.message ??
-          "Request failed."
-        );
-
-
-      } catch {
-
-        return "Request failed.";
-
-      }
-
-    }
-
-  }
-
-
-
-  if(error instanceof Error){
-
-    return error.message;
-
-  }
-
-
-
-  return "Unable to generate mobile connection code.";
-
-}
-
-
-
-
-
-
+/**
+ * Generate the temporary code the child's phone uses to link
+ * (Child Mobile Access).
+ */
 export async function generateMobilePairingCode(
   input:{
     childId:string;
@@ -121,12 +41,10 @@ export async function generateMobilePairingCode(
     data,
     error
   } =
-  await supabase.functions.invoke(
-    "mobile-pair-code",
+  await supabase.rpc(
+    "generate_child_phone_code",
     {
-      body:{
-        childId,
-      },
+      p_child_id:childId,
     }
   );
 
@@ -135,21 +53,17 @@ export async function generateMobilePairingCode(
   if(error){
 
     throw new Error(
-      await extractFunctionError(error)
+      error.message ||
+      "Unable to generate mobile connection code."
     );
 
   }
 
 
 
-  if(
-    !data ||
-    !data.ok ||
-    !data.connectionCode
-  ){
+  if(!data?.connectionCode){
 
     throw new Error(
-      data?.error ??
       "Unable to create mobile pairing code."
     );
 

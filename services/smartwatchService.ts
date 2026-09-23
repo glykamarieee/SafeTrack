@@ -94,7 +94,7 @@ async function getChildName(
   } =
   await supabase
 
-  .from("child_profiles")
+  .from("persons")
 
   .select(
     "full_name"

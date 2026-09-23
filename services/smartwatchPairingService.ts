@@ -5,89 +5,19 @@ export type SmartwatchPairingCode = {
   ok: true;
   connectionCode: string;
   expiresAt: string;
+  watchId: string;
   childId: string;
   childName: string;
 };
 
 
-type FunctionErrorResponse = {
-  error?: string;
-  message?: string;
+type PairingCodeRow = {
+  connection_code: string;
+  expires_at: string;
+  watch_id: string;
+  child_id: string;
+  child_name: string | null;
 };
-
-
-
-async function extractFunctionError(
-  error: unknown
-): Promise<string> {
-
-  if (
-    error &&
-    typeof error === "object" &&
-    "context" in error
-  ) {
-
-    const context =
-      (
-        error as {
-          context?: unknown;
-        }
-      ).context;
-
-
-    if (
-      context &&
-      typeof context === "object" &&
-      "json" in context &&
-      typeof (
-        context as {
-          json?: unknown;
-        }
-      ).json === "function"
-    ) {
-
-      try {
-
-        const response =
-          context as Response;
-
-
-        const body =
-          await response.json();
-
-
-        const parsed =
-          body as FunctionErrorResponse;
-
-
-        return (
-          parsed.error ??
-          parsed.message ??
-          "Request failed."
-        );
-
-
-      } catch {
-
-        return "Request failed.";
-
-      }
-
-    }
-
-  }
-
-
-  if(error instanceof Error){
-
-    return error.message;
-
-  }
-
-
-  return "Unable to generate smartwatch connection code.";
-
-}
 
 
 
@@ -119,12 +49,10 @@ export async function generateSmartwatchPairingCode(
     data,
     error
   } =
-  await supabase.functions.invoke(
-    "smartwatch-pair-code",
+  await supabase.rpc(
+    "generate_watch_pairing_code",
     {
-      body:{
-        childId,
-      },
+      p_child_id:childId,
     }
   );
 
@@ -133,22 +61,23 @@ export async function generateSmartwatchPairingCode(
   if(error){
 
     throw new Error(
-      await extractFunctionError(error)
+      error.message ||
+      "Unable to generate smartwatch connection code."
     );
 
   }
 
 
 
-  if(
-    !data ||
-    !data.ok ||
-    !data.connectionCode
-  ){
+  const row =
+    (data as PairingCodeRow[] | null)?.[0];
+
+
+
+  if(!row?.connection_code){
 
     throw new Error(
-      data?.error ??
-      "Unable to create smartwatch connection code."
+      "Unable to generate smartwatch connection code."
     );
 
   }
@@ -160,16 +89,19 @@ export async function generateSmartwatchPairingCode(
     ok:true,
 
     connectionCode:
-      data.connectionCode,
+      row.connection_code,
 
     expiresAt:
-      data.expiresAt,
+      row.expires_at,
+
+    watchId:
+      row.watch_id,
 
     childId:
-      data.childId,
+      row.child_id,
 
     childName:
-      data.childName ?? "",
+      row.child_name ?? "",
 
   };
 

@@ -261,6 +261,15 @@ childId:
 result.child.id,
 
 
+// A phone-only child gets a child phone code, not a watch code.
+device:
+trackingSource === "mobile"
+?
+"phone"
+:
+"watch",
+
+
 watchId:
 trackingSource === "mobile"
 ?

@@ -137,7 +137,7 @@ Deno.serve(async (request: Request) => {
     }
 
     const { data: child, error: childError } = await supabase
-      .from("child_profiles")
+      .from("children")
       .select(
         `
         id,

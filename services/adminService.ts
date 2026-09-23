@@ -382,7 +382,7 @@ export function subscribeAdminUpdates(
         {
           event: "*",
           schema: "public",
-          table: "guardian_profiles",
+          table: "persons",
         },
         callback
       )
@@ -392,7 +392,7 @@ export function subscribeAdminUpdates(
         {
           event: "*",
           schema: "public",
-          table: "child_profiles",
+          table: "person_relationships",
         },
         callback
       )

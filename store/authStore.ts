@@ -441,8 +441,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   /*
    * REFRESH CHILDREN
    *
-   * This reloads the actual child_profiles records
-   * from Supabase.
+   * This reloads the Guardian's children from
+   * Supabase.
    */
   refreshLinkedChildren: async () => {
     const guardian = get().guardian;

@@ -150,7 +150,7 @@ export async function ensureGuardianProfile(
   }
 
   const { data, error } = await supabase
-    .from("guardian_profiles")
+    .from("persons")
     .select("*")
     .eq("id", guardianId)
     .single();
@@ -171,9 +171,9 @@ export async function resolveProfileForUser(
   userId: string
 ): Promise<ResolvedProfile> {
   const { data, error } = await supabase
-    .from("guardian_profiles")
+    .from("persons")
     .select("*")
-    .eq("id", userId)
+    .eq("auth_user_id", userId)
     .maybeSingle();
 
   if (error) {
@@ -199,21 +199,14 @@ export async function resolveProfileForUser(
 
 /**
  * Load all children belonging to the currently
- * authenticated Guardian.
- *
- * IMPORTANT:
- * There is intentionally NO is_active filter
- * because child_profiles does not contain an
- * is_active column.
- *
- * A deleted child must therefore be physically
- * removed from child_profiles.
+ * authenticated Guardian. The children view only
+ * contains active (not deleted) children.
  */
 export async function fetchLinkedChildren(
   guardianId: string
 ): Promise<Child[]> {
   const { data, error } = await supabase
-    .from("child_profiles")
+    .from("children")
     .select("*")
     .eq("guardian_id", guardianId)
     .order("created_at", {
@@ -246,7 +239,7 @@ export async function fetchChildById(
   childId: string
 ): Promise<Child | null> {
   const { data, error } = await supabase
-    .from("child_profiles")
+    .from("children")
     .select("*")
     .eq("id", childId)
     .eq("guardian_id", guardianId)
@@ -269,12 +262,11 @@ export async function fetchChildById(
 }
 
 /**
- * Permanently delete a child profile.
+ * Delete a child profile.
  *
- * This is a real database DELETE, not a UI-only
- * removal. Therefore the child will no longer
- * appear after refreshing/reloading the Guardian
- * account.
+ * The child disappears from the Guardian's account
+ * and their devices are released. Location, safety
+ * and SOS history is retained for the record.
  */
 export async function deleteChildProfile(
   guardianId: string,
@@ -292,53 +284,16 @@ export async function deleteChildProfile(
     );
   }
 
-  /*
-   * First verify that the child belongs to this
-   * Guardian. This prevents deleting another
-   * Guardian's child.
-   */
-  const { data: child, error: lookupError } =
-    await supabase
-      .from("child_profiles")
-      .select("id, guardian_id, full_name")
-      .eq("id", childId)
-      .eq("guardian_id", guardianId)
-      .maybeSingle();
-
-  if (lookupError) {
-    throw new Error(
-      getErrorMessage(
-        lookupError,
-        "Unable to verify the child profile."
-      )
-    );
-  }
-
-  if (!child) {
-    throw new Error(
-      "The selected child profile was not found."
-    );
-  }
-
-  /*
-   * Delete the actual database record.
-   *
-   * Any related tables must have appropriate
-   * ON DELETE CASCADE rules or the database will
-   * return a foreign-key error.
-   */
   const { error: deleteError } =
-    await supabase
-      .from("child_profiles")
-      .delete()
-      .eq("id", childId)
-      .eq("guardian_id", guardianId);
+    await supabase.rpc("delete_my_child", {
+      p_child_id: childId,
+    });
 
   if (deleteError) {
     throw new Error(
       getErrorMessage(
         deleteError,
-        `Unable to delete ${child.full_name}'s profile.`
+        "Unable to delete the child profile."
       )
     );
   }
@@ -348,20 +303,31 @@ export async function updateGuardianProfile(
   guardianId: string,
   input: GuardianProfileUpdate
 ): Promise<Guardian> {
-  const { data, error } = await supabase
-    .from("guardian_profiles")
-    .update({
-      full_name: input.fullName.trim(),
-      email: input.email
+  const { error: updateError } = await supabase.rpc(
+    "update_my_person_profile",
+    {
+      p_full_name: input.fullName.trim(),
+      p_email: input.email
         .trim()
         .toLowerCase(),
-      avatar_path:
+      p_avatar_path:
         input.avatarPath ?? null,
-      updated_at:
-        new Date().toISOString(),
-    })
-    .eq("id", guardianId)
+    }
+  );
+
+  if (updateError) {
+    throw new Error(
+      getErrorMessage(
+        updateError,
+        "Unable to update the Guardian profile."
+      )
+    );
+  }
+
+  const { data, error } = await supabase
+    .from("persons")
     .select("*")
+    .eq("id", guardianId)
     .single();
 
   if (error) {
@@ -380,22 +346,34 @@ export async function updateChildProfile(
   childId: string,
   input: ChildProfileUpdate
 ): Promise<Child> {
-  const { data, error } = await supabase
-    .from("child_profiles")
-    .update({
-      full_name: input.fullName.trim(),
-      age: input.age,
-      relationship:
+  const { error: updateError } = await supabase.rpc(
+    "update_my_child_profile",
+    {
+      p_child_id: childId,
+      p_full_name: input.fullName.trim(),
+      p_age: input.age,
+      p_relationship:
         input.relationship.trim(),
-      tracking_source:
+      p_tracking_source:
         input.trackingSource,
-      avatar_path:
+      p_avatar_path:
         input.avatarPath ?? null,
-      updated_at:
-        new Date().toISOString(),
-    })
-    .eq("id", childId)
+    }
+  );
+
+  if (updateError) {
+    throw new Error(
+      getErrorMessage(
+        updateError,
+        "Unable to update the Child profile."
+      )
+    );
+  }
+
+  const { data, error } = await supabase
+    .from("children")
     .select("*")
+    .eq("id", childId)
     .single();
 
   if (error) {

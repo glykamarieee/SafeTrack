@@ -26,7 +26,6 @@ export async function authenticateWatch(request: Request) {
       id,
       watch_id,
       child_id,
-      child_person_id,
       is_active,
       device_token_hash
       `,

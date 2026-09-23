@@ -1,837 +1,259 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Device from "expo-device";
+import * as Location from "expo-location";
+import { Platform } from "react-native";
+
 import { supabase } from "../lib/supabase";
+import type {
+  ChildMobileContext,
+  ChildMobileSosAlert,
+  ChildSafeZoneStatus,
+  LocationLog,
+} from "../types/safetrack";
 
 
 /*
 =====================================================
-CHILD MOBILE TYPES
+CHILD PHONE CREDENTIALS
+
+A child phone has no Supabase login. Pairing
+(pair_child_phone) returns a device token that the
+phone keeps and sends with every request.
 =====================================================
 */
 
-export type ChildMobileContext = {
+const CREDENTIALS_KEY = "safetrack.childPhone";
+
+type ChildPhoneCredentials = {
   childId: string;
-
-  childName: string;
-
-  guardianName?: string | null;
-
-  guardianEmail?: string | null;
-
-  trackingSource:
-    | "mobile"
-    | "smartwatch"
-    | "both"
-    | string;
-
-  mobileDeviceActive: boolean;
-
-  deviceId?: string | null;
-
-  deviceToken?: string | null;
-
-  isLinked?: boolean;
-
-  latestLocation?: {
-    id: string;
-    childId: string;
-
-    latitude: number;
-    longitude: number;
-
-    accuracyMeters?: number | null;
-
-    source: string;
-
-    recordedAt: string;
-  } | null;
+  deviceToken: string;
 };
 
-
-
-export type ChildMobileLocation = {
-
-  latitude:number;
-
-  longitude:number;
-
-  accuracy?:number;
-
-  speed?:number;
-
-  heading?:number;
-
-  timestamp?:string;
-
-};
-
-
-
-export type ChildMobileSosAlert = {
-
-  id:string;
-
-  childId:string;
-
-  status:
-  | "active"
-  | "acknowledged"
-  | "resolved"
-  | "canceled";
-
-
-  activationMethod:string;
-
-
-  triggeredAt:string;
-
-
-  acknowledgedAt?:string|null;
-
-
-  realertCount:number;
-
-
-  latitude?:number|null;
-
-
-  longitude?:number|null;
-
-
-  locationSource?:string|null;
-
-
-  createdAt?:string|null;
-
-};
-
-
-
-export type ChildSafeZoneStatus = {
-
-  status:
-  | "inside"
-  | "outside"
-  | "no_safe_zone"
-  | "unavailable";
-
-
-  zoneName?:string|null;
-
-
-  message:string;
-
-
-  latestLocationAt?:string|null;
-
-};
-
-
-
-
-/*
-=====================================================
-AUTH
-=====================================================
-*/
-
-
-async function getCurrentUserId(){
-
-  const {
-    data,
-    error
-  } =
-  await supabase.auth.getUser();
-
-
-  if(error)
-    throw error;
-
-
-  if(!data.user){
-
-    throw new Error(
-      "Child account session expired."
-    );
-
-  }
-
-
-  return data.user.id;
-
-}
-
-
-
-
-async function parseFunctionError(error:any){
-
-  return (
-    error?.message ??
-    "Request failed."
-  );
-
-}
-
-
-
-
-
-/*
-=====================================================
-LINK CHILD MOBILE DEVICE
-=====================================================
-*/
-
-
-export async function linkChildMobileDevice(
-  connectionCode:string
-){
-
-  const {
-    data,
-    error
-  } =
-  await supabase.functions.invoke(
-    "mobile-pair",
-    {
-      body:{
-        connectionCode:
-          connectionCode.trim(),
-      },
-    }
-  );
-
-
-  if(error){
-
-    throw new Error(
-      await parseFunctionError(error)
-    );
-
-  }
-
-
-  if(!data?.ok){
-
-    throw new Error(
-      data?.error ??
-      "Unable to link mobile device."
-    );
-
-  }
-
-
-  return data;
-
-}
-
-
-
-
-/*
-=====================================================
-FETCH CHILD CONTEXT
-=====================================================
-*/
-
-
-export async function fetchChildMobileContext(
-  childId?:string
-):Promise<ChildMobileContext>{
-
-
-  const id =
-    childId ??
-    await getCurrentUserId();
-
-
-
-  const {
-    data:child,
-    error
-  } =
-  await supabase
-    .from("child_profiles")
-    .select(
-      `
-      id,
-      full_name,
-      guardian_id,
-      tracking_source
-      `
-    )
-    .eq(
-      "id",
-      id
-    )
-    .maybeSingle();
-
-
-
-  if(error)
-    throw error;
-
-
-
-  if(!child){
-
-    throw new Error(
-      "Child profile not found."
-    );
-
-  }
-
-
-
-  const {
-    data:guardian
-  } =
-  await supabase
-    .from("persons")
-    .select(
-      `
-      full_name,
-      email
-      `
-    )
-    .eq(
-      "id",
-      child.guardian_id
-    )
-    .maybeSingle();
-
-
-
-  const {
-    data:device
-  } =
-  await supabase
-    .from("child_mobile_devices")
-    .select(
-      `
-      id,
-      device_token
-      `
-    )
-    .eq(
-      "child_id",
-      child.id
-    )
-    .maybeSingle();
-
-
-
-  const {
-    data:location
-  } =
-  await supabase
-    .from("location_logs")
-    .select(
-      `
-      id,
-      child_id,
-      latitude,
-      longitude,
-      accuracy_meters,
-      source,
-      recorded_at
-      `
-    )
-    .eq(
-      "child_id",
-      child.id
-    )
-    .order(
-      "recorded_at",
-      {
-        ascending:false
-      }
-    )
-    .limit(1)
-    .maybeSingle();
-
-
-
-  return {
-
-    childId:
-      child.id,
-
-
-    childName:
-      child.full_name,
-
-
-    guardianName:
-      guardian?.full_name ??
-      null,
-
-
-    guardianEmail:
-      guardian?.email ??
-      null,
-
-
-    trackingSource:
-      child.tracking_source ??
-      "smartwatch",
-
-
-    mobileDeviceActive:
-      !!device,
-
-
-    deviceId:
-      device?.id ??
-      null,
-
-
-    deviceToken:
-      device?.device_token ??
-      null,
-
-
-    isLinked:
-      !!device,
-
-
-    latestLocation:
-      location
-      ?
-      {
-        id:
-          location.id,
-
-        childId:
-          location.child_id,
-
-        latitude:
-          location.latitude,
-
-        longitude:
-          location.longitude,
-
-        accuracyMeters:
-          location.accuracy_meters,
-
-        source:
-          location.source,
-
-        recordedAt:
-          location.recorded_at,
-
-      }
-      :
-      null,
-
-  };
-
-}
-
-
-
-
-
-/*
-=====================================================
-SEND LOCATION
-=====================================================
-*/
-
-
-export async function sendChildMobileLocation(
-  location:ChildMobileLocation
-){
-
-  const {
-    data,
-    error
-  } =
-  await supabase.functions.invoke(
-    "mobile-ingest",
-    {
-      body:{
-        latitude:
-          location.latitude,
-
-        longitude:
-          location.longitude,
-
-        accuracy:
-          location.accuracy,
-
-        speed:
-          location.speed,
-
-        heading:
-          location.heading,
-
-        timestamp:
-          location.timestamp ??
-          new Date().toISOString(),
-      }
-    }
-  );
-
-
-  if(error){
-
-    throw new Error(
-      await parseFunctionError(error)
-    );
-
-  }
-
-
-  return data;
-
-}
-
-
-
-
-/*
-=====================================================
-SAFE ZONE STATUS
-=====================================================
-*/
-
-
-export async function fetchChildSafeZoneStatus(
-  childId:string
-):Promise<ChildSafeZoneStatus>{
-
-
-  const {
-    data:zone
-  } =
-  await supabase
-    .from("safe_zones")
-    .select(
-      `
-      name
-      `
-    )
-    .eq(
-      "child_id",
-      childId
-    )
-    .eq(
-      "is_enabled",
-      true
-    )
-    .limit(1)
-    .maybeSingle();
-
-
-
-  if(!zone){
-
-    return {
-
-      status:
-        "no_safe_zone",
-
-      zoneName:
-        null,
-
-      message:
-        "No safe zone assigned.",
-
-    };
-
-  }
-
-
-
-  return {
-
-    status:
-      "inside",
-
-    zoneName:
-      zone.name,
-
-    message:
-      `Child is inside ${zone.name}.`,
-
-  };
-
-}
-
-
-
-
-
-/*
-=====================================================
-ACTIVE SOS
-=====================================================
-*/
-
-
-export async function fetchChildMobileActiveSos(
-  childId:string
-):Promise<ChildMobileSosAlert|null>{
-
-
-  const {
-    data,
-    error
-  } =
-  await supabase
-    .from("sos_alerts")
-    .select("*")
-    .eq(
-      "child_id",
-      childId
-    )
-    .in(
-      "status",
-      [
-        "active",
-        "acknowledged"
-      ]
-    )
-    .order(
-      "created_at",
-      {
-        ascending:false
-      }
-    )
-    .limit(1)
-    .maybeSingle();
-
-
-
-  if(error)
-    throw error;
-
-
-
-  if(!data)
+/** The phone was unlinked (or its token revoked) on the server. */
+export class ChildPhoneUnlinkedError extends Error {}
+
+async function readCredentials(): Promise<ChildPhoneCredentials | null> {
+  try {
+    const raw = await AsyncStorage.getItem(CREDENTIALS_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as Partial<ChildPhoneCredentials>;
+    return parsed.childId && parsed.deviceToken
+      ? { childId: parsed.childId, deviceToken: parsed.deviceToken }
+      : null;
+  } catch {
     return null;
-
-
-
-  return {
-
-    id:
-      data.id,
-
-
-    childId:
-      data.child_id,
-
-
-    status:
-      data.status,
-
-
-    activationMethod:
-      data.activation_method ??
-      "manual_button",
-
-
-    triggeredAt:
-      data.created_at,
-
-
-    acknowledgedAt:
-      data.acknowledged_at ??
-      null,
-
-
-    realertCount:
-      data.realert_count ??
-      0,
-
-
-    latitude:
-      data.latitude,
-
-
-    longitude:
-      data.longitude,
-
-
-    locationSource:
-      data.location_source,
-
-
-    createdAt:
-      data.created_at,
-
-  };
-
+  }
 }
 
+export async function clearChildPhoneCredentials() {
+  await AsyncStorage.removeItem(CREDENTIALS_KEY);
+}
 
-
+export async function hasChildPhoneCredentials() {
+  return (await readCredentials()) !== null;
+}
 
 
 /*
 =====================================================
-CREATE SOS
+DATABASE CALLS
 =====================================================
 */
 
+// Raised by child_phone_device() when the token is no longer valid.
+const UNLINKED_ERROR_CODE = "28000";
 
-export async function createChildMobileSosAlert(
-  childId:string
-){
+/**
+ * Call a child_phone_* database function with this phone's
+ * stored credentials.
+ */
+async function callAsChildPhone<T>(
+  functionName:
+    | "get_child_phone_state"
+    | "record_child_phone_location"
+    | "trigger_child_phone_sos"
+    | "realert_child_phone_sos"
+    | "unlink_child_phone",
+  args: Record<string, unknown> = {}
+): Promise<T> {
+  const credentials = await readCredentials();
 
-
-  const {
-    data,
-    error
-  } =
-  await supabase
-    .from("sos_alerts")
-    .insert({
-
-      child_id:
-        childId,
-
-      status:
-        "active",
-
-      activation_method:
-        "mobile",
-
-      realert_count:
-        0,
-
-    })
-    .select()
-    .single();
-
-
-
-  if(error)
-    throw error;
-
-
-  return data;
-
-}
-
-
-
-
-
-/*
-=====================================================
-RE ALERT
-=====================================================
-*/
-
-
-export async function recordChildMobileSosRealert(
-  sosId:string
-):Promise<ChildMobileSosAlert>{
-
-
-  const {
-    data,
-    error
-  } =
-  await supabase
-    .from("sos_alerts")
-    .update({
-
-      realert_count:
-        1,
-
-      updated_at:
-        new Date().toISOString(),
-
-    })
-    .eq(
-      "id",
-      sosId
-    )
-    .select()
-    .single();
-
-
-
-  if(error)
-    throw error;
-
-
-
-  return {
-
-    id:data.id,
-
-    childId:data.child_id,
-
-    status:data.status,
-
-    activationMethod:
-      data.activation_method ??
-      "mobile",
-
-    triggeredAt:
-      data.created_at,
-
-    acknowledgedAt:
-      data.acknowledged_at ??
-      null,
-
-    realertCount:
-      data.realert_count ??
-      1,
-
-
-    latitude:
-      data.latitude,
-
-
-    longitude:
-      data.longitude,
-
-
-    locationSource:
-      data.location_source,
-
-
-    createdAt:
-      data.created_at,
-
-  };
-
-}
-
-
-
-
-
-/*
-=====================================================
-DISCONNECT DEVICE
-=====================================================
-*/
-
-
-export async function disconnectChildMobileDevice(
-  deviceId:string
-){
-
-  const {
-    error
-  } =
-  await supabase
-    .from("child_mobile_devices")
-    .delete()
-    .eq(
-      "id",
-      deviceId
+  if (!credentials) {
+    throw new ChildPhoneUnlinkedError(
+      "This phone is not linked. Enter a new code from the Guardian."
     );
+  }
+
+  const { data, error } = await supabase.rpc(functionName, {
+    p_child_id: credentials.childId,
+    p_device_token: credentials.deviceToken,
+    ...args,
+  });
+
+  if (error) {
+    if (error.code === UNLINKED_ERROR_CODE) {
+      await clearChildPhoneCredentials();
+      throw new ChildPhoneUnlinkedError(error.message);
+    }
+
+    throw new Error(error.message);
+  }
+
+  return data as T;
+}
 
 
-  if(error)
-    throw error;
+/*
+=====================================================
+MAPPING
+=====================================================
+*/
 
+type LocationRow = {
+  id: string;
+  child_id: string;
+  source: string;
+  latitude: number;
+  longitude: number;
+  accuracy_meters: number | null;
+  recorded_at: string;
+};
+
+function toLocationLog(row: LocationRow | null): LocationLog | null {
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    childId: row.child_id,
+    latitude: Number(row.latitude),
+    longitude: Number(row.longitude),
+    accuracyMeters: row.accuracy_meters,
+    source: row.source,
+    recordedAt: row.recorded_at,
+  };
+}
+
+export type ChildPhoneState = {
+  context: ChildMobileContext;
+  latestLocation: LocationLog | null;
+  safeZoneStatus: ChildSafeZoneStatus;
+  activeSos: ChildMobileSosAlert | null;
+};
+
+
+/*
+=====================================================
+LINK / STATE / UNLINK
+=====================================================
+*/
+
+export async function linkChildPhone(connectionCode: string) {
+  const { data, error } = await supabase.rpc("pair_child_phone", {
+    p_code: connectionCode.replace(/\D/g, ""),
+    p_platform: Platform.OS,
+    p_device_model: Device.modelName ?? null,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data?.childId || !data.deviceToken) {
+    throw new Error("Unable to link this child phone.");
+  }
+
+  const credentials: ChildPhoneCredentials = {
+    childId: data.childId,
+    deviceToken: data.deviceToken,
+  };
+
+  await AsyncStorage.setItem(CREDENTIALS_KEY, JSON.stringify(credentials));
+}
+
+export async function fetchChildPhoneState(): Promise<ChildPhoneState> {
+  const data = await callAsChildPhone<{
+    context: ChildMobileContext;
+    latestLocation: LocationRow | null;
+    safeZoneStatus: ChildSafeZoneStatus;
+    activeSos: ChildMobileSosAlert | null;
+  }>("get_child_phone_state");
+
+  const latestLocation = toLocationLog(data.latestLocation);
+
+  return {
+    context: { ...data.context, latestLocation },
+    latestLocation,
+    safeZoneStatus: data.safeZoneStatus,
+    activeSos: data.activeSos,
+  };
+}
+
+export async function unlinkChildPhone() {
+  try {
+    await callAsChildPhone("unlink_child_phone");
+  } catch (error) {
+    // Already unlinked on the server: still forget it locally.
+    if (!(error instanceof ChildPhoneUnlinkedError)) throw error;
+  } finally {
+    await clearChildPhoneCredentials();
+  }
+}
+
+
+/*
+=====================================================
+LOCATION
+=====================================================
+*/
+
+export async function sendCurrentChildPhoneLocation(): Promise<{
+  location: LocationLog;
+  safeZoneStatus: ChildSafeZoneStatus;
+}> {
+  const permission = await Location.requestForegroundPermissionsAsync();
+
+  if (permission.status !== "granted") {
+    throw new Error(
+      "Location permission is required to share this phone's location with the Guardian."
+    );
+  }
+
+  const position = await Location.getCurrentPositionAsync({
+    accuracy: Location.Accuracy.High,
+  });
+
+  const data = await callAsChildPhone<{
+    location: LocationRow;
+    safeZoneStatus: ChildSafeZoneStatus;
+  }>("record_child_phone_location", {
+    p_latitude: position.coords.latitude,
+    p_longitude: position.coords.longitude,
+    p_accuracy_meters: position.coords.accuracy,
+  });
+
+  return {
+    location: toLocationLog(data.location)!,
+    safeZoneStatus: data.safeZoneStatus,
+  };
+}
+
+
+/*
+=====================================================
+SOS
+=====================================================
+*/
+
+export async function triggerChildPhoneSos(): Promise<ChildMobileSosAlert> {
+  return callAsChildPhone<ChildMobileSosAlert>("trigger_child_phone_sos");
+}
+
+export async function realertChildPhoneSos(
+  sosId: string
+): Promise<ChildMobileSosAlert | null> {
+  return callAsChildPhone<ChildMobileSosAlert | null>(
+    "realert_child_phone_sos",
+    { p_sos_id: sosId }
+  );
 }

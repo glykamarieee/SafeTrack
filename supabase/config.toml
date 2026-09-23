@@ -1,35 +1,19 @@
 project_id = "safetrack"
 
-[functions.guardian-child-onboarding]
-verify_jwt = true
-
-[functions.watch-pairing-code]
-verify_jwt = true
-
-[functions.guardian-register-push]
-verify_jwt = true
-
-[functions.guardian-ack-sos]
-verify_jwt = true
-
-[functions.guardian-safety-timeline]
-verify_jwt = true
-
-[functions.admin-guardians]
-verify_jwt = true
-
-[functions.admin-devices]
-verify_jwt = true
+# Guardian, admin and child-phone features are Postgres functions called with
+# supabase.rpc(); see supabase/migrations. Only these remain edge functions.
 
 [functions.generate-report]
 verify_jwt = true
 
+# Called by the Wear OS watch, which authenticates with its device token.
 [functions.watch-pair]
 verify_jwt = false
 
 [functions.watch-ingest]
 verify_jwt = false
 
+# Scheduled jobs, authenticated with the x-cron-secret header.
 [functions.sos-realert]
 verify_jwt = false
 

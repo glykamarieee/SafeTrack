@@ -120,7 +120,7 @@ export default function DeviceConnectionCodeScreen(){
       error
     } =
     await supabase
-      .from("child_profiles")
+      .from("children")
       .select(
         `
         id,

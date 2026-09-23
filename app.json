@@ -46,6 +46,12 @@
           "microphonePermission": false
         }
       ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow SafeTrack to share this phone's location with the child's Guardian."
+        }
+      ],
       "expo-video",
       "expo-sharing"
     ]

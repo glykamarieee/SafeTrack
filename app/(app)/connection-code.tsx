@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   Pressable,
@@ -24,8 +24,17 @@ import {
 
 import {
   generateSmartwatchPairingCode,
-  type SmartwatchPairingCode,
 } from "../../services/smartwatchPairingService";
+
+import {
+  generateMobilePairingCode,
+} from "../../services/mobilePairingService";
+
+
+type PairingCode = {
+  connectionCode: string;
+  expiresAt: string;
+};
 
 
 
@@ -62,6 +71,7 @@ export default function ConnectionCodeScreen(){
   const params =
     useLocalSearchParams<{
       childId?:string;
+      device?:string;
     }>();
 
 
@@ -71,12 +81,17 @@ export default function ConnectionCodeScreen(){
     ).trim();
 
 
+  // "phone" for Child Mobile Access; the smartwatch otherwise.
+  const isPhone =
+    params.device === "phone";
+
+
 
   const [
     result,
     setResult
   ] =
-  useState<SmartwatchPairingCode|null>(null);
+  useState<PairingCode|null>(null);
 
 
 
@@ -97,6 +112,13 @@ export default function ConnectionCodeScreen(){
 
 
 
+  // Each new code replaces the previous one on the server, so a
+  // second overlapping request would leave a stale code on screen.
+  const generating =
+    useRef(false);
+
+
+
   async function generate(){
 
     if(!childId){
@@ -110,14 +132,31 @@ export default function ConnectionCodeScreen(){
     }
 
 
+    if(generating.current){
+      return;
+    }
+
+
     try{
+
+      generating.current = true;
 
       setLoading(true);
 
       setError(null);
 
+      // This screen stays mounted between visits; never show a
+      // previous (e.g. smartwatch) code next to a new error.
+      setResult(null);
+
 
       const response =
+        isPhone
+        ?
+        await generateMobilePairingCode({
+          childId,
+        })
+        :
         await generateSmartwatchPairingCode({
           childId,
         });
@@ -140,6 +179,8 @@ export default function ConnectionCodeScreen(){
     }
     finally{
 
+      generating.current = false;
+
       setLoading(false);
 
     }
@@ -157,7 +198,7 @@ export default function ConnectionCodeScreen(){
 
     }
 
-  },[childId]);
+  },[childId, isPhone]);
 
 
 
@@ -199,7 +240,7 @@ export default function ConnectionCodeScreen(){
         <View style={styles.iconCircle}>
 
           <Ionicons
-            name="watch-outline"
+            name={isPhone ? "phone-portrait-outline" : "watch-outline"}
             size={34}
             color={C.green}
           />
@@ -216,14 +257,20 @@ export default function ConnectionCodeScreen(){
 
 
         <Text style={styles.title}>
-          Connect Child Smartwatch
+          {isPhone ? "Connect Child Phone" : "Connect Child Smartwatch"}
         </Text>
 
 
 
 
         <Text style={styles.subtitle}>
-          Enter this temporary code on the child's SafeTrack smartwatch application to connect the device.
+          {
+            isPhone
+            ?
+            "On the child's phone, open SafeTrack, tap \"Using a child's phone? Link child device\" on the login screen, and enter this temporary code."
+            :
+            "Enter this temporary code on the child's SafeTrack smartwatch application to connect the device."
+          }
         </Text>
 
 
@@ -366,7 +413,9 @@ export default function ConnectionCodeScreen(){
         <Text style={styles.note}>
 
           The generated code is valid for a limited time.
-          After successful connection, the smartwatch will appear as an active SafeTrack child device.
+          {isPhone
+            ? " After successful connection, the child's phone can share its location and send SOS alerts."
+            : " After successful connection, the smartwatch will appear as an active SafeTrack child device."}
 
         </Text>
 

@@ -43,7 +43,6 @@ Deno.serve(async (request: Request) => {
     const body = await request.json();
 
     const childId = String(body.childId ?? "").trim();
-    const guardianId = String(body.guardianId ?? "").trim();
     const locationLogId = String(body.locationLogId ?? "").trim();
 
     const latitude = Number(body.latitude);
@@ -54,11 +53,11 @@ Deno.serve(async (request: Request) => {
         ? body.recordedAt
         : new Date().toISOString();
 
-    if (!childId || !guardianId || !locationLogId) {
+    if (!childId || !locationLogId) {
       return json(
         {
           error:
-            "childId, guardianId, and locationLogId are required.",
+            "childId and locationLogId are required.",
         },
         400,
       );
@@ -79,7 +78,6 @@ Deno.serve(async (request: Request) => {
     await reviewAnomaly({
       supabase,
       childId,
-      guardianId,
       locationLogId,
       latitude,
       longitude,

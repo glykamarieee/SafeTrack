@@ -1,10 +1,11 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { sendGuardianPush } from "./push.ts";
+
+// Must match geofence_events_event_type_check.
+const ANOMALY_EVENT_TYPE = "possible_anomaly";
 
 export async function reviewAnomaly(args: {
   supabase: SupabaseClient;
   childId: string;
-  guardianId: string;
   locationLogId: string;
   latitude: number;
   longitude: number;
@@ -18,7 +19,6 @@ export async function reviewAnomaly(args: {
   const {
     supabase,
     childId,
-    guardianId,
     locationLogId,
     latitude,
     longitude,
@@ -29,7 +29,7 @@ export async function reviewAnomaly(args: {
     .from("geofence_events")
     .select("id, occurred_at")
     .eq("child_id", childId)
-    .eq("event_type", "anomaly")
+    .eq("event_type", ANOMALY_EVENT_TYPE)
     .order("occurred_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -104,7 +104,7 @@ export async function reviewAnomaly(args: {
       child_id: childId,
       geofence_id: null,
       location_log_id: locationLogId,
-      event_type: "anomaly",
+      event_type: ANOMALY_EVENT_TYPE,
       title: "Unusual movement notice",
       details,
       anomaly_score: score,
@@ -113,21 +113,8 @@ export async function reviewAnomaly(args: {
       occurred_at: recordedAt,
     });
 
+  // The Guardian is notified by the geofence_events_notify_guardian trigger.
   if (insertError) {
     console.error("anomaly event insert failed", insertError);
-    return;
   }
-
-  await sendGuardianPush(
-    supabase,
-    guardianId,
-    "SafeTrack unusual movement notice",
-    details,
-    {
-      type: "anomaly",
-      childId,
-      locationLogId,
-      anomalyScore: score,
-    },
-  );
 }

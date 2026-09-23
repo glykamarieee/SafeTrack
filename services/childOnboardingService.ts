@@ -114,98 +114,6 @@ export interface ChildRegistrationResult {
 
 
 
-type FunctionErrorPayload = {
-
-  error?: string;
-
-  message?: string;
-
-};
-
-
-
-async function extractFunctionError(
-  error: unknown,
-  fallback: string,
-): Promise<string> {
-
-
-  if (
-    error &&
-    typeof error === "object" &&
-    "context" in error
-  ) {
-
-
-    const context =
-      (error as {
-        context?: unknown;
-      }).context;
-
-
-
-    if (
-      context instanceof Response
-    ) {
-
-
-      try {
-
-
-        const payload =
-          (await context.json()) as FunctionErrorPayload;
-
-
-
-        if (
-          payload.error &&
-          payload.error.trim()
-        ) {
-
-          return payload.error.trim();
-
-        }
-
-
-
-        if (
-          payload.message &&
-          payload.message.trim()
-        ) {
-
-          return payload.message.trim();
-
-        }
-
-
-      } catch {
-
-      }
-
-    }
-
-  }
-
-
-
-  if (
-    error instanceof Error &&
-    error.message.trim()
-  ) {
-
-    return error.message;
-
-  }
-
-
-
-  return fallback;
-
-}
-
-
-
-
 export async function completeChildRegistration(
   input: CompleteChildRegistrationInput,
 ): Promise<ChildRegistrationResult> {
@@ -273,29 +181,24 @@ export async function completeChildRegistration(
     error,
 
   } =
-    await supabase.functions.invoke(
-      "guardian-child-onboarding",
+    await supabase.rpc(
+      "register_my_child",
       {
 
-        body: {
-
+        p_full_name:
           fullName,
 
-          age:
-            input.age,
+        p_age:
+          input.age,
 
-          relationship:
-            input.relationship,
+        p_relationship:
+          input.relationship,
 
+        p_tracking_source:
+          input.trackingSource,
 
-          trackingSource:
-            input.trackingSource,
-
-
-          watchId:
-            watchId || null,
-
-        },
+        p_watch_id:
+          watchId || null,
 
       },
     );
@@ -308,12 +211,8 @@ export async function completeChildRegistration(
 
 
     throw new Error(
-
-      await extractFunctionError(
-        error,
-        "Unable to complete child registration.",
-      ),
-
+      error.message ||
+      "Unable to complete child registration.",
     );
 
   }
@@ -331,7 +230,6 @@ export async function completeChildRegistration(
 
 
     throw new Error(
-      data?.error ??
       "SafeTrack could not complete child setup.",
     );
 

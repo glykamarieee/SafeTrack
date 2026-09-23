@@ -2,7 +2,6 @@ import { json, options } from "../_shared/response.ts";
 import { authenticateWatch } from "../_shared/device-auth.ts";
 import { processGeofences } from "../_shared/geofence.ts";
 import { reviewAnomaly } from "../_shared/anomaly.ts";
-import { sendGuardianPush } from "../_shared/push.ts";
 
 function numberOrNull(value: unknown): number | null {
   const parsed = Number(value);
@@ -22,7 +21,7 @@ async function childContext(
   childId: string,
 ) {
   const { data: child, error } = await supabase
-    .from("child_profiles")
+    .from("children")
     .select("id, full_name, guardian_id")
     .eq("id", childId)
     .maybeSingle();
@@ -89,6 +88,7 @@ Deno.serve(async (request) => {
 
     if (seenError) throw seenError;
 
+    // Rejects watches whose child profile was deleted.
     const child = await childContext(supabase as any, device.child_id);
 
     if (type === "heartbeat") {
@@ -106,10 +106,7 @@ Deno.serve(async (request) => {
         safeZoneStatus = await processGeofences({
           supabase,
           childId: device.child_id,
-          guardianId: child.guardian_id,
           locationLogId: latest.id,
-          latitude: Number(latest.latitude),
-          longitude: Number(latest.longitude),
         });
       }
 
@@ -130,16 +127,12 @@ Deno.serve(async (request) => {
       const safeZoneStatus = await processGeofences({
         supabase,
         childId: device.child_id,
-        guardianId: child.guardian_id,
         locationLogId: location.id,
-        latitude: Number(location.latitude),
-        longitude: Number(location.longitude),
       });
 
       await reviewAnomaly({
         supabase,
         childId: device.child_id,
-        guardianId: child.guardian_id,
         locationLogId: location.id,
         latitude: Number(location.latitude),
         longitude: Number(location.longitude),
@@ -155,10 +148,11 @@ Deno.serve(async (request) => {
     }
 
     if (type === "sos") {
+      // Must match sos_alerts_activation_method_check.
       const activationMethod =
         body.activationMethod === "shake"
           ? "shake"
-          : "tap-and-hold";
+          : "tap_and_hold";
 
       let locationLogId: string | null = null;
       let latitude: number | null = null;
@@ -224,21 +218,8 @@ Deno.serve(async (request) => {
         .select("id")
         .single();
 
+      // The Guardian is notified by the sos_alerts_notify_guardian trigger.
       if (sosError) throw sosError;
-
-      await sendGuardianPush(
-        supabase,
-        child.guardian_id,
-        "SafeTrack SOS alert",
-        `${child.full_name} triggered SOS using ${activationMethod}.`,
-        {
-          type: "sos",
-          sosAlertId: sos.id,
-          childId: child.id,
-          latitude,
-          longitude,
-        },
-      );
 
       return json({
         ok: true,
@@ -259,7 +240,7 @@ Deno.serve(async (request) => {
       const { error: cancelError } = await supabase
         .from("sos_alerts")
         .update({
-          status: "canceled",
+          status: "cancelled",
           updated_at: now,
         })
         .eq("id", sosAlertId)

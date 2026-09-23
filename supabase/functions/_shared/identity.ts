@@ -18,69 +18,47 @@ export async function requireUser(
   return user;
 }
 
+type Person = {
+  id: string;
+  auth_user_id: string;
+  full_name: string;
+  email: string | null;
+  is_active: boolean;
+};
+
 /**
- * Resolve the current SafeTrack Guardian profile.
- *
- * The live SafeTrack schema currently uses guardian_profiles.id as the
- * authenticated Guardian identifier. Email fallback keeps existing records
- * usable if an older migration produced a different id.
+ * Resolve the signed-in user's persons row if it holds the given role.
+ * persons.id equals auth.users.id for everyone who can log in.
  */
-export async function findGuardianProfile(
+async function findPersonWithRole(
   supabase: SupabaseClient,
   user: User,
-): Promise<any | null> {
-  const direct = await supabase
-    .from("guardian_profiles")
-    .select("*")
-    .eq("id", user.id)
-    .limit(1)
+  roleCode: "ADMIN",
+): Promise<Person | null> {
+  const { data, error } = await supabase
+    .from("persons")
+    .select("id, auth_user_id, full_name, email, is_active, person_roles!inner(is_active, roles!inner(role_code))")
+    .eq("auth_user_id", user.id)
+    .eq("person_roles.is_active", true)
+    .eq("person_roles.roles.role_code", roleCode)
     .maybeSingle();
 
-  if (!direct.error && direct.data) return direct.data;
+  if (error) throw error;
+  if (!data) return null;
 
-  if (user.email) {
-    const byEmail = await supabase
-      .from("guardian_profiles")
-      .select("*")
-      .eq("email", user.email)
-      .limit(1)
-      .maybeSingle();
-
-    if (!byEmail.error && byEmail.data) return byEmail.data;
-  }
-
-  return null;
+  const { person_roles: _roles, ...person } = data as Person & { person_roles: unknown };
+  return person;
 }
 
-/** Resolve the current SafeTrack Administrator profile. */
+/** Resolve the current SafeTrack Administrator (active or not). */
 export async function findAdminProfile(
   supabase: SupabaseClient,
   user: User,
-): Promise<any | null> {
-  const direct = await supabase
-    .from("system_administrators")
-    .select("*")
-    .eq("id", user.id)
-    .limit(1)
-    .maybeSingle();
-
-  if (!direct.error && direct.data) return direct.data;
-
-  if (user.email) {
-    const byEmail = await supabase
-      .from("system_administrators")
-      .select("*")
-      .eq("email", user.email)
-      .limit(1)
-      .maybeSingle();
-
-    if (!byEmail.error && byEmail.data) return byEmail.data;
-  }
-
-  return null;
+): Promise<Person | null> {
+  return findPersonWithRole(supabase, user, "ADMIN");
 }
 
-export function assertActiveAdmin(admin: any) {
+export function assertActiveAdmin(admin: Person | null) {
   if (!admin) throw new Error("ADMIN_REQUIRED");
   if (admin.is_active === false) throw new Error("ADMIN_INACTIVE");
 }

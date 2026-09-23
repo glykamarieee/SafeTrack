@@ -1,5 +1,4 @@
 import { json, options } from "../_shared/response.ts";
-import { sendGuardianPush } from "../_shared/push.ts";
 import { serviceClient } from "../_shared/supabase.ts";
 
 Deno.serve(async (request) => {
@@ -45,12 +44,8 @@ Deno.serve(async (request) => {
 
       if (comparison && comparison > threshold) continue;
 
-      const { data: child } = await supabase
-        .from("child_profiles")
-        .select("full_name")
-        .eq("id", alert.child_id)
-        .maybeSingle();
-
+      // Raising realert_count makes the sos_alerts_notify_guardian trigger
+      // send the reminder.
       const nextCount = Number(alert.realert_count ?? 0) + 1;
       const now = new Date().toISOString();
 
@@ -68,19 +63,6 @@ Deno.serve(async (request) => {
         console.error("SOS re-alert update failed", updateError);
         continue;
       }
-
-      await sendGuardianPush(
-        supabase,
-        alert.guardian_id,
-        "SafeTrack SOS re-alert",
-        `${child?.full_name ?? "Child"} has an active SOS alert awaiting acknowledgement.`,
-        {
-          type: "sos_realert",
-          sosAlertId: alert.id,
-          childId: alert.child_id,
-          realertCount: nextCount,
-        },
-      );
 
       sent += 1;
     }
