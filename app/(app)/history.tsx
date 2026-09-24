@@ -12,6 +12,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 
 import {
@@ -40,11 +41,11 @@ import {
 
 
 import {
-  safeTrackColors as colors,
-  safeTrackRadius as radius,
-  safeTrackShadow as shadow,
-  safeTrackSpacing as spacing,
-} from "../../constants/safeTrackDesign";
+  guardianColors as colors,
+  guardianRadius as radius,
+  guardianShadow as shadow,
+  guardianSpacing as spacing,
+} from "../../constants/guardianDesign";
 
 
 
@@ -504,6 +505,9 @@ function distanceLabel(
 
 
 export default function HistoryScreen(){
+
+  const { width } = useWindowDimensions();
+  const wide = width >= 1040;
 
 
   const child =
@@ -1370,892 +1374,523 @@ const selectedLabel =
     today
   );
 
+
+  const eventIcon = (type: HistoryEvent["type"]): keyof typeof Ionicons.glyphMap => {
+    if (type === "sos") return "warning-outline";
+    if (type === "anomaly") return "analytics-outline";
+    if (type === "watch_disconnected") return "watch-outline";
+    if (type === "prolonged_inactivity") return "hourglass-outline";
+    return "shield-checkmark-outline";
+  };
+
   return (
-
-  <SafeAreaView
-    style={styles.safe}
-    edges={[
-      "top",
-      "left",
-      "right"
-    ]}
-  >
-
-    <ScrollView
-
-      style={styles.flex}
-
-      contentContainerStyle={
-        styles.content
-      }
-
-      showsVerticalScrollIndicator={false}
-
-    >
-
-
-      <Text style={styles.eyebrow}>
-        DAILY ACTIVITY HISTORY
-      </Text>
-
-
-
-      <Text style={styles.heading}>
-        Activity, in one view.
-      </Text>
-
-
-
-      <Text style={styles.subtitle}>
-
-        Review available route records and
-        safety events for{" "}
-
-        {child?.fullName ?? "your child"}.
-
-      </Text>
-
-
-
-
-
-      <View style={styles.dateNav}>
-
-
-        <Pressable
-
-          style={({pressed})=>[
-            styles.dateButton,
-            pressed &&
-            styles.pressed
-          ]}
-
-          onPress={()=>setSelectedDate(
-            value=>moveDate(value,-1)
-          )}
-
-        >
-
-          <Ionicons
-
-            name="chevron-back"
-
-            size={20}
-
-            color={colors.primaryDark}
-
-          />
-
-        </Pressable>
-
-
-
-
-
-        <View style={styles.dateCenter}>
-
-
-          <Text style={styles.dateTitle}>
-            {selectedLabel}
-          </Text>
-
-
-          <Text style={styles.dateSubtitle}>
-            Selected activity date
-          </Text>
-
-
-        </View>
-
-
-
-
-
-        <Pressable
-
-          disabled={
-            selectedDate>=today
-          }
-
-          style={({pressed})=>[
-
-            styles.dateButton,
-
-            selectedDate>=today &&
-            styles.disabled,
-
-            pressed &&
-            styles.pressed
-
-          ]}
-
-          onPress={()=>setSelectedDate(
-            value=>moveDate(value,1)
-          )}
-
-        >
-
-          <Ionicons
-
-            name="chevron-forward"
-
-            size={20}
-
-            color={colors.primaryDark}
-
-          />
-
-        </Pressable>
-
-
-      </View>
-
-
-
-
-
-
-      <View style={styles.mapContainer}>
-
-
-        <SafeTrackInteractiveMap
-
-          markers={mapMarkers}
-
-          path={mapPath}
-
-          height={320}
-
-          recenterSignal={
-            recenterSignal
-          }
-
-          mapStyleControlTop={14}
-
-          mapStyleControlLeft={14}
-
-        />
-
-
-
-        {
-          loading && (
-
-            <View style={styles.loadingOverlay}>
-
-              <ActivityIndicator
-
-                size="small"
-
-                color={colors.primary}
-
-              />
-
-              <Text style={styles.loadingText}>
-                Loading history...
-              </Text>
-
-
-            </View>
-
-          )
-        }
-
-
-
-        {
-          !loading &&
-          points.length===0 && (
-
-            <View style={styles.emptyMap}>
-
-
-              <Ionicons
-
-                name="map-outline"
-
-                size={30}
-
-                color={colors.primary}
-
-              />
-
-
-              <Text style={styles.emptyTitle}>
-                No location records
-              </Text>
-
-
-              <Text style={styles.emptyText}>
-
-                {message ||
-                "No stored location data is available for this date."}
-
-              </Text>
-
-
-            </View>
-
-          )
-        }
-
-
-      </View>
-
-
-
-
-
-
-
-      <View style={styles.mapActions}>
-
-
-        <Text style={styles.mapHint}>
-
-          Drag and zoom the map to inspect
-          available route records.
-
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.eyebrow}>DAILY ACTIVITY HISTORY</Text>
+        <Text style={styles.heading}>A day, retraced with context.</Text>
+        <Text style={styles.subtitle}>
+          Review recorded route points and safety events for {child?.fullName ?? "your child"}.
         </Text>
 
-
-
-        <Pressable
-
-          style={({pressed})=>[
-
-            styles.fitButton,
-
-            pressed &&
-            styles.pressed
-
-          ]}
-
-          onPress={()=>setRecenterSignal(
-            value=>value+1
-          )}
-
-        >
-
-          <Ionicons
-
-            name="scan-outline"
-
-            size={16}
-
-            color={colors.primaryDark}
-
-          />
-
-          <Text style={styles.fitText}>
-            Fit route
-          </Text>
-
-
-        </Pressable>
-
-
-      </View>
-
-
-
-
-
-
-
-
-
-      <View style={styles.metrics}>
-
-
-        <View style={styles.metric}>
-
-          <Text style={styles.metricValue}>
-            {points.length}
-          </Text>
-
-
-          <Text style={styles.metricLabel}>
-            Records
-          </Text>
-
-
-        </View>
-
-
-
-
-        <View style={styles.divider}/>
-
-
-
-
-        <View style={styles.metric}>
-
-          <Text style={styles.metricValue}>
-            {distanceLabel(routeDistance)}
-          </Text>
-
-
-          <Text style={styles.metricLabel}>
-            Distance
-          </Text>
-
-
-        </View>
-
-
-
-
-
-        <View style={styles.divider}/>
-
-
-
-        <View style={styles.metric}>
-
-          <Text style={styles.metricValue}>
-            {recordedSpan} min
-          </Text>
-
-
-          <Text style={styles.metricLabel}>
-            Duration
-          </Text>
-
-
-        </View>
-
-
-      </View>
-
-
-
-
-
-
-
-
-
-      <Text style={styles.sectionTitle}>
-        Safety Timeline
-      </Text>
-
-
-
-
-
-
-      {
-        events.length > 0
-
-        ?
-
-        events.map(event=>(
-
-
-          <View
-
-            key={`${event.type}-${event.id}`}
-
-            style={styles.eventCard}
-
+        <View style={styles.dateDeck}>
+          <Pressable
+            accessibilityLabel="Previous date"
+            onPress={() => setSelectedDate((value) => moveDate(value, -1))}
+            style={({ pressed }) => [styles.dateArrow, pressed && styles.pressed]}
           >
+            <Ionicons name="chevron-back" size={20} color={colors.primaryDeep} />
+          </Pressable>
 
-
-
-            <View
-
-              style={[
-                styles.eventIcon,
-
-                event.type==="sos" &&
-                styles.eventDanger,
-
-                event.type==="anomaly" &&
-                styles.eventWarning,
-
-              ]}
-
-            >
-
-              <Ionicons
-
-                name={
-
-                  event.type==="sos"
-
-                  ?
-
-                  "warning-outline"
-
-                  :
-
-                  event.type==="anomaly"
-
-                  ?
-
-                  "analytics-outline"
-
-                  :
-
-                  "shield-checkmark-outline"
-
-                }
-
-                size={20}
-
-                color={
-
-                  event.type==="sos"
-
-                  ?
-
-                  colors.danger
-
-                  :
-
-                  colors.primary
-
-                }
-
-              />
-
-            </View>
-
-
-
-
-            <View style={styles.eventBody}>
-
-
-              <Text style={styles.eventTitle}>
-                {event.title}
-              </Text>
-
-
-
-              <Text style={styles.eventText}>
-
-                {event.detail}
-
-              </Text>
-
-
-
-              <Text style={styles.eventTime}>
-
-                {timeLabel(event.occurredAt)}
-
-              </Text>
-
-
-            </View>
-
-
+          <View style={styles.dateCenter}>
+            <Text style={styles.dateEyebrow}>SELECTED DATE</Text>
+            <Text style={styles.dateTitle}>{selectedLabel}</Text>
           </View>
 
-
-        ))
-
-
-
-        :
-
-
-        <View style={styles.noEvents}>
-
-
-          <Ionicons
-
-            name="checkmark-circle-outline"
-
-            size={24}
-
-            color={colors.primary}
-
-          />
-
-
-          <Text style={styles.noEventsText}>
-
-            No safety events recorded for this date.
-
-          </Text>
-
-
+          <Pressable
+            accessibilityLabel="Next date"
+            disabled={selectedDate >= today}
+            onPress={() => setSelectedDate((value) => moveDate(value, 1))}
+            style={({ pressed }) => [
+              styles.dateArrow,
+              selectedDate >= today && styles.disabled,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons name="chevron-forward" size={20} color={colors.primaryDeep} />
+          </Pressable>
         </View>
 
+        <View style={styles.mapTopline}>
+          <View>
+            <Text style={styles.mapTitle}>Route canvas</Text>
+            <Text style={styles.mapSubtitle}>Start, latest point, and recorded path for the day.</Text>
+          </View>
+          <Pressable
+            onPress={() => setRecenterSignal((value) => value + 1)}
+            style={({ pressed }) => [styles.fitButton, pressed && styles.pressed]}
+          >
+            <Ionicons name="scan-outline" size={15} color={colors.primaryDark} />
+            <Text style={styles.fitText}>Fit</Text>
+          </Pressable>
+        </View>
 
-      }
+        <View style={styles.mapContainer}>
+          <SafeTrackInteractiveMap
+            markers={mapMarkers}
+            path={mapPath}
+            height={wide ? 520 : 370}
+            recenterSignal={recenterSignal}
+            mapStyleControlTop={16}
+            mapStyleControlLeft={16}
+          />
 
+          {loading && (
+            <View style={styles.loadingOverlay}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.loadingText}>Loading history</Text>
+            </View>
+          )}
 
+          {!loading && points.length === 0 && (
+            <View style={styles.emptyMap}>
+              <View style={styles.emptyMapIcon}>
+                <Ionicons name="map-outline" size={26} color={colors.primaryDark} />
+              </View>
+              <Text style={styles.emptyTitle}>No route recorded</Text>
+              <Text style={styles.emptyText}>
+                {message || "No stored location data is available for this date."}
+              </Text>
+            </View>
+          )}
+        </View>
 
+        <View style={styles.metricsRail}>
+          <View style={styles.metric}>
+            <Text style={styles.metricValue}>{points.length}</Text>
+            <Text style={styles.metricLabel}>Records</Text>
+          </View>
+          <View style={styles.metricDivider} />
+          <View style={styles.metric}>
+            <Text style={styles.metricValue}>{distanceLabel(routeDistance)}</Text>
+            <Text style={styles.metricLabel}>Distance</Text>
+          </View>
+          <View style={styles.metricDivider} />
+          <View style={styles.metric}>
+            <Text style={styles.metricValue}>{recordedSpan} min</Text>
+            <Text style={styles.metricLabel}>Recorded span</Text>
+          </View>
+        </View>
 
+        <View style={styles.timelineHeader}>
+          <View>
+            <Text style={styles.sectionEyebrow}>SAFETY TIMELINE</Text>
+            <Text style={styles.sectionTitle}>Events in chronological context</Text>
+          </View>
+          <View style={styles.eventCountChip}>
+            <Text style={styles.eventCountText}>{events.length} event{events.length === 1 ? "" : "s"}</Text>
+          </View>
+        </View>
 
+        {events.length > 0 ? (
+          <View style={styles.timeline}>
+            {events.map((event, index) => {
+              const isDanger = event.type === "sos";
+              const isWarning = event.type === "anomaly";
+              return (
+                <View key={`${event.type}-${event.id}`} style={styles.timelineItem}>
+                  <View style={styles.timelineRail}>
+                    <View
+                      style={[
+                        styles.timelineDot,
+                        isDanger && styles.timelineDotDanger,
+                        isWarning && styles.timelineDotWarning,
+                      ]}
+                    >
+                      <Ionicons
+                        name={eventIcon(event.type)}
+                        size={15}
+                        color={isDanger ? colors.danger : isWarning ? colors.warning : colors.primaryDark}
+                      />
+                    </View>
+                    {index < events.length - 1 && <View style={styles.timelineLine} />}
+                  </View>
 
-      <View style={styles.note}>
+                  <View style={styles.eventBody}>
+                    <View style={styles.eventTitleRow}>
+                      <Text style={styles.eventTitle}>{event.title}</Text>
+                      <Text style={styles.eventTime}>{timeLabel(event.occurredAt)}</Text>
+                    </View>
+                    <Text style={styles.eventText}>{event.detail}</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        ) : (
+          <View style={styles.noEvents}>
+            <View style={styles.noEventsIcon}>
+              <Ionicons name="checkmark" size={18} color={colors.primaryDark} />
+            </View>
+            <View style={styles.noEventsCopy}>
+              <Text style={styles.noEventsTitle}>Quiet day in the safety timeline</Text>
+              <Text style={styles.noEventsText}>No safety events were recorded for this selected date.</Text>
+            </View>
+          </View>
+        )}
 
-
-        <Ionicons
-
-          name="information-circle-outline"
-
-          size={18}
-
-          color={colors.primary}
-
-        />
-
-
-        <Text style={styles.noteText}>
-
-          History displays records from the child's selected tracking source:
-          {trackingSource === "mobile"
-            ? " mobile device."
-            : trackingSource === "smartwatch"
-            ? " smartwatch."
-            : " smartwatch and mobile devices."}
-
-        </Text>
-
-
-      </View>
-
-
-
-    </ScrollView>
-
-
-  </SafeAreaView>
-
-);
-
+        <View style={styles.note}>
+          <Ionicons name="information-circle-outline" size={18} color={colors.primaryDark} />
+          <Text style={styles.noteText}>
+            History contains only successfully stored records from the child&apos;s selected tracking source: {trackingSource === "mobile" ? "mobile device." : trackingSource === "smartwatch" ? "smartwatch." : "smartwatch and mobile devices."}
+          </Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
 }
 
-
-
-
-
-
-
-
 const styles = StyleSheet.create({
-
-safe:{
-  flex:1,
-  backgroundColor:colors.background,
-},
-
-
-flex:{
-  flex:1,
-},
-
-
-content:{
-  paddingHorizontal:spacing.lg,
-  paddingTop:35,
-  paddingBottom:40,
-},
-
-
-eyebrow:{
-  color:colors.primary,
-  fontSize:10,
-  fontWeight:"900",
-  letterSpacing:1.2,
-},
-
-
-heading:{
-  marginTop:5,
-  color:colors.ink,
-  fontSize:29,
-  fontWeight:"900",
-},
-
-
-subtitle:{
-  marginTop:7,
-  color:colors.muted,
-  fontSize:13,
-  lineHeight:19,
-},
-
-
-dateNav:{
-  marginTop:20,
-  height:64,
-  flexDirection:"row",
-  alignItems:"center",
-  justifyContent:"space-between",
-},
-
-
-dateButton:{
-  width:40,
-  height:40,
-  borderRadius:20,
-  alignItems:"center",
-  justifyContent:"center",
-  backgroundColor:colors.softMint,
-},
-
-
-dateCenter:{
-  alignItems:"center",
-},
-
-
-dateTitle:{
-  color:colors.ink,
-  fontSize:15,
-  fontWeight:"900",
-},
-
-
-dateSubtitle:{
-  color:colors.muted,
-  fontSize:11,
-},
-
-
-mapContainer:{
-  height:320,
-  marginTop:10,
-  borderRadius:radius.lg,
-  overflow:"hidden",
-  ...shadow.card,
-},
-
-
-loadingOverlay:{
-  position:"absolute",
-  right:15,
-  top:15,
-  flexDirection:"row",
-  alignItems:"center",
-  padding:10,
-  borderRadius:radius.pill,
-  backgroundColor:"#fff",
-},
-
-
-loadingText:{
-  marginLeft:7,
-  fontSize:11,
-  color:colors.muted,
-},
-
-
-emptyMap:{
-  position:"absolute",
-  left:25,
-  right:25,
-  top:90,
-  padding:20,
-  alignItems:"center",
-  backgroundColor:"#fff",
-  borderRadius:radius.md,
-},
-
-
-emptyTitle:{
-  marginTop:8,
-  fontWeight:"900",
-  color:colors.ink,
-},
-
-
-emptyText:{
-  marginTop:5,
-  textAlign:"center",
-  color:colors.muted,
-  fontSize:12,
-},
-
-
-mapActions:{
-  flexDirection:"row",
-  alignItems:"center",
-  justifyContent:"space-between",
-  marginVertical:10,
-},
-
-
-mapHint:{
-  flex:1,
-  fontSize:11,
-  color:colors.muted,
-},
-
-
-fitButton:{
-  flexDirection:"row",
-  alignItems:"center",
-  paddingHorizontal:12,
-  paddingVertical:7,
-  borderRadius:radius.pill,
-  backgroundColor:colors.softMint,
-},
-
-
-fitText:{
-  marginLeft:5,
-  fontSize:11,
-  fontWeight:"900",
-  color:colors.primaryDark,
-},
-
-
-metrics:{
-  flexDirection:"row",
-  backgroundColor:colors.white,
-  paddingVertical:16,
-  borderRadius:radius.md,
-  ...shadow.soft,
-},
-
-
-metric:{
-  flex:1,
-  alignItems:"center",
-},
-
-
-metricValue:{
-  fontWeight:"900",
-  fontSize:16,
-  color:colors.ink,
-},
-
-
-metricLabel:{
-  marginTop:3,
-  fontSize:10,
-  color:colors.muted,
-},
-
-
-divider:{
-  width:1,
-  backgroundColor:colors.border,
-},
-
-
-sectionTitle:{
-  marginTop:24,
-  marginBottom:10,
-  fontSize:17,
-  fontWeight:"900",
-  color:colors.ink,
-},
-
-
-eventCard:{
-  flexDirection:"row",
-  padding:14,
-  marginBottom:10,
-  borderRadius:radius.md,
-  backgroundColor:colors.white,
-  ...shadow.soft,
-},
-
-
-eventIcon:{
-  width:42,
-  height:42,
-  borderRadius:14,
-  alignItems:"center",
-  justifyContent:"center",
-  backgroundColor:colors.softMint,
-},
-
-
-eventDanger:{
-  backgroundColor:colors.dangerSoft,
-},
-
-
-eventWarning:{
-  backgroundColor:colors.warningSoft,
-},
-
-
-eventBody:{
-  flex:1,
-  marginLeft:10,
-},
-
-
-eventTitle:{
-  fontWeight:"900",
-  color:colors.ink,
-},
-
-
-eventText:{
-  marginTop:3,
-  color:colors.muted,
-  fontSize:12,
-},
-
-
-eventTime:{
-  marginTop:4,
-  color:colors.primaryDark,
-  fontSize:11,
-  fontWeight:"800",
-},
-
-
-noEvents:{
-  flexDirection:"row",
-  alignItems:"center",
-  padding:14,
-  borderRadius:radius.md,
-  backgroundColor:colors.softMint,
-},
-
-
-noEventsText:{
-  marginLeft:8,
-  color:colors.primaryDark,
-  fontSize:12,
-},
-
-
-note:{
-  marginTop:20,
-  padding:14,
-  flexDirection:"row",
-  backgroundColor:colors.softMint,
-  borderRadius:radius.md,
-},
-
-
-noteText:{
-  flex:1,
-  marginLeft:8,
-  color:"#547067",
-  fontSize:11.5,
-  lineHeight:17,
-},
-
-
-disabled:{
-  opacity:.4,
-},
-
-
-pressed:{
-  opacity:.75,
-  transform:[
-    {
-      scale:.97
-    }
-  ],
-},
-
+  safe: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  flex: {
+    flex: 1,
+  },
+  content: {
+    width: "100%",
+    maxWidth: 1160,
+    alignSelf: "center",
+    paddingHorizontal: spacing.lg,
+    paddingTop: 30,
+    paddingBottom: 120,
+  },
+  eyebrow: {
+    color: colors.primary,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.4,
+  },
+  heading: {
+    maxWidth: 360,
+    marginTop: 7,
+    color: colors.ink,
+    fontSize: 29,
+    lineHeight: 34,
+    fontWeight: "900",
+    letterSpacing: -0.85,
+  },
+  subtitle: {
+    maxWidth: 360,
+    marginTop: 7,
+    color: colors.muted,
+    fontSize: 12.5,
+    lineHeight: 18,
+  },
+  dateDeck: {
+    minHeight: 74,
+    marginTop: 22,
+    paddingHorizontal: 10,
+    borderRadius: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.soft,
+  },
+  dateArrow: {
+    width: 42,
+    height: 42,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.softMint,
+  },
+  dateCenter: {
+    flex: 1,
+    alignItems: "center",
+  },
+  dateEyebrow: {
+    color: colors.muted,
+    fontSize: 8.5,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  dateTitle: {
+    marginTop: 3,
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  disabled: {
+    opacity: 0.3,
+  },
+  mapTopline: {
+    marginTop: 24,
+    marginBottom: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  mapTitle: {
+    color: colors.ink,
+    fontSize: 16.5,
+    fontWeight: "900",
+  },
+  mapSubtitle: {
+    marginTop: 3,
+    color: colors.muted,
+    fontSize: 10.5,
+  },
+  fitButton: {
+    minHeight: 36,
+    paddingHorizontal: 11,
+    borderRadius: radius.pill,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.softMint,
+  },
+  fitText: {
+    marginLeft: 5,
+    color: colors.primaryDark,
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  mapContainer: {
+    height: 370,
+    borderRadius: radius.xl,
+    overflow: "hidden",
+    ...shadow.card,
+  },
+  loadingOverlay: {
+    position: "absolute",
+    left: 16,
+    bottom: 16,
+    minHeight: 38,
+    paddingHorizontal: 12,
+    borderRadius: radius.pill,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.glass,
+    ...shadow.soft,
+  },
+  loadingText: {
+    marginLeft: 7,
+    color: colors.muted,
+    fontSize: 10.5,
+    fontWeight: "700",
+  },
+  emptyMap: {
+    position: "absolute",
+    left: 26,
+    right: 26,
+    top: 112,
+    paddingVertical: 21,
+    paddingHorizontal: 20,
+    borderRadius: 24,
+    alignItems: "center",
+    backgroundColor: colors.glass,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.9)",
+    ...shadow.floating,
+  },
+  emptyMapIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.softMint,
+  },
+  emptyTitle: {
+    marginTop: 10,
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  emptyText: {
+    marginTop: 5,
+    textAlign: "center",
+    color: colors.muted,
+    fontSize: 10.5,
+    lineHeight: 15.5,
+  },
+  metricsRail: {
+    minHeight: 88,
+    marginTop: 14,
+    borderRadius: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  metric: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  metricValue: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  metricLabel: {
+    marginTop: 4,
+    color: colors.muted,
+    fontSize: 9.5,
+    fontWeight: "700",
+  },
+  metricDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: colors.border,
+  },
+  timelineHeader: {
+    marginTop: 31,
+    marginBottom: 15,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+  },
+  sectionEyebrow: {
+    color: colors.primaryDark,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+  },
+  sectionTitle: {
+    marginTop: 3,
+    color: colors.ink,
+    fontSize: 16.5,
+    fontWeight: "900",
+  },
+  eventCountChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceMuted,
+  },
+  eventCountText: {
+    color: colors.primaryDark,
+    fontSize: 9,
+    fontWeight: "900",
+  },
+  timeline: {
+    paddingLeft: 2,
+  },
+  timelineItem: {
+    minHeight: 88,
+    flexDirection: "row",
+  },
+  timelineRail: {
+    width: 44,
+    alignItems: "center",
+  },
+  timelineDot: {
+    width: 34,
+    height: 34,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.softMint,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  timelineDotDanger: {
+    backgroundColor: colors.dangerSoft,
+    borderColor: "#F4C5C9",
+  },
+  timelineDotWarning: {
+    backgroundColor: colors.warningSoft,
+    borderColor: "#F3D7A0",
+  },
+  timelineLine: {
+    flex: 1,
+    width: 1.5,
+    marginVertical: 5,
+    backgroundColor: colors.border,
+  },
+  eventBody: {
+    flex: 1,
+    paddingLeft: 9,
+    paddingBottom: 18,
+  },
+  eventTitleRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+  },
+  eventTitle: {
+    flex: 1,
+    color: colors.ink,
+    fontSize: 12.5,
+    fontWeight: "900",
+  },
+  eventTime: {
+    marginLeft: 10,
+    color: colors.primaryDark,
+    fontSize: 9.5,
+    fontWeight: "800",
+  },
+  eventText: {
+    marginTop: 5,
+    color: colors.muted,
+    fontSize: 10.5,
+    lineHeight: 15.5,
+  },
+  noEvents: {
+    padding: 15,
+    borderRadius: 22,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.softMint,
+  },
+  noEventsIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.white,
+  },
+  noEventsCopy: {
+    flex: 1,
+    marginLeft: 11,
+  },
+  noEventsTitle: {
+    color: colors.ink,
+    fontSize: 11.5,
+    fontWeight: "900",
+  },
+  noEventsText: {
+    marginTop: 3,
+    color: colors.muted,
+    fontSize: 10.5,
+    lineHeight: 15,
+  },
+  note: {
+    marginTop: 25,
+    paddingHorizontal: 5,
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  noteText: {
+    flex: 1,
+    marginLeft: 8,
+    color: colors.muted,
+    fontSize: 10.5,
+    lineHeight: 15.5,
+  },
+  pressed: {
+    opacity: 0.82,
+    transform: [{ scale: 0.985 }],
+  },
 });

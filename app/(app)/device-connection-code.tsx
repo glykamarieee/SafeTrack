@@ -43,11 +43,11 @@ type PairingCode = {
 
 
 import {
-  safeTrackColors as colors,
-  safeTrackRadius as radius,
-  safeTrackShadow as shadow,
-  safeTrackSpacing as spacing,
-} from "../../constants/safeTrackDesign";
+  guardianColors as colors,
+  guardianRadius as radius,
+  guardianShadow as shadow,
+  guardianSpacing as spacing,
+} from "../../constants/guardianDesign";
 
 
 
@@ -685,6 +685,9 @@ safe:{
 
 container:{
   flexGrow:1,
+  width:"100%",
+  maxWidth:760,
+  alignSelf:"center",
   padding:spacing.lg,
   paddingTop:40,
 },

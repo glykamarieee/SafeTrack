@@ -19,11 +19,11 @@ import { supabase } from "../../lib/supabase";
 import { getProfileAvatarUrl } from "../../services/profileAvatarService";
 
 import {
-  safeTrackColors as colors,
-  safeTrackRadius as radius,
-  safeTrackShadow as shadow,
-  safeTrackSpacing as spacing,
-} from "../../constants/safeTrackDesign";
+  guardianColors as colors,
+  guardianRadius as radius,
+  guardianShadow as shadow,
+  guardianSpacing as spacing,
+} from "../../constants/guardianDesign";
 
 
 type Profile = {
@@ -97,15 +97,17 @@ function Row({
   return(
 
     <Pressable
-      style={styles.row}
+      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
       onPress={onPress}
     >
 
-      <Ionicons
-        name={icon}
-        size={22}
-        color={colors.primary}
-      />
+      <View style={styles.rowIcon}>
+        <Ionicons
+          name={icon}
+          size={20}
+          color={colors.primaryDark}
+        />
+      </View>
 
 
       <View style={styles.rowCopy}>
@@ -552,6 +554,12 @@ export default function ProfileScreen(){
 
 
 
+        <Text style={styles.pageEyebrow}>PROFILE & SUPPORT</Text>
+        <Text style={styles.pageTitle}>Your SafeTrack space.</Text>
+        <Text style={styles.pageSubtitle}>
+          Keep guardian details, child setup, and support close without crowding the monitoring experience.
+        </Text>
+
         <View style={styles.profileTop}>
 
 
@@ -630,6 +638,19 @@ export default function ProfileScreen(){
 
 
         <Text style={styles.section}>
+          ACCOUNT
+        </Text>
+
+        <View style={styles.openGroup}>
+          <Row
+            icon="create-outline"
+            title="Guardian profile"
+            detail="Edit your stored account details and profile picture"
+            onPress={() => router.push("/(app)/edit-guardian-profile")}
+          />
+        </View>
+
+        <Text style={styles.section}>
           CHILD PROFILE
         </Text>
 
@@ -671,7 +692,7 @@ export default function ProfileScreen(){
 
               ?
 
-              { pathname:"/edit-child-profile", params:{ childId:child.id } }
+              { pathname:"/edit-child-profile", params:{ childId:child.id, section:"details" } }
 
               :
 
@@ -752,7 +773,7 @@ export default function ProfileScreen(){
               child
               ?
 
-              { pathname:"/edit-child-profile", params:{ childId:child.id } }
+              { pathname:"/edit-child-profile", params:{ childId:child.id, section:"tracking" } }
 
               :
 
@@ -773,6 +794,13 @@ export default function ProfileScreen(){
         <Text style={styles.section}>
           PRIVACY AND SUPPORT
         </Text>
+
+        <Row
+          icon="help-circle-outline"
+          title="Help & support"
+          detail="Open SafeTrack guidance and support information"
+          onPress={() => router.push("/(app)/help-support")}
+        />
 
 
 
@@ -843,116 +871,155 @@ export default function ProfileScreen(){
 
 
 const styles = StyleSheet.create({
-
-safe:{
-  flex:1,
-  backgroundColor:colors.background
-},
-
-loading:{
-  flex:1,
-  justifyContent:"center",
-  alignItems:"center"
-},
-
-content:{
-  padding:spacing.lg,
-  paddingBottom:40
-},
-
-profileTop:{
-  flexDirection:"row",
-  alignItems:"center"
-},
-
-avatar:{
-  width:58,
-  height:58,
-  borderRadius:20,
-  backgroundColor:colors.primary,
-  justifyContent:"center",
-  alignItems:"center"
-},
-
-avatarText:{
-  color:colors.white,
-  fontSize:24,
-  fontWeight:"900"
-},
-
-profileText:{
-  marginLeft:13
-},
-
-label:{
-  fontSize:10,
-  fontWeight:"900",
-  color:colors.primary
-},
-
-name:{
-  fontSize:22,
-  fontWeight:"900",
-  color:colors.ink
-},
-
-email:{
-  color:colors.muted
-},
-
-section:{
-  marginTop:25,
-  marginBottom:10,
-  fontSize:10,
-  fontWeight:"900",
-  color:colors.muted,
-  letterSpacing:1.5
-},
-
-row:{
-  minHeight:76,
-  backgroundColor:colors.white,
-  borderRadius:radius.md,
-  padding:15,
-  flexDirection:"row",
-  alignItems:"center",
-  marginBottom:8,
-  ...shadow.soft
-},
-
-rowCopy:{
-  flex:1,
-  marginLeft:12
-},
-
-rowTitle:{
-  fontSize:15,
-  fontWeight:"900",
-  color:colors.ink
-},
-
-rowDetail:{
-  fontSize:12.5,
-  color:colors.muted,
-  marginTop:3
-},
-
-signOut:{
-  marginTop:20,
-  height:54,
-  borderRadius:radius.pill,
-  borderWidth:1,
-  borderColor:colors.primary,
-  backgroundColor:colors.white,
-  alignItems:"center",
-  justifyContent:"center",
-  flexDirection:"row"
-},
-
-signOutText:{
-  marginLeft:8,
-  fontWeight:"900",
-  color:colors.primaryDark
-}
-
+  safe: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  loading: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: colors.background,
+  },
+  content: {
+    width: "100%",
+    maxWidth: 780,
+    alignSelf: "center",
+    paddingHorizontal: spacing.lg,
+    paddingTop: 28,
+    paddingBottom: 118,
+  },
+  pageEyebrow: {
+    color: colors.primary,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.4,
+  },
+  pageTitle: {
+    marginTop: 7,
+    color: colors.ink,
+    fontSize: 29,
+    lineHeight: 34,
+    fontWeight: "900",
+    letterSpacing: -0.7,
+  },
+  pageSubtitle: {
+    maxWidth: 430,
+    marginTop: 7,
+    color: colors.muted,
+    fontSize: 12.5,
+    lineHeight: 19,
+  },
+  profileTop: {
+    marginTop: 22,
+    minHeight: 112,
+    padding: 18,
+    borderRadius: radius.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.primaryDeep,
+    overflow: "hidden",
+    ...shadow.card,
+  },
+  avatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 22,
+    backgroundColor: colors.softMint,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,.22)",
+  },
+  avatarText: {
+    color: colors.primaryDeep,
+    fontSize: 24,
+    fontWeight: "900",
+  },
+  profileText: {
+    flex: 1,
+    minWidth: 0,
+    marginLeft: 14,
+  },
+  label: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "rgba(255,255,255,.62)",
+    letterSpacing: 1.1,
+  },
+  name: {
+    marginTop: 4,
+    fontSize: 21,
+    fontWeight: "900",
+    color: colors.white,
+  },
+  email: {
+    marginTop: 4,
+    color: "rgba(255,255,255,.72)",
+    fontSize: 12,
+  },
+  section: {
+    marginTop: 26,
+    marginBottom: 4,
+    fontSize: 9.5,
+    fontWeight: "900",
+    color: colors.muted,
+    letterSpacing: 1.35,
+  },
+  openGroup: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  row: {
+    minHeight: 76,
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  rowPressed: {
+    opacity: 0.72,
+  },
+  rowIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.softMint,
+  },
+  rowCopy: {
+    flex: 1,
+    minWidth: 0,
+    marginLeft: 12,
+    paddingRight: 10,
+  },
+  rowTitle: {
+    fontSize: 14.5,
+    fontWeight: "900",
+    color: colors.ink,
+  },
+  rowDetail: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.muted,
+    marginTop: 3,
+  },
+  signOut: {
+    marginTop: 28,
+    minHeight: 52,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+  },
+  signOutText: {
+    marginLeft: 8,
+    fontWeight: "900",
+    color: colors.primaryDark,
+  },
 });

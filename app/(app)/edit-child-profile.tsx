@@ -28,11 +28,11 @@ import {
 import { supabase } from "../../lib/supabase";
 
 import {
-  safeTrackColors as colors,
-  safeTrackRadius as radius,
-  safeTrackShadow as shadow,
-  safeTrackSpacing as spacing,
-} from "../../constants/safeTrackDesign";
+  guardianColors as colors,
+  guardianRadius as radius,
+  guardianShadow as shadow,
+  guardianSpacing as spacing,
+} from "../../constants/guardianDesign";
 
 const RELATIONSHIPS = [
   "Mother",
@@ -44,30 +44,27 @@ const RELATIONSHIPS = [
 ];
 
 type TrackingSource = "smartwatch" | "mobile" | "both";
+type EditSection = "details" | "tracking";
 
 const TRACKING_SOURCES: Array<{
   value: TrackingSource;
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
-  description: string;
 }> = [
   {
     value: "smartwatch",
     label: "Watch",
     icon: "watch-outline",
-    description: "Galaxy Watch is the primary tracking device.",
   },
   {
     value: "mobile",
     label: "Phone",
     icon: "phone-portrait-outline",
-    description: "The child's phone is the only tracking device.",
   },
   {
     value: "both",
     label: "Both",
     icon: "git-compare-outline",
-    description: "Watch remains primary; child phone is optional.",
   },
 ];
 
@@ -81,15 +78,19 @@ function usesPhone(source: TrackingSource) {
 
 export default function EditChildProfileScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ childId?: string }>();
+  const params = useLocalSearchParams<{
+    childId?: string;
+    section?: string;
+  }>();
+
   const requestedChildId = String(params.childId ?? "").trim();
+  const section: EditSection =
+    params.section === "tracking" ? "tracking" : "details";
 
   const [childId, setChildId] = useState("");
-
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
   const [relationship, setRelationship] = useState("Guardian");
-
   const [trackingSource, setTrackingSource] =
     useState<TrackingSource>("smartwatch");
 
@@ -108,11 +109,6 @@ export default function EditChildProfileScreen() {
 
   const busy = saving || openingConnectionCode || unlinkingWatch;
 
-  /**
-   * ----------------------------------------------------------
-   * LOAD CHILD PROFILE
-   * ----------------------------------------------------------
-   */
   const loadChildProfile = useCallback(async () => {
     setLoading(true);
 
@@ -121,18 +117,11 @@ export default function EditChildProfileScreen() {
         await supabase.auth.getUser();
 
       if (authError || !authData.user) {
-        throw new Error(
-          "Your session has expired. Please log in again."
-        );
+        throw new Error("Your session has expired. Please log in again.");
       }
 
       const guardianId = authData.user.id;
 
-      /**
-       * Edit the child passed by the caller; otherwise the
-       * first registered child, the same one the Guardian
-       * home screen generates connection codes for.
-       */
       let childQuery = supabase
         .from("children")
         .select(
@@ -151,13 +140,8 @@ export default function EditChildProfileScreen() {
         childQuery = childQuery.eq("id", requestedChildId);
       }
 
-      const {
-        data: child,
-        error: childError,
-      } = await childQuery
-        .order("created_at", {
-          ascending: true,
-        })
+      const { data: child, error: childError } = await childQuery
+        .order("created_at", { ascending: true })
         .limit(1)
         .maybeSingle();
 
@@ -176,38 +160,17 @@ export default function EditChildProfileScreen() {
       setRelationship(child.relationship ?? "Guardian");
 
       const normalizedTrackingSource: TrackingSource =
-        child.tracking_source === "mobile" ||
-        child.tracking_source === "both"
+        child.tracking_source === "mobile" || child.tracking_source === "both"
           ? child.tracking_source
           : "smartwatch";
 
       setTrackingSource(normalizedTrackingSource);
-
       setAvatarPath(child.avatar_path ?? null);
+      setAvatarUrl(await getProfileAvatarUrl(child.avatar_path ?? null));
 
-      const resolvedAvatar = await getProfileAvatarUrl(
-        child.avatar_path ?? null
-      );
-
-      setAvatarUrl(resolvedAvatar);
-
-      /**
-       * Find the smartwatch associated with this child.
-       */
-      const {
-        data: watch,
-        error: watchError,
-      } = await supabase
+      const { data: watch, error: watchError } = await supabase
         .from("smartwatch_devices")
-        .select(
-          `
-          id,
-          watch_id,
-          child_id,
-          is_active,
-          paired_at
-        `
-        )
+        .select("id, watch_id, child_id, is_active, paired_at")
         .eq("child_id", child.id)
         .eq("is_active", true)
         .limit(1)
@@ -220,119 +183,81 @@ export default function EditChildProfileScreen() {
       setWatchId(watch?.watch_id ?? "");
       setLinkedWatchId(watch?.watch_id ?? "");
     } catch (reason) {
-      const message =
-        reason instanceof Error
-          ? reason.message
-          : "Please try again.";
-
       Alert.alert(
         "Unable to load child profile",
-        message
+        reason instanceof Error ? reason.message : "Please try again."
       );
     } finally {
       setLoading(false);
     }
-  }, [router, requestedChildId]);
+  }, [requestedChildId, router]);
 
   useEffect(() => {
     void loadChildProfile();
   }, [loadChildProfile]);
 
-  /**
-   * ----------------------------------------------------------
-   * CHOOSE PROFILE PHOTO
-   * ----------------------------------------------------------
-   */
   const chooseAvatar = async () => {
     try {
       const uri = await chooseProfileAvatar();
-
       if (uri) {
         setSelectedAvatar(uri);
       }
     } catch (reason) {
       Alert.alert(
         "Unable to select photo",
-        reason instanceof Error
-          ? reason.message
-          : "Please try again."
+        reason instanceof Error ? reason.message : "Please try again."
       );
     }
   };
 
-  /**
-   * ----------------------------------------------------------
-   * VALIDATE FORM
-   * ----------------------------------------------------------
-   */
-  const validateForm = () => {
+  const validateChildDetails = () => {
     const numericAge = Number(age);
 
     if (name.trim().length < 2) {
-      Alert.alert(
-        "Check child details",
-        "Enter the child's full name."
-      );
-
+      Alert.alert("Check child details", "Enter the child's full name.");
       return null;
     }
 
-    if (
-      !Number.isInteger(numericAge) ||
-      numericAge < 6 ||
-      numericAge > 15
-    ) {
-      Alert.alert(
-        "Check child details",
-        "Enter an age from 6 to 15."
-      );
-
+    if (!Number.isInteger(numericAge) || numericAge < 6 || numericAge > 15) {
+      Alert.alert("Check child details", "Enter an age from 6 to 15.");
       return null;
     }
 
-    const normalizedWatchId = watchId
-      .trim()
-      .toUpperCase();
+    return numericAge;
+  };
+
+  const validateTracking = () => {
+    const normalizedWatchId = watchId.trim().toUpperCase();
 
     if (usesWatch(trackingSource) && !normalizedWatchId) {
       Alert.alert(
         "Watch ID required",
         "Enter the Watch ID, or choose Phone as the tracking source."
       );
-
       return null;
     }
 
-    return {
-      numericAge,
-      normalizedWatchId,
-    };
+    return normalizedWatchId;
   };
 
-  /**
-   * ----------------------------------------------------------
-   * LINK WATCH TO CHILD
-   * ----------------------------------------------------------
-   */
-  const linkWatchToChild = async (
-    normalizedWatchId: string
-  ) => {
-    if (!childId) {
-      throw new Error(
-        "SafeTrack could not identify the child profile."
-      );
+  const requireSessionAndChild = async () => {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !authData.user) {
+      throw new Error("Your session has expired. Please log in again.");
     }
 
-    /**
-     * Runs server-side: guardians cannot update
-     * smartwatch_devices directly. The server checks
-     * the Watch exists, is active and is not linked to
-     * another child, and releases this child's previous
-     * Watch.
-     */
-    const {
-      error: linkError,
-    } = await supabase.rpc(
+    if (!childId) {
+      throw new Error("SafeTrack could not identify the child profile.");
+    }
+  };
+
+  const linkWatchToChild = async (normalizedWatchId: string) => {
+    if (!childId) {
+      throw new Error("SafeTrack could not identify the child profile.");
+    }
+
+    const { error: linkError } = await supabase.rpc(
       "link_watch_to_my_child",
       {
         p_child_id: childId,
@@ -345,11 +270,6 @@ export default function EditChildProfileScreen() {
     }
   };
 
-  /**
-   * ----------------------------------------------------------
-   * UNLINK WATCH FROM CHILD
-   * ----------------------------------------------------------
-   */
   const unlinkWatch = async () => {
     if (!childId) {
       return;
@@ -358,17 +278,11 @@ export default function EditChildProfileScreen() {
     setUnlinkingWatch(true);
 
     try {
-      /**
-       * Server-side, like linking. The watch loses its
-       * device token and returns to its connection screen.
-       */
-      const {
-        error: unlinkError,
-      } = await supabase.rpc(
+      // Server-side, like linking. The watch loses its device token and
+      // returns to its connection screen.
+      const { error: unlinkError } = await supabase.rpc(
         "unlink_watch_from_my_child",
-        {
-          p_child_id: childId,
-        }
+        { p_child_id: childId }
       );
 
       if (unlinkError) {
@@ -385,9 +299,7 @@ export default function EditChildProfileScreen() {
     } catch (reason) {
       Alert.alert(
         "Unable to unlink watch",
-        reason instanceof Error
-          ? reason.message
-          : "Please try again."
+        reason instanceof Error ? reason.message : "Please try again."
       );
     } finally {
       setUnlinkingWatch(false);
@@ -399,69 +311,50 @@ export default function EditChildProfileScreen() {
       "Unlink watch?",
       `${linkedWatchId} will stop tracking ${name.trim() || "this child"}. To use it again, link it and enter a new connection code on the watch.`,
       [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
+        { text: "Cancel", style: "cancel" },
         {
           text: "Unlink",
           style: "destructive",
-          onPress: () => {
-            void unlinkWatch();
-          },
+          onPress: () => void unlinkWatch(),
         },
       ]
     );
   };
 
-  /**
-   * ----------------------------------------------------------
-   * SAVE CHILD PROFILE
-   * ----------------------------------------------------------
-   */
-  const saveChildProfile = async (
-    options?: {
-      /** After saving, open the connection-code screen for this device. */
-      openConnection?: "watch" | "phone";
-    }
-  ) => {
-    const validated = validateForm();
+  const updateChildRecord = async (options: {
+    fullName: string;
+    numericAge: number;
+    relationshipValue: string;
+    trackingSourceValue: TrackingSource;
+    avatarPathValue: string | null;
+  }) => {
+    const { error: updateError } = await supabase.rpc(
+      "update_my_child_profile",
+      {
+        p_child_id: childId,
+        p_full_name: options.fullName,
+        p_age: options.numericAge,
+        p_relationship: options.relationshipValue,
+        p_tracking_source: options.trackingSourceValue,
+        p_avatar_path: options.avatarPathValue,
+      }
+    );
 
-    if (!validated) {
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
+  };
+
+  const saveChildDetails = async () => {
+    const numericAge = validateChildDetails();
+    if (numericAge === null) {
       return;
     }
 
-    const {
-      numericAge,
-      normalizedWatchId,
-    } = validated;
-
-    const shouldOpenConnection =
-      options?.openConnection !== undefined;
-
-    if (shouldOpenConnection) {
-      setOpeningConnectionCode(true);
-    } else {
-      setSaving(true);
-    }
+    setSaving(true);
 
     try {
-      const {
-        data: authData,
-        error: authError,
-      } = await supabase.auth.getUser();
-
-      if (authError || !authData.user) {
-        throw new Error(
-          "Your session has expired. Please log in again."
-        );
-      }
-
-      if (!childId) {
-        throw new Error(
-          "SafeTrack could not identify the child profile."
-        );
-      }
+      await requireSessionAndChild();
 
       let nextAvatarPath = avatarPath;
 
@@ -474,72 +367,79 @@ export default function EditChildProfileScreen() {
         );
       }
 
-      /**
-       * Confirm and link the physical Watch first.
-       * A phone-only child keeps any watch linked
-       * earlier, in case the Guardian switches back.
-       */
-      if (usesWatch(trackingSource)) {
-        await linkWatchToChild(
-          normalizedWatchId
-        );
-
-        setWatchId(normalizedWatchId);
-        setLinkedWatchId(normalizedWatchId);
-      }
-
-      /**
-       * Update child profile.
-       */
-      const {
-        error: updateError,
-      } = await supabase.rpc(
-        "update_my_child_profile",
-        {
-          p_child_id: childId,
-          p_full_name: name.trim(),
-          p_age: numericAge,
-          p_relationship: relationship,
-          p_tracking_source: trackingSource,
-          p_avatar_path: nextAvatarPath,
-        }
-      );
-
-      if (updateError) {
-        throw new Error(updateError.message);
-      }
+      await updateChildRecord({
+        fullName: name.trim(),
+        numericAge,
+        relationshipValue: relationship,
+        trackingSourceValue: trackingSource,
+        avatarPathValue: nextAvatarPath,
+      });
 
       setAvatarPath(nextAvatarPath);
 
       if (selectedAvatar) {
-        const nextAvatarUrl =
-          await getProfileAvatarUrl(
-            nextAvatarPath
-          );
-
-        setAvatarUrl(nextAvatarUrl);
+        setAvatarUrl(await getProfileAvatarUrl(nextAvatarPath));
         setSelectedAvatar(null);
       }
 
-      /**
-       * ------------------------------------------------------
-       * CONNECTION CODES
-       * ------------------------------------------------------
-       *
-       * Opened only after saving, so the server sees the
-       * tracking source the Guardian just chose.
-       */
+      Alert.alert(
+        "Child details updated",
+        "The child's profile details were saved successfully.",
+        [{ text: "OK", onPress: () => router.back() }]
+      );
+    } catch (reason) {
+      Alert.alert(
+        "Unable to save child details",
+        reason instanceof Error ? reason.message : "Please try again."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveTrackingSource = async (options?: {
+    openConnection?: "watch" | "phone";
+  }) => {
+    const normalizedWatchId = validateTracking();
+    if (normalizedWatchId === null) {
+      return;
+    }
+
+    const numericAge = Number(age);
+    const shouldOpenConnection = options?.openConnection !== undefined;
+
+    if (shouldOpenConnection) {
+      setOpeningConnectionCode(true);
+    } else {
+      setSaving(true);
+    }
+
+    try {
+      await requireSessionAndChild();
+
+      if (usesWatch(trackingSource)) {
+        await linkWatchToChild(normalizedWatchId);
+        setWatchId(normalizedWatchId);
+        setLinkedWatchId(normalizedWatchId);
+      }
+
+      await updateChildRecord({
+        fullName: name.trim(),
+        numericAge,
+        relationshipValue: relationship,
+        trackingSourceValue: trackingSource,
+        avatarPathValue: avatarPath,
+      });
+
       if (options?.openConnection === "watch") {
         router.push({
-          pathname:
-            "/(app)/device-connection-code",
+          pathname: "/(app)/device-connection-code",
           params: {
             childId,
             childName: name.trim(),
             watchId: normalizedWatchId,
           },
         });
-
         return;
       }
 
@@ -551,33 +451,20 @@ export default function EditChildProfileScreen() {
             device: "phone",
           },
         });
-
         return;
       }
 
       Alert.alert(
-        "Child profile updated",
-        "The child's SafeTrack profile was saved successfully.",
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              router.back();
-            },
-          },
-        ]
+        "Tracking source updated",
+        "The child's registered tracking source was saved successfully.",
+        [{ text: "OK", onPress: () => router.back() }]
       );
     } catch (reason) {
-      const message =
-        reason instanceof Error
-          ? reason.message
-          : "Please try again.";
-
       Alert.alert(
         shouldOpenConnection
-          ? "Unable to generate Watch connection code"
-          : "Unable to save child profile",
-        message
+          ? "Unable to open connection code"
+          : "Unable to save tracking source",
+        reason instanceof Error ? reason.message : "Please try again."
       );
     } finally {
       setSaving(false);
@@ -585,39 +472,21 @@ export default function EditChildProfileScreen() {
     }
   };
 
-  /**
-   * ----------------------------------------------------------
-   * LOADING
-   * ----------------------------------------------------------
-   */
   if (loading) {
     return (
       <SafeAreaView style={styles.loading}>
-        <ActivityIndicator
-          size="large"
-          color={colors.primary}
-        />
+        <ActivityIndicator size="large" color={colors.primary} />
       </SafeAreaView>
     );
   }
 
-  /**
-   * ----------------------------------------------------------
-   * SCREEN
-   * ----------------------------------------------------------
-   */
+  const isDetails = section === "details";
+
   return (
-    <SafeAreaView
-      style={styles.safe}
-      edges={["top", "left", "right"]}
-    >
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={
-          Platform.OS === "ios"
-            ? "padding"
-            : undefined
-        }
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
           contentContainerStyle={styles.content}
@@ -627,474 +496,413 @@ export default function EditChildProfileScreen() {
           <SafeTrackBackButton />
 
           <Text style={styles.eyebrow}>
-            CHILD ACCOUNT
+            {isDetails ? "CHILD PROFILE" : "TRACKING SOURCE"}
           </Text>
-
           <Text style={styles.title}>
-            Edit child profile
+            {isDetails
+              ? "Edit child details."
+              : `${name || "Child"}'s device routing.`}
           </Text>
-
           <Text style={styles.subtitle}>
-            Update the child details and registered
-            smartwatch used by SafeTrack.
+            {isDetails
+              ? "Update identity, age, relationship, and profile photo."
+              : "Choose the registered tracking source and manage its existing device connection options."}
           </Text>
 
-          {/* PROFILE PHOTO */}
+          {isDetails ? (
+            <>
+              <View style={styles.profileHero}>
+                <View style={styles.heroAccentOne} />
+                <View style={styles.heroAccentTwo} />
+                <SafeTrackAvatar
+                  imageUri={selectedAvatar || avatarUrl}
+                  name={name}
+                  size={88}
+                  editable
+                  onPress={() => void chooseAvatar()}
+                />
 
-          <View style={styles.photoRow}>
-            <SafeTrackAvatar
-              imageUri={
-                selectedAvatar ||
-                avatarUrl
-              }
-              name={name}
-              size={82}
-              editable
-              onPress={() =>
-                void chooseAvatar()
-              }
-            />
-
-            <View style={styles.photoCopy}>
-              <Text style={styles.photoTitle}>
-                {name || "Child profile"}
-              </Text>
-
-              <Text style={styles.photoText}>
-                {linkedWatchId
-                  ? `Watch ${linkedWatchId} is linked`
-                  : "Tap the photo to choose an image."}
-              </Text>
-            </View>
-          </View>
-
-          {/* FULL NAME */}
-
-          <Text style={styles.label}>
-            Child&apos;s full name
-          </Text>
-
-          <View style={styles.inputShell}>
-            <Ionicons
-              name="person-outline"
-              size={21}
-              color={colors.primary}
-            />
-
-            <TextInput
-              value={name}
-              onChangeText={setName}
-              style={styles.input}
-              placeholder="Child's full name"
-              placeholderTextColor={
-                colors.muted
-              }
-              autoCapitalize="words"
-            />
-          </View>
-
-          {/* AGE */}
-
-          <Text style={styles.label}>
-            Age
-          </Text>
-
-          <View style={styles.inputShell}>
-            <Ionicons
-              name="calendar-outline"
-              size={21}
-              color={colors.primary}
-            />
-
-            <TextInput
-              value={age}
-              onChangeText={(value) =>
-                setAge(
-                  value.replace(
-                    /[^0-9]/g,
-                    ""
-                  )
-                )
-              }
-              keyboardType="number-pad"
-              style={styles.input}
-              placeholder="6 - 15"
-              placeholderTextColor={
-                colors.muted
-              }
-            />
-          </View>
-
-          <Text style={styles.scope}>
-            SafeTrack is scoped for children
-            aged 6 to 15 years old.
-          </Text>
-
-          {/* RELATIONSHIP */}
-
-          <Text style={styles.label}>
-            Relationship
-          </Text>
-
-          <View style={styles.chips}>
-            {RELATIONSHIPS.map(
-              (item) => {
-                const selected =
-                  relationship === item;
-
-                return (
-                  <Pressable
-                    key={item}
-                    onPress={() =>
-                      setRelationship(
-                        item
-                      )
-                    }
-                    style={[
-                      styles.chip,
-                      selected &&
-                        styles.chipSelected,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.chipText,
-                        selected &&
-                          styles.chipTextSelected,
-                      ]}
-                    >
-                      {item}
-                    </Text>
-                  </Pressable>
-                );
-              }
-            )}
-          </View>
-
-          {/* TRACKING SOURCE */}
-
-          <Text style={styles.label}>
-            Tracking source
-          </Text>
-
-          <View style={styles.sources}>
-            {TRACKING_SOURCES.map(
-              (option) => {
-                const selected =
-                  trackingSource ===
-                  option.value;
-
-                return (
-                  <Pressable
-                    key={option.value}
-                    onPress={() =>
-                      setTrackingSource(
-                        option.value
-                      )
-                    }
-                    style={[
-                      styles.source,
-                      selected &&
-                        styles.sourceSelected,
-                    ]}
-                  >
+                <View style={styles.profileHeroCopy}>
+                  <Text style={styles.profileHeroKicker}>MONITORED CHILD</Text>
+                  <Text numberOfLines={1} style={styles.profileHeroName}>
+                    {name || "Child profile"}
+                  </Text>
+                  <View style={styles.profileMetaRow}>
                     <Ionicons
-                      name={option.icon}
-                      size={22}
-                      color={
-                        selected
-                          ? colors.primaryDark
-                          : colors.muted
-                      }
+                      name="person-outline"
+                      size={14}
+                      color={colors.primaryDark}
                     />
+                    <Text style={styles.profileMetaText}>
+                      {age ? `${age} years old • ${relationship}` : relationship}
+                    </Text>
+                  </View>
+                </View>
+              </View>
 
-                    <Text
-                      style={[
-                        styles.sourceText,
-                        selected &&
-                          styles.sourceTextSelected,
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionEyebrow}>BASIC DETAILS</Text>
+                <Text style={styles.sectionTitle}>Who are you monitoring?</Text>
+              </View>
+
+              <Text style={styles.label}>Child&apos;s full name</Text>
+              <View style={styles.inputShell}>
+                <View style={styles.fieldIcon}>
+                  <Ionicons
+                    name="person-outline"
+                    size={19}
+                    color={colors.primaryDark}
+                  />
+                </View>
+                <TextInput
+                  value={name}
+                  onChangeText={setName}
+                  style={styles.input}
+                  placeholder="Child's full name"
+                  placeholderTextColor={colors.mutedLight}
+                  autoCapitalize="words"
+                />
+              </View>
+
+              <Text style={styles.label}>Age</Text>
+              <View style={styles.inputShell}>
+                <View style={styles.fieldIcon}>
+                  <Ionicons
+                    name="calendar-outline"
+                    size={19}
+                    color={colors.primaryDark}
+                  />
+                </View>
+                <TextInput
+                  value={age}
+                  onChangeText={(value) =>
+                    setAge(value.replace(/[^0-9]/g, ""))
+                  }
+                  keyboardType="number-pad"
+                  style={styles.input}
+                  placeholder="6 - 15"
+                  placeholderTextColor={colors.mutedLight}
+                />
+                <View style={styles.ageBadge}>
+                  <Text style={styles.ageBadgeText}>AGES 6–15</Text>
+                </View>
+              </View>
+
+              <Text style={styles.helperText}>
+                SafeTrack is scoped for children aged 6 to 15 years old.
+              </Text>
+
+              <Text style={styles.label}>Relationship to child</Text>
+              <View style={styles.chips}>
+                {RELATIONSHIPS.map((item) => {
+                  const selected = relationship === item;
+
+                  return (
+                    <Pressable
+                      key={item}
+                      onPress={() => setRelationship(item)}
+                      style={({ pressed }) => [
+                        styles.chip,
+                        selected && styles.chipSelected,
+                        pressed && styles.pressed,
                       ]}
                     >
-                      {option.label}
-                    </Text>
-                  </Pressable>
-                );
-              }
-            )}
-          </View>
+                      {selected ? (
+                        <Ionicons
+                          name="checkmark"
+                          size={14}
+                          color={colors.white}
+                          style={styles.chipCheck}
+                        />
+                      ) : null}
+                      <Text
+                        style={[
+                          styles.chipText,
+                          selected && styles.chipTextSelected,
+                        ]}
+                      >
+                        {item}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
 
-          <View style={styles.trackingNotice}>
-            <Ionicons
-              name="shield-checkmark-outline"
-              size={19}
-              color={colors.primary}
-            />
-
-            <Text style={styles.trackingNoticeText}>
-              {trackingSource === "both"
-                ? "The smartwatch remains the primary child safety device. The child's phone is optional."
-                : trackingSource === "mobile"
-                  ? "The child's phone shares location and sends SOS alerts. No smartwatch is required."
-                  : "The registered smartwatch is the child's primary SafeTrack device."}
-            </Text>
-          </View>
-
-          {/* LINKED WATCH */}
-
-          {linkedWatchId ? (
-            <View style={styles.linkedWatch}>
-              <Ionicons
-                name="watch-outline"
-                size={21}
-                color={colors.primary}
+              <SafeTrackButton
+                label="Save child details"
+                icon="checkmark-outline"
+                onPress={() => void saveChildDetails()}
+                loading={saving}
+                disabled={busy}
+                style={styles.save}
               />
 
-              <View style={styles.linkedWatchCopy}>
-                <Text style={styles.linkedWatchLabel}>
-                  Linked watch
-                </Text>
-
-                <Text
-                  style={styles.linkedWatchId}
-                  numberOfLines={1}
-                >
-                  {linkedWatchId}
-                </Text>
-              </View>
-
-              <Pressable
-                disabled={busy}
-                onPress={confirmUnlinkWatch}
-                style={({ pressed }) => [
-                  styles.unlinkButton,
-                  pressed &&
-                    styles.connectionButtonPressed,
-                  busy &&
-                    styles.connectionButtonDisabled,
-                ]}
-              >
-                {unlinkingWatch ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={colors.danger}
-                  />
-                ) : (
-                  <Text style={styles.unlinkButtonText}>
-                    Unlink
-                  </Text>
-                )}
-              </Pressable>
-            </View>
-          ) : null}
-
-          {usesWatch(trackingSource) ? (
-          <>
-          {/* WATCH ID */}
-
-          <Text style={styles.label}>
-            {linkedWatchId
-              ? "Link a different watch"
-              : "Watch ID"}
-          </Text>
-
-          <View style={styles.inputShell}>
-            <Ionicons
-              name="watch-outline"
-              size={21}
-              color={colors.primary}
-            />
-
-            <TextInput
-              value={watchId}
-              onChangeText={(value) =>
-                setWatchId(
-                  value.toUpperCase()
-                )
-              }
-              style={styles.input}
-              placeholder="ST-WATCH-XXXXXXXX"
-              placeholderTextColor={
-                colors.muted
-              }
-              autoCapitalize="characters"
-              autoCorrect={false}
-            />
-          </View>
-
-          <Text style={styles.watchHelp}>
-            Enter the Watch ID displayed by
-            SafeTrack on the child&apos;s Wear OS
-            smartwatch.
-            {linkedWatchId
-              ? " Saving a different ID replaces the linked watch, and the new watch needs a connection code."
-              : ""}
-          </Text>
-
-          {/* WATCH CONNECTION */}
-
-          <View style={styles.watchCard}>
-            <View style={styles.watchCardHeader}>
-              <View
-                style={styles.watchIcon}
-              >
-                <Ionicons
-                  name="watch-outline"
-                  size={24}
-                  color={colors.primary}
-                />
-              </View>
-
-              <View style={styles.watchCardCopy}>
-                <Text
-                  style={styles.watchCardTitle}
-                >
-                  Child smartwatch
-                </Text>
-
-                <Text
-                  style={styles.watchCardText}
-                >
-                  Generate the temporary
-                  connection code that must be
-                  entered on the child&apos;s
-                  Wear OS Watch.
+              <Text style={styles.saveNote}>
+                Only the child&apos;s profile details are changed here.
+              </Text>
+            </>
+          ) : (
+            <>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionEyebrow}>DEVICE ROUTING</Text>
+                <Text style={styles.sectionTitle}>
+                  Choose the registered tracking source
                 </Text>
               </View>
-            </View>
 
-            <Pressable
-              disabled={busy}
-              onPress={() =>
-                void saveChildProfile({
-                  openConnection: "watch",
-                })
-              }
-              style={({ pressed }) => [
-                styles.connectionButton,
-                pressed &&
-                  styles.connectionButtonPressed,
-                busy &&
-                  styles.connectionButtonDisabled,
-              ]}
-            >
-              {openingConnectionCode ? (
-                <ActivityIndicator
-                  size="small"
-                  color={colors.white}
-                />
-              ) : (
-                <>
-                  <Ionicons
-                    name="key-outline"
-                    size={20}
-                    color={colors.white}
-                  />
+              <View style={styles.sources}>
+                {TRACKING_SOURCES.map((option) => {
+                  const selected = trackingSource === option.value;
 
-                  <Text
-                    style={
-                      styles.connectionButtonText
-                    }
-                  >
-                    Generate Child Device
-                    Connection Code
-                  </Text>
-                </>
-              )}
-            </Pressable>
-
-            <Text
-              style={styles.connectionFootnote}
-            >
-              This code is for the registered
-              smartwatch. It is different from
-              Child Mobile Access.
-            </Text>
-          </View>
-          </>
-          ) : null}
-
-          {/* PHONE CONNECTION */}
-
-          {usesPhone(trackingSource) ? (
-            <View style={styles.watchCard}>
-              <View style={styles.watchCardHeader}>
-                <View style={styles.watchIcon}>
-                  <Ionicons
-                    name="phone-portrait-outline"
-                    size={24}
-                    color={colors.primary}
-                  />
-                </View>
-
-                <View style={styles.watchCardCopy}>
-                  <Text style={styles.watchCardTitle}>
-                    Child phone
-                  </Text>
-
-                  <Text style={styles.watchCardText}>
-                    Generate the temporary
-                    connection code that must be
-                    entered on the child&apos;s
-                    phone under &quot;Link child
-                    device&quot;.
-                  </Text>
-                </View>
-              </View>
-
-              <Pressable
-                disabled={busy}
-                onPress={() =>
-                  void saveChildProfile({
-                    openConnection: "phone",
-                  })
-                }
-                style={({ pressed }) => [
-                  styles.connectionButton,
-                  pressed &&
-                    styles.connectionButtonPressed,
-                  busy &&
-                    styles.connectionButtonDisabled,
-                ]}
-              >
-                {openingConnectionCode ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={colors.white}
-                  />
-                ) : (
-                  <>
-                    <Ionicons
-                      name="key-outline"
-                      size={20}
-                      color={colors.white}
-                    />
-
-                    <Text
-                      style={
-                        styles.connectionButtonText
-                      }
+                  return (
+                    <Pressable
+                      key={option.value}
+                      onPress={() => setTrackingSource(option.value)}
+                      style={({ pressed }) => [
+                        styles.source,
+                        selected && styles.sourceSelected,
+                        pressed && styles.pressed,
+                      ]}
                     >
-                      Generate Child Phone
-                      Connection Code
+                      <View
+                        style={[
+                          styles.sourceIcon,
+                          selected && styles.sourceIconSelected,
+                        ]}
+                      >
+                        <Ionicons
+                          name={option.icon}
+                          size={20}
+                          color={
+                            selected ? colors.primaryDark : colors.muted
+                          }
+                        />
+                      </View>
+                      <Text
+                        style={[
+                          styles.sourceText,
+                          selected && styles.sourceTextSelected,
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <View style={styles.trackingNotice}>
+                <View style={styles.trackingNoticeIcon}>
+                  <Ionicons
+                    name="information"
+                    size={15}
+                    color={colors.primaryDark}
+                  />
+                </View>
+                <Text style={styles.trackingNoticeText}>
+                  {trackingSource === "both"
+                    ? "Smartwatch remains the primary child-side device while the child phone can provide an additional location source."
+                    : trackingSource === "mobile"
+                      ? "This current profile is configured to use the child's phone as its tracking source."
+                      : "The registered smartwatch is the child's primary SafeTrack location and SOS device."}
+                </Text>
+              </View>
+
+              {linkedWatchId ? (
+                <View style={styles.linkedWatch}>
+                  <View style={styles.fieldIcon}>
+                    <Ionicons
+                      name="watch-outline"
+                      size={19}
+                      color={colors.primaryDark}
+                    />
+                  </View>
+                  <View style={styles.linkedWatchCopy}>
+                    <Text style={styles.linkedWatchLabel}>LINKED WATCH</Text>
+                    <Text numberOfLines={1} style={styles.linkedWatchId}>
+                      {linkedWatchId}
                     </Text>
-                  </>
-                )}
-              </Pressable>
-            </View>
-          ) : null}
+                  </View>
+                  <Pressable
+                    disabled={busy}
+                    onPress={confirmUnlinkWatch}
+                    style={({ pressed }) => [
+                      styles.unlinkButton,
+                      pressed && styles.pressed,
+                      busy && styles.buttonDisabled,
+                    ]}
+                  >
+                    {unlinkingWatch ? (
+                      <ActivityIndicator size="small" color={colors.danger} />
+                    ) : (
+                      <Text style={styles.unlinkButtonText}>Unlink</Text>
+                    )}
+                  </Pressable>
+                </View>
+              ) : null}
 
-          {/* SAVE */}
+              {usesWatch(trackingSource) ? (
+                <>
+                  <Text style={styles.label}>
+                    {linkedWatchId ? "Link a different watch" : "Watch ID"}
+                  </Text>
+                  <View style={styles.inputShell}>
+                    <View style={styles.fieldIcon}>
+                      <Ionicons
+                        name="watch-outline"
+                        size={19}
+                        color={colors.primaryDark}
+                      />
+                    </View>
+                    <TextInput
+                      value={watchId}
+                      onChangeText={(value) => setWatchId(value.toUpperCase())}
+                      style={styles.input}
+                      placeholder="ST-WATCH-XXXXXXXX"
+                      placeholderTextColor={colors.mutedLight}
+                      autoCapitalize="characters"
+                      autoCorrect={false}
+                    />
+                  </View>
 
-          <SafeTrackButton
-            label="Save child profile"
-            icon="checkmark-outline"
-            onPress={() =>
-              void saveChildProfile()
-            }
-            loading={saving}
-            disabled={busy}
-            style={styles.save}
-          />
+                  <Text style={styles.helperText}>
+                    Enter the Watch ID displayed by SafeTrack on the child&apos;s
+                    Wear OS smartwatch.
+                    {linkedWatchId
+                      ? " Saving a different ID replaces the linked watch, and the new watch needs a connection code."
+                      : ""}
+                  </Text>
+
+                  <View style={styles.connectionBand}>
+                    <View style={styles.connectionHeader}>
+                      <View style={styles.connectionIcon}>
+                        <Ionicons
+                          name="watch-outline"
+                          size={22}
+                          color={colors.primaryDark}
+                        />
+                      </View>
+                      <View style={styles.connectionCopy}>
+                        <Text style={styles.connectionTitle}>
+                          Smartwatch connection
+                        </Text>
+                        <Text style={styles.connectionText}>
+                          Create the temporary code that the child enters on the
+                          Wear OS application.
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Pressable
+                      disabled={busy}
+                      onPress={() =>
+                        void saveTrackingSource({ openConnection: "watch" })
+                      }
+                      style={({ pressed }) => [
+                        styles.connectionButton,
+                        pressed && styles.pressed,
+                        busy && styles.buttonDisabled,
+                      ]}
+                    >
+                      {openingConnectionCode ? (
+                        <ActivityIndicator size="small" color={colors.white} />
+                      ) : (
+                        <>
+                          <Ionicons
+                            name="key-outline"
+                            size={18}
+                            color={colors.white}
+                          />
+                          <Text style={styles.connectionButtonText}>
+                            Generate child device code
+                          </Text>
+                          <Ionicons
+                            name="arrow-forward"
+                            size={16}
+                            color={colors.white}
+                          />
+                        </>
+                      )}
+                    </Pressable>
+
+                    <Text style={styles.connectionFootnote}>
+                      Watch and child-phone connection codes are separate and
+                      single-purpose.
+                    </Text>
+                  </View>
+                </>
+              ) : null}
+
+              {usesPhone(trackingSource) ? (
+                <View style={styles.connectionBand}>
+                  <View style={styles.connectionHeader}>
+                    <View style={styles.connectionIcon}>
+                      <Ionicons
+                        name="phone-portrait-outline"
+                        size={22}
+                        color={colors.primaryDark}
+                      />
+                    </View>
+                    <View style={styles.connectionCopy}>
+                      <Text style={styles.connectionTitle}>
+                        Child phone connection
+                      </Text>
+                      <Text style={styles.connectionText}>
+                        Generate the temporary code entered on the child phone
+                        under Link child device.
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Pressable
+                    disabled={busy}
+                    onPress={() =>
+                      void saveTrackingSource({ openConnection: "phone" })
+                    }
+                    style={({ pressed }) => [
+                      styles.connectionButton,
+                      pressed && styles.pressed,
+                      busy && styles.buttonDisabled,
+                    ]}
+                  >
+                    {openingConnectionCode ? (
+                      <ActivityIndicator size="small" color={colors.white} />
+                    ) : (
+                      <>
+                        <Ionicons
+                          name="key-outline"
+                          size={18}
+                          color={colors.white}
+                        />
+                        <Text style={styles.connectionButtonText}>
+                          Generate child phone code
+                        </Text>
+                        <Ionicons
+                          name="arrow-forward"
+                          size={16}
+                          color={colors.white}
+                        />
+                      </>
+                    )}
+                  </Pressable>
+                </View>
+              ) : null}
+
+              <SafeTrackButton
+                label="Save tracking source"
+                icon="checkmark-outline"
+                onPress={() => void saveTrackingSource()}
+                loading={saving}
+                disabled={busy}
+                style={styles.save}
+              />
+
+              <Text style={styles.saveNote}>
+                Changes here apply only to the child&apos;s registered tracking
+                source and device setup.
+              </Text>
+            </>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -1106,319 +914,389 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-
   flex: {
     flex: 1,
   },
-
   content: {
+    width: "100%",
+    maxWidth: 780,
+    alignSelf: "center",
     paddingHorizontal: spacing.lg,
-    paddingTop: 16,
-    paddingBottom: 36,
+    paddingTop: 14,
+    paddingBottom: 46,
   },
-
   loading: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.background,
   },
-
   eyebrow: {
+    marginTop: 20,
     color: colors.primary,
     fontSize: 10,
     fontWeight: "900",
-    letterSpacing: 1.5,
-    marginTop: 20,
+    letterSpacing: 1.45,
   },
-
   title: {
+    maxWidth: 360,
+    marginTop: 6,
     color: colors.ink,
-    fontSize: 29,
+    fontSize: 28,
+    lineHeight: 33,
     fontWeight: "900",
-    marginTop: 5,
+    letterSpacing: -0.75,
   },
-
   subtitle: {
-    color: colors.muted,
-    fontSize: 14.5,
-    lineHeight: 21,
+    maxWidth: 420,
     marginTop: 7,
+    color: colors.muted,
+    fontSize: 12.5,
+    lineHeight: 18.5,
   },
-
-  photoRow: {
+  profileHero: {
+    minHeight: 126,
+    marginTop: 22,
+    padding: 17,
+    borderRadius: radius.xl,
+    overflow: "hidden",
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 22,
-    marginBottom: 18,
+    backgroundColor: colors.primaryDeep,
+    ...shadow.card,
   },
-
-  photoCopy: {
+  heroAccentOne: {
+    position: "absolute",
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    right: -28,
+    top: -52,
+    backgroundColor: "rgba(105,219,157,.13)",
+  },
+  heroAccentTwo: {
+    position: "absolute",
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    left: -48,
+    bottom: -55,
+    backgroundColor: "rgba(255,255,255,.07)",
+  },
+  profileHeroCopy: {
     flex: 1,
-    marginLeft: 14,
+    minWidth: 0,
+    marginLeft: 15,
   },
-
-  photoTitle: {
+  profileHeroKicker: {
+    color: "rgba(255,255,255,.58)",
+    fontSize: 8.5,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+  },
+  profileHeroName: {
+    marginTop: 4,
+    color: colors.white,
+    fontSize: 20,
+    fontWeight: "900",
+  },
+  profileMetaRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    alignSelf: "flex-start",
+    backgroundColor: colors.mintGlow,
+  },
+  profileMetaText: {
+    maxWidth: 220,
+    marginLeft: 5,
+    color: colors.primaryDeep,
+    fontSize: 9,
+    fontWeight: "800",
+  },
+  sectionHeader: {
+    marginTop: 29,
+    marginBottom: 4,
+  },
+  sectionEyebrow: {
+    color: colors.primaryDark,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+  },
+  sectionTitle: {
+    marginTop: 3,
     color: colors.ink,
     fontSize: 16,
     fontWeight: "900",
   },
-
-  photoText: {
-    color: colors.muted,
-    fontSize: 12.5,
-    lineHeight: 18,
-    marginTop: 3,
-  },
-
   label: {
-    color: colors.ink,
-    fontSize: 14.5,
-    fontWeight: "900",
-    marginTop: 14,
+    marginTop: 16,
     marginBottom: 8,
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "900",
   },
-
   inputShell: {
-    minHeight: 58,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    borderRadius: radius.md,
+    minHeight: 60,
+    paddingHorizontal: 11,
+    borderRadius: 21,
     borderWidth: 1,
     borderColor: colors.border,
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: colors.white,
     ...shadow.soft,
   },
-
+  fieldIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.softMint,
+  },
   input: {
     flex: 1,
-    color: colors.ink,
-    fontSize: 16,
-    fontWeight: "600",
-    marginLeft: 12,
+    minWidth: 0,
+    marginLeft: 10,
     paddingVertical: 10,
+    color: colors.ink,
+    fontSize: 14.5,
+    fontWeight: "700",
   },
-
-  scope: {
+  ageBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceMuted,
+  },
+  ageBadgeText: {
+    color: colors.primaryDark,
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+  },
+  helperText: {
+    marginTop: 7,
+    paddingHorizontal: 4,
     color: colors.muted,
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 8,
+    fontSize: 10.5,
+    lineHeight: 15,
   },
-
   chips: {
     flexDirection: "row",
     flexWrap: "wrap",
+    gap: 7,
   },
-
   chip: {
+    minHeight: 38,
     paddingHorizontal: 13,
-    paddingVertical: 9,
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.border,
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: colors.white,
-    marginRight: 8,
-    marginBottom: 8,
   },
-
   chipSelected: {
-    backgroundColor: colors.primary,
     borderColor: colors.primary,
+    backgroundColor: colors.primary,
   },
-
+  chipCheck: {
+    marginRight: 4,
+  },
   chipText: {
     color: colors.muted,
-    fontSize: 13,
+    fontSize: 11.5,
     fontWeight: "800",
   },
-
   chipTextSelected: {
     color: colors.white,
   },
-
   sources: {
+    marginTop: 12,
+    padding: 5,
+    borderRadius: 23,
     flexDirection: "row",
-    padding: 4,
-    borderRadius: radius.md,
     backgroundColor: colors.surfaceMuted,
   },
-
   source: {
     flex: 1,
-    minHeight: 64,
+    minHeight: 74,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
   },
-
   sourceSelected: {
     backgroundColor: colors.white,
-    borderRadius: radius.sm,
     ...shadow.soft,
   },
-
-  sourceText: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: "800",
-    marginTop: 4,
+  sourceIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
   },
-
+  sourceIconSelected: {
+    backgroundColor: colors.softMint,
+  },
+  sourceText: {
+    marginTop: 5,
+    color: colors.muted,
+    fontSize: 10.5,
+    fontWeight: "800",
+  },
   sourceTextSelected: {
     color: colors.primaryDark,
   },
-
   trackingNotice: {
+    marginTop: 10,
+    padding: 13,
+    borderRadius: 20,
     flexDirection: "row",
     alignItems: "flex-start",
-    padding: 13,
-    marginTop: 10,
-    borderRadius: radius.md,
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.softMint,
   },
-
+  trackingNoticeIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.white,
+  },
   trackingNoticeText: {
     flex: 1,
-    color: colors.muted,
-    fontSize: 12,
-    lineHeight: 18,
     marginLeft: 9,
+    color: colors.muted,
+    fontSize: 10.5,
+    lineHeight: 15.5,
   },
-
   linkedWatch: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 14,
     marginTop: 14,
-    borderRadius: radius.md,
+    padding: 11,
+    borderRadius: 21,
     borderWidth: 1,
     borderColor: colors.border,
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: colors.white,
     ...shadow.soft,
   },
-
   linkedWatchCopy: {
     flex: 1,
-    marginLeft: 12,
-  },
-
-  linkedWatchLabel: {
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: "800",
-  },
-
-  linkedWatchId: {
-    color: colors.ink,
-    fontSize: 15,
-    fontWeight: "900",
-    marginTop: 2,
-  },
-
-  unlinkButton: {
-    minWidth: 82,
-    minHeight: 38,
-    paddingHorizontal: 14,
-    borderRadius: radius.pill,
-    backgroundColor: colors.dangerSoft,
-    alignItems: "center",
-    justifyContent: "center",
+    minWidth: 0,
     marginLeft: 10,
   },
-
+  linkedWatchLabel: {
+    color: colors.muted,
+    fontSize: 8.5,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+  },
+  linkedWatchId: {
+    marginTop: 3,
+    color: colors.ink,
+    fontSize: 14.5,
+    fontWeight: "900",
+  },
+  unlinkButton: {
+    minWidth: 76,
+    minHeight: 36,
+    marginLeft: 10,
+    paddingHorizontal: 13,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.dangerSoft,
+  },
   unlinkButtonText: {
     color: colors.danger,
-    fontSize: 13,
+    fontSize: 11.5,
     fontWeight: "900",
   },
-
-  watchHelp: {
-    color: colors.muted,
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 8,
-  },
-
-  watchCard: {
-    marginTop: 22,
-    padding: 16,
-    borderRadius: radius.md,
+  connectionBand: {
+    marginTop: 21,
+    padding: 15,
+    borderRadius: 24,
+    backgroundColor: colors.white,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.white,
     ...shadow.soft,
   },
-
-  watchCardHeader: {
+  connectionHeader: {
     flexDirection: "row",
     alignItems: "center",
   },
-
-  watchIcon: {
-    width: 48,
-    height: 48,
+  connectionIcon: {
+    width: 47,
+    height: 47,
     borderRadius: 16,
-    backgroundColor: colors.surfaceMuted,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: colors.softMint,
   },
-
-  watchCardCopy: {
+  connectionCopy: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 11,
   },
-
-  watchCardTitle: {
+  connectionTitle: {
     color: colors.ink,
-    fontSize: 15,
+    fontSize: 13.5,
     fontWeight: "900",
   },
-
-  watchCardText: {
-    color: colors.muted,
-    fontSize: 12,
-    lineHeight: 18,
+  connectionText: {
     marginTop: 4,
+    color: colors.muted,
+    fontSize: 10.5,
+    lineHeight: 15.5,
   },
-
   connectionButton: {
-    minHeight: 54,
-    marginTop: 16,
-    borderRadius: radius.md,
-    backgroundColor: colors.primary,
+    minHeight: 50,
+    marginTop: 14,
+    paddingHorizontal: 14,
+    borderRadius: 18,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 14,
+    backgroundColor: colors.primaryDark,
   },
-
-  connectionButtonPressed: {
-    opacity: 0.88,
-  },
-
-  connectionButtonDisabled: {
-    opacity: 0.6,
-  },
-
   connectionButtonText: {
-    flexShrink: 1,
+    flex: 1,
+    marginHorizontal: 8,
     color: colors.white,
-    fontSize: 13,
+    textAlign: "center",
+    fontSize: 11.5,
     fontWeight: "900",
-    textAlign: "center",
-    marginLeft: 8,
   },
-
   connectionFootnote: {
+    marginTop: 8,
     color: colors.muted,
-    fontSize: 11,
-    lineHeight: 16,
     textAlign: "center",
-    marginTop: 10,
+    fontSize: 9.5,
+    lineHeight: 14,
   },
-
+  buttonDisabled: {
+    opacity: 0.55,
+  },
   save: {
-    marginTop: 18,
+    marginTop: 20,
+  },
+  saveNote: {
+    marginTop: 9,
+    paddingHorizontal: 16,
+    color: colors.muted,
+    textAlign: "center",
+    fontSize: 9.5,
+    lineHeight: 14,
+  },
+  pressed: {
+    opacity: 0.82,
+    transform: [{ scale: 0.985 }],
   },
 });

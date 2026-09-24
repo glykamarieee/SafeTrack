@@ -16,11 +16,11 @@ import {
 } from "@expo/vector-icons";
 
 import {
-  safeTrackColors as colors,
-  safeTrackRadius as radius,
-  safeTrackShadow as shadow,
-  safeTrackSpacing as spacing,
-} from "../../constants/safeTrackDesign";
+  guardianColors as colors,
+  guardianRadius as radius,
+  guardianShadow as shadow,
+  guardianSpacing as spacing,
+} from "../../constants/guardianDesign";
 
 
 
@@ -244,6 +244,9 @@ backgroundColor:colors.background,
 
 
 container:{
+width:"100%",
+maxWidth:900,
+alignSelf:"center",
 padding:spacing.lg,
 paddingBottom:100,
 },

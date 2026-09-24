@@ -4,11 +4,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
 import {
-  safeTrackColors as colors,
-  safeTrackRadius as radius,
-  safeTrackShadow as shadow,
-  safeTrackSpacing as spacing,
-} from "../../constants/safeTrackDesign";
+  guardianColors as colors,
+  guardianRadius as radius,
+  guardianShadow as shadow,
+  guardianSpacing as spacing,
+} from "../../constants/guardianDesign";
 
 
 export default function ActivityMapScreen() {
@@ -106,6 +106,9 @@ safe:{
 
 container:{
   flex:1,
+  width:"100%",
+  maxWidth:1160,
+  alignSelf:"center",
   padding:spacing.lg,
 },
 
