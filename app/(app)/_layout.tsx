@@ -213,6 +213,11 @@ export default function AppLayout(){
       />
 
       <Tabs.Screen
+        name="device-connection-code"
+        options={{href:null}}
+      />
+
+      <Tabs.Screen
         name="sos-alerts"
         options={{href:null}}
       />

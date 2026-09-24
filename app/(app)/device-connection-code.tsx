@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   Pressable,
@@ -27,8 +27,19 @@ import {
 
 import {
   generateSmartwatchPairingCode,
-  type SmartwatchPairingCode,
 } from "../../services/smartwatchPairingService";
+
+import {
+  generateMobilePairingCode,
+} from "../../services/mobilePairingService";
+
+
+type Device = "watch" | "phone";
+
+type PairingCode = {
+  connectionCode: string;
+  expiresAt: string;
+};
 
 
 import {
@@ -81,11 +92,27 @@ export default function DeviceConnectionCodeScreen(){
 
 
 
+  // Chosen from the child's tracking source once loaded.
+  const [
+    device,
+    setDevice
+  ] =
+  useState<Device|null>(null);
+
+
+
   const [
     result,
     setResult
   ] =
-  useState<SmartwatchPairingCode|null>(null);
+  useState<PairingCode|null>(null);
+
+
+
+  // A new code replaces the previous one on the server, so
+  // overlapping requests could leave a stale code on screen.
+  const generating =
+    useRef(false);
 
 
 
@@ -110,8 +137,23 @@ export default function DeviceConnectionCodeScreen(){
   async function loadChild(){
 
 
+    setChild(null);
+
+    setDevice(null);
+
+    setResult(null);
+
+    setError(null);
+
+
     if(!childId){
+
+      setError(
+        "Child profile is missing."
+      );
+
       return;
+
     }
 
 
@@ -132,17 +174,38 @@ export default function DeviceConnectionCodeScreen(){
         "id",
         childId
       )
-      .single();
+      .maybeSingle();
 
 
 
-    if(!error){
+    if(error || !data){
 
-      setChild(
-        data as ChildInfo
+      setError(
+        error?.message ??
+        "Child profile not found."
       );
 
+      return;
+
     }
+
+
+    const loaded =
+      data as ChildInfo;
+
+
+    setChild(loaded);
+
+
+    // Phone-only children link a phone; everyone else starts
+    // with the watch (Both can switch below).
+    setDevice(
+      loaded.tracking_source === "mobile"
+      ?
+      "phone"
+      :
+      "watch"
+    );
 
   }
 
@@ -153,11 +216,7 @@ export default function DeviceConnectionCodeScreen(){
   async function generate(){
 
 
-    if(!childId){
-
-      setError(
-        "Child profile is missing."
-      );
+    if(!childId || !device || generating.current){
 
       return;
 
@@ -168,13 +227,24 @@ export default function DeviceConnectionCodeScreen(){
     try{
 
 
+      generating.current = true;
+
       setLoading(true);
 
       setError(null);
 
+      // Never leave a previous code next to a new error.
+      setResult(null);
+
 
 
       const response =
+        device === "phone"
+        ?
+        await generateMobilePairingCode({
+          childId,
+        })
+        :
         await generateSmartwatchPairingCode({
           childId,
         });
@@ -202,6 +272,8 @@ export default function DeviceConnectionCodeScreen(){
     finally{
 
 
+      generating.current = false;
+
       setLoading(false);
 
 
@@ -217,9 +289,20 @@ export default function DeviceConnectionCodeScreen(){
 
     void loadChild();
 
+  },[childId]);
+
+
+
+  useEffect(()=>{
+
     void generate();
 
-  },[childId]);
+  },[childId, device]);
+
+
+
+  const isPhone =
+    device === "phone";
 
 
 
@@ -281,7 +364,7 @@ export default function DeviceConnectionCodeScreen(){
 
           <Ionicons
 
-            name="watch-outline"
+            name={isPhone ? "phone-portrait-outline" : "watch-outline"}
 
             size={34}
 
@@ -311,10 +394,65 @@ export default function DeviceConnectionCodeScreen(){
 
         <Text style={styles.subtitle}>
 
-          Create a temporary code for your
-          child's SafeTrack smartwatch.
+          {
+            isPhone
+            ?
+            "Create a temporary code for your child's phone."
+            :
+            "Create a temporary code for your child's SafeTrack smartwatch."
+          }
 
         </Text>
+
+
+
+
+        {
+          child?.tracking_source === "both" &&
+
+          <View style={styles.devices}>
+
+            {
+              (["watch", "phone"] as const).map(option => (
+
+                <Pressable
+
+                  key={option}
+
+                  disabled={loading}
+
+                  onPress={() => setDevice(option)}
+
+                  style={[
+                    styles.deviceOption,
+                    device === option && styles.deviceOptionSelected,
+                  ]}
+
+                >
+
+                  <Ionicons
+                    name={option === "phone" ? "phone-portrait-outline" : "watch-outline"}
+                    size={18}
+                    color={device === option ? colors.primaryDark : colors.muted}
+                  />
+
+                  <Text
+                    style={[
+                      styles.deviceOptionText,
+                      device === option && styles.deviceOptionTextSelected,
+                    ]}
+                  >
+                    {option === "phone" ? "Phone" : "Smartwatch"}
+                  </Text>
+
+                </Pressable>
+
+              ))
+            }
+
+          </View>
+
+        }
 
 
 
@@ -462,9 +600,9 @@ export default function DeviceConnectionCodeScreen(){
 
         <Pressable
 
-          disabled={loading}
+          disabled={loading || !device}
 
-          onPress={generate}
+          onPress={() => void generate()}
 
           style={[
             styles.button,
@@ -511,10 +649,13 @@ export default function DeviceConnectionCodeScreen(){
 
         <Text style={styles.note}>
 
-          Enter this code on the SafeTrack
-          smartwatch application.
-          After successful pairing, the device
-          will appear as connected.
+          {
+            isPhone
+            ?
+            "On the child's phone, open SafeTrack, tap \"Using a child's phone? Link child device\" on the login screen, and enter this code within 10 minutes."
+            :
+            "Enter this code on the SafeTrack smartwatch application within 10 minutes. After successful pairing, the device will appear as connected."
+          }
 
         </Text>
 
@@ -628,6 +769,43 @@ childName:{
 source:{
   marginTop:5,
   color:colors.muted,
+},
+
+
+devices:{
+  marginTop:20,
+  padding:4,
+  flexDirection:"row",
+  borderRadius:radius.md,
+  backgroundColor:colors.surfaceMuted,
+},
+
+
+deviceOption:{
+  flex:1,
+  minHeight:44,
+  flexDirection:"row",
+  alignItems:"center",
+  justifyContent:"center",
+},
+
+
+deviceOptionSelected:{
+  backgroundColor:colors.white,
+  borderRadius:radius.sm,
+  ...shadow.soft,
+},
+
+
+deviceOptionText:{
+  marginLeft:6,
+  color:colors.muted,
+  fontWeight:"800",
+},
+
+
+deviceOptionTextSelected:{
+  color:colors.primaryDark,
 },
 
 
