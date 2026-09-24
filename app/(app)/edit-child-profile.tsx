@@ -97,11 +97,16 @@ export default function EditChildProfileScreen() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
 
+  /** Watch ID field; linkedWatchId is what the server has linked. */
   const [watchId, setWatchId] = useState("");
+  const [linkedWatchId, setLinkedWatchId] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [openingConnectionCode, setOpeningConnectionCode] = useState(false);
+  const [unlinkingWatch, setUnlinkingWatch] = useState(false);
+
+  const busy = saving || openingConnectionCode || unlinkingWatch;
 
   /**
    * ----------------------------------------------------------
@@ -213,6 +218,7 @@ export default function EditChildProfileScreen() {
       }
 
       setWatchId(watch?.watch_id ?? "");
+      setLinkedWatchId(watch?.watch_id ?? "");
     } catch (reason) {
       const message =
         reason instanceof Error
@@ -341,6 +347,75 @@ export default function EditChildProfileScreen() {
 
   /**
    * ----------------------------------------------------------
+   * UNLINK WATCH FROM CHILD
+   * ----------------------------------------------------------
+   */
+  const unlinkWatch = async () => {
+    if (!childId) {
+      return;
+    }
+
+    setUnlinkingWatch(true);
+
+    try {
+      /**
+       * Server-side, like linking. The watch loses its
+       * device token and returns to its connection screen.
+       */
+      const {
+        error: unlinkError,
+      } = await supabase.rpc(
+        "unlink_watch_from_my_child",
+        {
+          p_child_id: childId,
+        }
+      );
+
+      if (unlinkError) {
+        throw new Error(unlinkError.message);
+      }
+
+      setLinkedWatchId("");
+      setWatchId("");
+
+      Alert.alert(
+        "Watch unlinked",
+        "Enter a new Watch ID and save to link another smartwatch."
+      );
+    } catch (reason) {
+      Alert.alert(
+        "Unable to unlink watch",
+        reason instanceof Error
+          ? reason.message
+          : "Please try again."
+      );
+    } finally {
+      setUnlinkingWatch(false);
+    }
+  };
+
+  const confirmUnlinkWatch = () => {
+    Alert.alert(
+      "Unlink watch?",
+      `${linkedWatchId} will stop tracking ${name.trim() || "this child"}. To use it again, link it and enter a new connection code on the watch.`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Unlink",
+          style: "destructive",
+          onPress: () => {
+            void unlinkWatch();
+          },
+        },
+      ]
+    );
+  };
+
+  /**
+   * ----------------------------------------------------------
    * SAVE CHILD PROFILE
    * ----------------------------------------------------------
    */
@@ -410,6 +485,7 @@ export default function EditChildProfileScreen() {
         );
 
         setWatchId(normalizedWatchId);
+        setLinkedWatchId(normalizedWatchId);
       }
 
       /**
@@ -585,8 +661,8 @@ export default function EditChildProfileScreen() {
               </Text>
 
               <Text style={styles.photoText}>
-                {watchId
-                  ? `Watch ${watchId} is linked`
+                {linkedWatchId
+                  ? `Watch ${linkedWatchId} is linked`
                   : "Tap the photo to choose an image."}
               </Text>
             </View>
@@ -763,12 +839,62 @@ export default function EditChildProfileScreen() {
             </Text>
           </View>
 
+          {/* LINKED WATCH */}
+
+          {linkedWatchId ? (
+            <View style={styles.linkedWatch}>
+              <Ionicons
+                name="watch-outline"
+                size={21}
+                color={colors.primary}
+              />
+
+              <View style={styles.linkedWatchCopy}>
+                <Text style={styles.linkedWatchLabel}>
+                  Linked watch
+                </Text>
+
+                <Text
+                  style={styles.linkedWatchId}
+                  numberOfLines={1}
+                >
+                  {linkedWatchId}
+                </Text>
+              </View>
+
+              <Pressable
+                disabled={busy}
+                onPress={confirmUnlinkWatch}
+                style={({ pressed }) => [
+                  styles.unlinkButton,
+                  pressed &&
+                    styles.connectionButtonPressed,
+                  busy &&
+                    styles.connectionButtonDisabled,
+                ]}
+              >
+                {unlinkingWatch ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={colors.danger}
+                  />
+                ) : (
+                  <Text style={styles.unlinkButtonText}>
+                    Unlink
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          ) : null}
+
           {usesWatch(trackingSource) ? (
           <>
           {/* WATCH ID */}
 
           <Text style={styles.label}>
-            Watch ID
+            {linkedWatchId
+              ? "Link a different watch"
+              : "Watch ID"}
           </Text>
 
           <View style={styles.inputShell}>
@@ -799,6 +925,9 @@ export default function EditChildProfileScreen() {
             Enter the Watch ID displayed by
             SafeTrack on the child&apos;s Wear OS
             smartwatch.
+            {linkedWatchId
+              ? " Saving a different ID replaces the linked watch, and the new watch needs a connection code."
+              : ""}
           </Text>
 
           {/* WATCH CONNECTION */}
@@ -834,10 +963,7 @@ export default function EditChildProfileScreen() {
             </View>
 
             <Pressable
-              disabled={
-                saving ||
-                openingConnectionCode
-              }
+              disabled={busy}
               onPress={() =>
                 void saveChildProfile({
                   openConnection: "watch",
@@ -847,8 +973,7 @@ export default function EditChildProfileScreen() {
                 styles.connectionButton,
                 pressed &&
                   styles.connectionButtonPressed,
-                (saving ||
-                  openingConnectionCode) &&
+                busy &&
                   styles.connectionButtonDisabled,
               ]}
             >
@@ -917,10 +1042,7 @@ export default function EditChildProfileScreen() {
               </View>
 
               <Pressable
-                disabled={
-                  saving ||
-                  openingConnectionCode
-                }
+                disabled={busy}
                 onPress={() =>
                   void saveChildProfile({
                     openConnection: "phone",
@@ -930,8 +1052,7 @@ export default function EditChildProfileScreen() {
                   styles.connectionButton,
                   pressed &&
                     styles.connectionButtonPressed,
-                  (saving ||
-                    openingConnectionCode) &&
+                  busy &&
                     styles.connectionButtonDisabled,
                 ]}
               >
@@ -971,6 +1092,7 @@ export default function EditChildProfileScreen() {
               void saveChildProfile()
             }
             loading={saving}
+            disabled={busy}
             style={styles.save}
           />
         </ScrollView>
@@ -1162,6 +1284,53 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     marginLeft: 9,
+  },
+
+  linkedWatch: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+    marginTop: 14,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.white,
+    ...shadow.soft,
+  },
+
+  linkedWatchCopy: {
+    flex: 1,
+    marginLeft: 12,
+  },
+
+  linkedWatchLabel: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  linkedWatchId: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "900",
+    marginTop: 2,
+  },
+
+  unlinkButton: {
+    minWidth: 82,
+    minHeight: 38,
+    paddingHorizontal: 14,
+    borderRadius: radius.pill,
+    backgroundColor: colors.dangerSoft,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 10,
+  },
+
+  unlinkButtonText: {
+    color: colors.danger,
+    fontSize: 13,
+    fontWeight: "900",
   },
 
   watchHelp: {

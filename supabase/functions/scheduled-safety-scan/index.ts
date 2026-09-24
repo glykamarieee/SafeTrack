@@ -1,5 +1,6 @@
 import { json, options } from "../_shared/response.ts";
 import { serviceClient } from "../_shared/supabase.ts";
+import { reviewAnomaly } from "../_shared/anomaly.ts";
 
 function seconds(value: string | undefined, fallback: number) {
   const parsed = Number(value ?? fallback);
@@ -93,7 +94,7 @@ Deno.serve(async (request: Request) => {
     const { data: devices, error } = await supabase
       .from("smartwatch_devices")
       .select(
-        "id, watch_id, child_id, is_active, last_seen_at, last_location_at",
+        "id, watch_id, child_id, is_active, last_seen_at, last_location_at, last_ai_review_at",
       )
       .eq("is_active", true)
       .not("child_id", "is", null);
@@ -102,6 +103,7 @@ Deno.serve(async (request: Request) => {
 
     let disconnected = 0;
     let inactivity = 0;
+    let aiReviewed = 0;
 
     for (const device of devices ?? []) {
       const { data: child, error: childError } = await supabase
@@ -111,6 +113,46 @@ Deno.serve(async (request: Request) => {
         .maybeSingle();
 
       if (childError || !child) continue;
+
+      // Advisory AI review of the newest watch location. The watch now reports
+      // through database functions, which cannot call the AI service, so the
+      // review runs here once per new location.
+      if (
+        device.last_location_at &&
+        (!device.last_ai_review_at ||
+          new Date(device.last_location_at).getTime() >
+            new Date(device.last_ai_review_at).getTime())
+      ) {
+        try {
+          const { data: latest } = await supabase
+            .from("location_logs")
+            .select("id, latitude, longitude, recorded_at")
+            .eq("child_id", child.id)
+            .eq("source", "smartwatch")
+            .order("recorded_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (latest) {
+            await reviewAnomaly({
+              supabase,
+              childId: child.id,
+              locationLogId: latest.id,
+              latitude: Number(latest.latitude),
+              longitude: Number(latest.longitude),
+              recordedAt: latest.recorded_at,
+            });
+            aiReviewed += 1;
+          }
+
+          await supabase
+            .from("smartwatch_devices")
+            .update({ last_ai_review_at: new Date().toISOString() })
+            .eq("id", device.id);
+        } catch (aiError) {
+          console.error("[scheduled-safety-scan] AI review failed", aiError);
+        }
+      }
 
       const lastSeenMs = device.last_seen_at
         ? new Date(device.last_seen_at).getTime()
@@ -164,6 +206,7 @@ Deno.serve(async (request: Request) => {
       scanned: devices?.length ?? 0,
       disconnectedEventsCreated: disconnected,
       inactivityEventsCreated: inactivity,
+      aiReviews: aiReviewed,
     });
   } catch (error) {
     console.error("[scheduled-safety-scan]", error);

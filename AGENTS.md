@@ -15,7 +15,7 @@ Child-safety tracking app. Three kinds of user:
 - **Guardian**: registers children, sees their location, safe zones and SOS alerts.
 - **Administrator**: manages guardians and smartwatches.
 - **Child**: tracked through a Wear OS **smartwatch** (separate app, not in this
-  repo), an Android/iOS **phone** running this app in child mode, or both.
+  repo: `D:\Projects\SafeTrackWatch`, Kotlin + Compose for Wear OS), an Android/iOS **phone** running this app in child mode, or both.
 
 Stack: Expo 57 / React Native 0.86 / expo-router, Zustand stores, Supabase
 (Postgres, Auth, Storage, Edge Functions). Supabase project ref `evffpbkxnjpizwqsrlqx`.
@@ -70,7 +70,7 @@ Key RPCs:
 - **Guardian:**
   - `ensure_guardian_profile`, `update_my_person_profile`
   - `register_my_child`, `update_my_child_profile`, `delete_my_child`
-  - `link_watch_to_my_child`
+  - `link_watch_to_my_child`, `unlink_watch_from_my_child`
   - `generate_watch_pairing_code`, `generate_child_phone_code`
   - `register_my_push_token`
   - `get_my_child_safety_timeline`, `acknowledge_my_sos_alert`
@@ -80,35 +80,66 @@ Key RPCs:
   - `record_child_phone_location`
   - `trigger_child_phone_sos`, `realert_child_phone_sos`
   - `unlink_child_phone`
+- **Smartwatch** (callable by `anon`; authenticated by Watch ID + device token inside
+  the function; `20260929_watch_rpc.sql`):
+  - `pair_watch`
+  - `record_watch_heartbeat`, `record_watch_location`
+  - `trigger_watch_sos`
 - **Admin:**
   - `get_admin_summary_metrics`
   - `get_admin_guardian_accounts`, `get_admin_guardian_detail`, `update_admin_guardian_account_status`
   - `get_admin_smartwatch_devices`, `get_admin_smartwatch_device_detail`, `update_admin_smartwatch_device_status`
   - `get_admin_report_summary`
 - **Internal / service role:**
-  - `create_child_person`
+  - `create_child_person`, `find_or_register_watch`
+  - `watch_device`, `touch_watch`, `insert_watch_location`
   - `process_safe_zone_events`, `safe_zone_status`
   - `send_guardian_push`
 
 Only these **edge functions** remain, each for a reason SQL cannot cover:
 
-- `watch-pair`, `watch-ingest`: HTTP API for the Wear OS watch (headers
-  `x-watch-id` + `x-device-token`). Their request/response shape is a contract with
-  the watch app: do not change it casually.
 - `generate-report`, `anomaly-detection` (calls an external AI service).
-- `sos-realert`, `scheduled-safety-scan`: scheduled jobs (`x-cron-secret`).
+- `sos-realert`, `scheduled-safety-scan`: scheduled jobs (`x-cron-secret`). The scan
+  also runs the advisory AI review of each watch's newest location (tracked by
+  `smartwatch_devices.last_ai_review_at`), since the watch functions cannot call it.
+- **Legacy, unused:** `watch-pair`, `watch-ingest`. The watch app switched to the
+  smartwatch database functions; delete these once no deployed watch app uses them
+  (`npx supabase functions delete <name>`). Device tokens use the same hash, so
+  watches paired through them keep working.
 
 ## Devices and pairing
 
 - **Watch:** a guardian links a Watch ID (`link_watch_to_my_child`), generates a
   6-digit code (`generate_watch_pairing_code`, hash stored in
-  `smartwatch_devices.pairing_code_hash`), and the watch redeems it at `watch-pair`
+  `smartwatch_devices.pairing_code_hash`), and the watch redeems it with `pair_watch`
   for a device token. One watch per child (`smartwatch_devices.child_id` is unique).
+  Linking a different Watch ID releases the old watch; `unlink_watch_from_my_child`
+  releases it with no replacement. Both clear the released watch's device token, so
+  it gets a 403 and returns to its connection screen.
 - **Child phone:** a guardian generates a code (`generate_child_phone_code`, stored in
   `child_mobile_devices`); the phone redeems the code alone with `pair_child_phone`
   and stores `{childId, deviceToken}` in AsyncStorage (`services/childMobileService.ts`).
   An invalid or revoked token raises SQLSTATE `28000`, and the app then returns to the
   link screen.
+- **Watch API contract** (the smartwatch functions above; the Wear OS app calls them
+  with the publishable key and named `p_*` parameters, so renaming a parameter
+  breaks deployed watches): every call takes optional `p_battery_percent`,
+  `p_network_type` (`Wi-Fi | LTE | No network | Unknown`) and `p_device_model`,
+  stored on `smartwatch_devices`. Location inserts advance `last_location_at` (never
+  backwards). A `trigger_watch_sos` whose `p_triggered_at` matches an existing alert
+  for the child returns that alert (`duplicate: true`) instead of inserting: the
+  watch resends a pending SOS until it gets an answer. Heartbeat and location return
+  `safeZone` = `safe_zone_status()`. Failures carry a machine-readable `HINT`
+  (`watch_not_registered`, `watch_not_linked`, `no_active_code`, `code_expired`,
+  `code_invalid`, `invalid_location`, `device_unlinked`) that the watch maps to its
+  messages. Only SQLSTATE `28000` (`device_unlinked`) makes the watch drop its token
+  and return to its connection screen.
+- **Watch IDs** are `ST-WATCH-` + 8 characters, derived on the watch and shown on
+  its connection screen (alphabet `23456789ABCDEFGHJKMNPQRSTUVWXYZ`). The first
+  time a guardian links or registers a child with an unknown ID in that format,
+  `find_or_register_watch` creates its `smartwatch_devices` row. Rows are never
+  created from the watch side. Linking alone gives no data access: the watch must
+  still redeem a connection code.
 - **Watch codes and phone codes are different things.** A watch code cannot link a
   phone. The phone code comes from Edit Child Profile, "Generate Child Phone
   Connection Code" (tracking source Phone or Both).
@@ -169,10 +200,14 @@ EAS project ID is configured.
 
 - Phone pairing codes are 6 digits and `pair_child_phone` is public: brute force
   within the 10-minute window is possible. Consider longer codes or attempt limits.
+  `pair_watch` has the same exposure, limited to a known Watch ID.
 - The child-phone device token is stored unencrypted (AsyncStorage);
   `expo-secure-store` is not installed.
 - Child phones only send location when the child taps "Send latest location";
   there is no background tracking.
+- Because linking registers unknown Watch IDs, a guardian can claim a well-formed
+  ID before its real owner does, and the owner then sees "already linked to
+  another child profile". An admin must resolve it.
 - `anomaly_events` has an INSERT policy of `true` for `public`.
 - The app calls `trigger_my_test_sos_alert` and `resolve_my_sos_alert`, which do not
   exist in the database.
