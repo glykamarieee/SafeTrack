@@ -5,529 +5,387 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
-
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAuthStore } from "../../store/authStore";
 import { useLocationStore } from "../../store/locationStore";
-
 import { LocationMapCard } from "../../components/location/LocationMapCard";
 
 import {
-  safeTrackColors as colors,
-  safeTrackSpacing as spacing,
-  safeTrackRadius as radius,
-  safeTrackShadow as shadow,
-} from "../../constants/safeTrackDesign";
+  guardianColors as colors,
+  guardianSpacing as spacing,
+  guardianRadius as radius,
+  guardianShadow as shadow,
+} from "../../constants/guardianDesign";
 
-
-function getSourceLabel(source?: string){
-
-  if(source==="mobile"){
-    return "Mobile Device";
-  }
-
-  if(source==="both"){
-    return "Smartwatch + Mobile";
-  }
-
+function getSourceLabel(source?: string) {
+  if (source === "mobile") return "Mobile device";
+  if (source === "both") return "Smartwatch + mobile";
   return "Smartwatch";
 }
 
-
-
-function getSourceIcon(source?: string){
-
-  if(source==="mobile"){
-    return "phone-portrait-outline";
-  }
-
-  if(source==="both"){
-    return "git-compare-outline";
-  }
-
+function getSourceIcon(source?: string): keyof typeof Ionicons.glyphMap {
+  if (source === "mobile") return "phone-portrait-outline";
+  if (source === "both") return "git-compare-outline";
   return "watch-outline";
 }
 
-
-
-export default function LocationScreen(){
-
-  const role =
-    useAuthStore(
-      state=>state.role
-    );
-
-
-  const child =
-    useAuthStore(
-      state=>state.child
-    );
-
-
-  const children =
-    useAuthStore(
-      state=>state.linkedChildren
-    );
-
-
-  const primaryChild =
-    role==="child"
-      ? child
-      : children?.[0] ?? null;
-
-
-
-  const location =
-    useLocationStore(
-      state=>state.latest
-    );
-
-
-  const loading =
-    useLocationStore(
-      state=>state.isLoading
-    );
-
-
-  const load =
-    useLocationStore(
-      state=>state.loadForChild
-    );
-
-
-
-  const trackingSource =
-    primaryChild?.trackingSource ?? "mobile";
-
-
-
-  useEffect(()=>{
-
-    if(primaryChild?.id){
-
-      void load(
-        primaryChild.id
-      );
-
-    }
-
-  },[
-    primaryChild?.id
-  ]);
-
-
-
-
-  return(
-
-    <SafeAreaView
-      style={styles.safe}
-      edges={[
-        "top",
-        "left",
-        "right"
-      ]}
-    >
-
-
-      <ScrollView
-
-        showsVerticalScrollIndicator={false}
-
-        contentContainerStyle={
-          styles.content
-        }
-
-      >
-
-
-
-        <View style={styles.header}>
-
-
-          <View>
-
-            <Text style={styles.eyebrow}>
-              LOCATION TRACKING
-            </Text>
-
-
-            <Text style={styles.heading}>
-
-              {
-                primaryChild?.fullName ??
-                "Child"
-              }
-              's Location
-
-            </Text>
-
-
-            <Text style={styles.subtitle}>
-
-              View the latest available location
-              based on the registered tracking source.
-
-            </Text>
-
-
-          </View>
-
-
-
-          <Pressable
-
-            style={styles.refresh}
-
-            onPress={()=>{
-
-              if(primaryChild?.id){
-
-                void load(
-                  primaryChild.id
-                );
-
-              }
-
-            }}
-
-          >
-
-            <Ionicons
-
-              name={
-                loading
-                ?
-                "sync-outline"
-                :
-                "refresh-outline"
-              }
-
-              size={21}
-
-              color={
-                colors.primaryDark
-              }
-
-            />
-
-          </Pressable>
-
-
-        </View>
-
-
-
-
-
-        <View style={styles.sourceCard}>
-
-
-          <Ionicons
-
-            name={
-              getSourceIcon(
-                trackingSource
-              )
-            }
-
-            size={25}
-
-            color={
-              colors.primary
-            }
-
-          />
-
-
-          <View style={styles.sourceContent}>
-
-
-            <Text style={styles.sourceTitle}>
-
-              Tracking Source
-
-            </Text>
-
-
-
-            <Text style={styles.sourceValue}>
-
-              {
-                getSourceLabel(
-                  trackingSource
-                )
-              }
-
-            </Text>
-
-
-          </View>
-
-
-        </View>
-
-
-
-
-
-
-        <LocationMapCard
-
-          location={
-            location
-          }
-
-          height={
-            510
-          }
-
-          loading={
-            loading
-          }
-
-          onRefresh={()=>{
-
-            if(primaryChild?.id){
-
-              void load(
-                primaryChild.id
-              );
-
-            }
-
-          }}
-
-        />
-
-
-
-
-
-
-        <View style={styles.note}>
-
-
-          <View style={styles.info}>
-
-            <Text style={styles.infoText}>
-              i
-            </Text>
-
-          </View>
-
-
-
-          <Text style={styles.noteText}>
-
-            {
-              location
-              ?
-
-              "The marker represents the latest successfully stored location record."
-
-              :
-
-              "A location marker appears after the registered child device sends a location update."
-
-            }
-
-
-          </Text>
-
-
-        </View>
-
-
-
-      </ScrollView>
-
-
-    </SafeAreaView>
-
-  );
-
+function formatTimestamp(value?: string | null) {
+  if (!value) return "No location record yet";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Latest stored location";
+  return new Intl.DateTimeFormat("en-PH", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
+export default function LocationScreen() {
+  const { width } = useWindowDimensions();
+  const wide = width >= 1040;
+  const role = useAuthStore((state) => state.role);
+  const child = useAuthStore((state) => state.child);
+  const children = useAuthStore((state) => state.linkedChildren);
 
+  const primaryChild = role === "child" ? child : children?.[0] ?? null;
 
+  const location = useLocationStore((state) => state.latest);
+  const loading = useLocationStore((state) => state.isLoading);
+  const load = useLocationStore((state) => state.loadForChild);
+
+  const trackingSource = primaryChild?.trackingSource ?? "mobile";
+  const supportedTrackingSource =
+    trackingSource === "mobile" || trackingSource === "both"
+      ? trackingSource
+      : "smartwatch";
+
+  useEffect(() => {
+    if (primaryChild?.id) {
+      void load(primaryChild.id);
+    }
+  }, [primaryChild?.id]);
+
+  const refresh = () => {
+    if (primaryChild?.id) {
+      void load(primaryChild.id);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.content}
+      >
+        <View style={styles.header}>
+          <View style={styles.headerCopy}>
+            <Text style={styles.eyebrow}>LOCATION TRACKING</Text>
+            <Text style={styles.heading}>
+              {primaryChild?.fullName ?? "Child"}'s location
+            </Text>
+            <Text style={styles.subtitle}>
+              Latest available position from the registered SafeTrack child device.
+            </Text>
+          </View>
+
+          <Pressable
+            accessibilityLabel="Refresh latest location"
+            onPress={refresh}
+            style={({ pressed }) => [styles.refresh, pressed && styles.pressed]}
+          >
+            <Ionicons
+              name={loading ? "sync-outline" : "refresh-outline"}
+              size={20}
+              color={colors.primaryDark}
+            />
+          </Pressable>
+        </View>
+
+        <View style={styles.sourceRibbon}>
+          <View style={styles.sourceIcon}>
+            <Ionicons
+              name={getSourceIcon(trackingSource)}
+              size={20}
+              color={colors.primaryDark}
+            />
+          </View>
+
+          <View style={styles.sourceCopy}>
+            <Text style={styles.sourceLabel}>Tracking source</Text>
+            <Text style={styles.sourceValue}>{getSourceLabel(trackingSource)}</Text>
+          </View>
+
+          <View style={styles.liveChip}>
+            <View style={styles.liveDot} />
+            <Text style={styles.liveChipText}>{location ? "RECEIVED" : "WAITING"}</Text>
+          </View>
+        </View>
+
+        <View style={styles.mapHeaderRow}>
+          <View>
+            <Text style={styles.mapTitle}>Explore the latest position</Text>
+            <Text style={styles.mapCaption}>Pinch, zoom, switch map style, or recenter.</Text>
+          </View>
+          <View style={styles.mapHintIcon}>
+            <Ionicons name="map-outline" size={18} color={colors.primaryDark} />
+          </View>
+        </View>
+
+        <LocationMapCard
+          location={location}
+          height={wide ? 650 : 560}
+          loading={loading}
+          trackingSource={supportedTrackingSource}
+          onRefresh={refresh}
+        />
+
+        <View style={styles.metaRail}>
+          <View style={styles.metaItem}>
+            <Ionicons name="time-outline" size={17} color={colors.primaryDark} />
+            <View style={styles.metaCopy}>
+              <Text style={styles.metaLabel}>Last update</Text>
+              <Text numberOfLines={1} style={styles.metaValue}>
+                {formatTimestamp(location?.recordedAt)}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.metaDivider} />
+
+          <View style={styles.metaItem}>
+            <Ionicons name="locate-outline" size={17} color={colors.primaryDark} />
+            <View style={styles.metaCopy}>
+              <Text style={styles.metaLabel}>Accuracy</Text>
+              <Text style={styles.metaValue}>
+                {location?.accuracyMeters != null
+                  ? `±${Math.round(location.accuracyMeters)} m`
+                  : "Not provided"}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.notice}>
+          <View style={styles.noticeIcon}>
+            <Ionicons name="information" size={15} color={colors.primaryDark} />
+          </View>
+          <Text style={styles.noticeText}>
+            SafeTrack shows the latest successfully stored device location. GPS/GNSS,
+            connectivity, permissions, and device availability can affect when the next
+            update appears.
+          </Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
 
 const styles = StyleSheet.create({
-
-  safe:{
-    flex:1,
-    backgroundColor:
-      colors.background,
+  safe: {
+    flex: 1,
+    backgroundColor: colors.background,
   },
-
-
-  content:{
-    paddingHorizontal:
-      spacing.lg,
-
-    paddingTop:
-      35,
-
-    paddingBottom:
-      35,
+  content: {
+    width: "100%",
+    maxWidth: 1160,
+    alignSelf: "center",
+    paddingHorizontal: spacing.lg,
+    paddingTop: 28,
+    paddingBottom: 118,
   },
-
-
-  header:{
-    flexDirection:"row",
-    justifyContent:"space-between",
-    marginBottom:18,
+  header: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: 20,
   },
-
-
-  eyebrow:{
-    color:
-      colors.primary,
-
-    fontSize:10.5,
-
-    fontWeight:"900",
-
-    letterSpacing:1.4,
+  headerCopy: {
+    flex: 1,
+    paddingRight: 12,
   },
-
-
-  heading:{
-    color:
-      colors.ink,
-
-    fontSize:27,
-
-    fontWeight:"900",
-
-    marginTop:6,
+  eyebrow: {
+    color: colors.primary,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.45,
   },
-
-
-  subtitle:{
-    color:
-      colors.muted,
-
-    fontSize:12.5,
-
-    lineHeight:18,
-
-    marginTop:5,
-
-    maxWidth:280,
+  heading: {
+    marginTop: 6,
+    color: colors.ink,
+    fontSize: 28,
+    lineHeight: 33,
+    fontWeight: "900",
+    letterSpacing: -0.7,
   },
-
-
-  refresh:{
-    width:43,
-    height:43,
-
-    borderRadius:22,
-
-    justifyContent:"center",
-
-    alignItems:"center",
-
-    backgroundColor:
-      colors.softMint,
+  subtitle: {
+    maxWidth: 320,
+    marginTop: 6,
+    color: colors.muted,
+    fontSize: 12.5,
+    lineHeight: 18,
   },
-
-
-  sourceCard:{
-    flexDirection:"row",
-
-    alignItems:"center",
-
-    padding:16,
-
-    borderRadius:
-      radius.md,
-
-    backgroundColor:
-      colors.white,
-
-    marginBottom:16,
-
+  refresh: {
+    width: 46,
+    height: 46,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
     ...shadow.soft,
   },
-
-
-  sourceContent:{
-    marginLeft:12,
+  sourceRibbon: {
+    minHeight: 70,
+    paddingHorizontal: 13,
+    borderRadius: 23,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.soft,
   },
-
-
-  sourceTitle:{
-    color:
-      colors.muted,
-
-    fontSize:11,
-
-    fontWeight:"900",
+  sourceIcon: {
+    width: 43,
+    height: 43,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.softMint,
   },
-
-
-  sourceValue:{
-    color:
-      colors.ink,
-
-    fontSize:16,
-
-    fontWeight:"900",
-
-    marginTop:3,
+  sourceCopy: {
+    flex: 1,
+    marginLeft: 11,
   },
-
-
-  note:{
-    flexDirection:"row",
-
-    marginTop:16,
-
-    alignItems:"flex-start",
+  sourceLabel: {
+    color: colors.muted,
+    fontSize: 9.5,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.75,
   },
-
-
-  info:{
-    width:20,
-
-    height:20,
-
-    borderRadius:10,
-
-    justifyContent:"center",
-
-    alignItems:"center",
-
-    backgroundColor:
-      colors.softMint,
+  sourceValue: {
+    marginTop: 3,
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "900",
   },
-
-
-  infoText:{
-    color:
-      colors.primaryDark,
-
-    fontSize:12,
-
-    fontWeight:"900",
+  liveChip: {
+    minHeight: 30,
+    paddingHorizontal: 10,
+    borderRadius: radius.pill,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surfaceMuted,
   },
-
-
-  noteText:{
-    flex:1,
-
-    color:
-      colors.muted,
-
-    fontSize:12.5,
-
-    lineHeight:18,
-
-    marginLeft:9,
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 6,
+    backgroundColor: colors.primary,
   },
-
+  liveChipText: {
+    color: colors.primaryDark,
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+  mapHeaderRow: {
+    marginTop: 24,
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  mapTitle: {
+    color: colors.ink,
+    fontSize: 17,
+    fontWeight: "900",
+  },
+  mapCaption: {
+    marginTop: 3,
+    color: colors.muted,
+    fontSize: 10.5,
+  },
+  mapHintIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.softMint,
+  },
+  metaRail: {
+    minHeight: 78,
+    marginTop: 14,
+    paddingHorizontal: 13,
+    borderRadius: 22,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  metaItem: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  metaCopy: {
+    flex: 1,
+    minWidth: 0,
+    marginLeft: 8,
+  },
+  metaLabel: {
+    color: colors.muted,
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
+  metaValue: {
+    marginTop: 3,
+    color: colors.ink,
+    fontSize: 10.5,
+    fontWeight: "800",
+  },
+  metaDivider: {
+    width: 1,
+    height: 40,
+    marginHorizontal: 10,
+    backgroundColor: colors.border,
+  },
+  notice: {
+    marginTop: 18,
+    paddingHorizontal: 4,
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  noticeIcon: {
+    width: 25,
+    height: 25,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.softMint,
+  },
+  noticeText: {
+    flex: 1,
+    marginLeft: 9,
+    color: colors.muted,
+    fontSize: 10.5,
+    lineHeight: 15.5,
+  },
+  pressed: {
+    opacity: 0.82,
+    transform: [{ scale: 0.985 }],
+  },
 });

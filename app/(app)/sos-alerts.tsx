@@ -48,10 +48,10 @@ import {
 
 
 import {
-  safeTrackColors as colors,
-  safeTrackRadius as radius,
-  safeTrackSpacing as spacing,
-} from "../../constants/safeTrackDesign";
+  guardianColors as colors,
+  guardianRadius as radius,
+  guardianSpacing as spacing,
+} from "../../constants/guardianDesign";
 
 
 
@@ -469,453 +469,233 @@ export default function SosAlertsScreen(){
 
 
   return (
-
-    <SafeAreaView
-      style={styles.safe}
-      edges={[
-        "top",
-        "left",
-        "right"
-      ]}
-    >
-
-
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <ScrollView
         style={styles.flex}
-        contentContainerStyle={
-          styles.content
-        }
+        contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-
-
-
         <View style={styles.header}>
-
-
-          <SafeTrackBackButton/>
-
-
+          <SafeTrackBackButton />
           <View style={styles.headerCopy}>
-
-
-            <Text style={styles.heading}>
-              SOS Alerts
-            </Text>
-
-
+            <Text style={styles.eyebrow}>EMERGENCY MONITORING</Text>
+            <Text style={styles.heading}>SOS alerts</Text>
             <Text style={styles.subtitle}>
-              Child emergency alerts requiring guardian review.
-              {trackingSource === "mobile"
-                ? " Alerts are received from the child's mobile device."
-                : trackingSource === "both"
-                ? " Alerts may be received from smartwatch and mobile sources."
-                : " Alerts are received from the child's smartwatch."}
+              Review confirmed emergency records for {child?.fullName ?? "the selected child"} and acknowledge active alerts through the existing SafeTrack workflow.
             </Text>
-
-
           </View>
-
-
         </View>
 
-
-
-
-
-        <View style={styles.notice}>
-
-
-          <Ionicons
-            name="warning-outline"
-            size={22}
-            color={colors.danger}
-          />
-
-
-          <Text style={styles.noticeText}>
-
-            {
-              activeCount > 0
-              ?
-              `${activeCount} active SOS alert${activeCount>1?"s":""} needs acknowledgment.`
-              :
-              "No active SOS alert currently needs acknowledgment."
-            }
-
-          </Text>
-
-
-        </View>
-
-
-
-
-
-        {
-          loading
-          ?
-
-          <View style={styles.loading}>
-
-            <ActivityIndicator
-              size="large"
-              color={colors.primary}
-            />
-
-          </View>
-
-
-          :
-
-          alerts.length===0
-
-          ?
-
-          <View style={styles.empty}>
-
-
+        <View style={[styles.statusBand, activeCount > 0 && styles.statusBandActive]}>
+          <View style={[styles.statusSymbol, activeCount > 0 && styles.statusSymbolActive]}>
             <Ionicons
-              name="shield-checkmark-outline"
-              size={35}
-              color={colors.primary}
+              name={activeCount > 0 ? "warning-outline" : "shield-checkmark-outline"}
+              size={21}
+              color={activeCount > 0 ? colors.danger : colors.primaryDark}
             />
-
-
-            <Text style={styles.emptyTitle}>
-              No SOS Alerts
-            </Text>
-
-
-            <Text style={styles.emptyText}>
-              No confirmed SOS record has been received.
-            </Text>
-
-
           </View>
+          <View style={styles.statusCopy}>
+            <Text style={[styles.statusTitle, activeCount > 0 && styles.statusTitleActive]}>
+              {activeCount > 0
+                ? `${activeCount} active SOS alert${activeCount > 1 ? "s" : ""}`
+                : "No active SOS requires acknowledgment"}
+            </Text>
+            <Text style={styles.statusText}>
+              {trackingSource === "mobile"
+                ? "SOS records are associated with the child's mobile tracking source."
+                : trackingSource === "both"
+                  ? "SOS records may be associated with the registered smartwatch or mobile source."
+                  : "SOS records are associated with the registered smartwatch."}
+            </Text>
+          </View>
+        </View>
 
+        <View style={styles.listHeader}>
+          <View>
+            <Text style={styles.sectionEyebrow}>ALERT HISTORY</Text>
+            <Text style={styles.sectionTitle}>Recorded SOS activity</Text>
+          </View>
+          <Pressable
+            accessibilityLabel="Refresh SOS alerts"
+            onPress={() => void loadAlerts()}
+            style={({ pressed }) => [styles.refreshAction, pressed && styles.pressed]}
+          >
+            <Ionicons name="refresh-outline" size={17} color={colors.primaryDark} />
+            <Text style={styles.refreshText}>Refresh</Text>
+          </Pressable>
+        </View>
 
-
-          :
-
-
-          alerts.map(
-            alert=>{
-
-
-              const active =
-                alert.status==="active";
-
+        {loading ? (
+          <View style={styles.loading}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={styles.loadingText}>Loading SOS records...</Text>
+          </View>
+        ) : alerts.length === 0 ? (
+          <View style={styles.empty}>
+            <View style={styles.emptyIcon}>
+              <Ionicons name="shield-checkmark-outline" size={25} color={colors.primaryDark} />
+            </View>
+            <View style={styles.emptyCopy}>
+              <Text style={styles.emptyTitle}>No confirmed SOS records</Text>
+              <Text style={styles.emptyText}>SafeTrack has no SOS record to display for this child.</Text>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.timeline}>
+            {alerts.map((alert, index) => {
+              const active = alert.status === "active";
+              const hasLocation = alert.latitude !== null && alert.longitude !== null;
 
               return (
-
                 <View
                   key={alert.id}
-                  style={styles.card}
+                  style={[
+                    styles.alertRow,
+                    active && styles.alertRowActive,
+                    index !== alerts.length - 1 && styles.alertDivider,
+                  ]}
                 >
-
-
-                  <View style={styles.row}>
-
-
-                    <Ionicons
-                      name={
-                        active
-                        ?
-                        "warning-outline"
-                        :
-                        "checkmark-circle-outline"
-                      }
-                      size={25}
-                      color={
-                        active
-                        ?
-                        colors.danger
-                        :
-                        colors.primary
-                      }
-                    />
-
-
-                    <View style={styles.copy}>
-
-
-                      <Text style={styles.title}>
-                        {
-                          alert.is_test
-                          ?
-                          "Test SOS Alert"
-                          :
-                          "SOS Alert"
-                        }
-                      </Text>
-
-
-                      <Text style={styles.time}>
-                        {
-                          displayTime(
-                            alert.triggered_at
-                          )
-                        }
-                      </Text>
-
-
+                  <View style={styles.timelineRail}>
+                    <View style={[styles.timelineDot, active && styles.timelineDotActive]}>
+                      <Ionicons
+                        name={active ? "warning" : "checkmark"}
+                        size={12}
+                        color={active ? colors.white : colors.primaryDark}
+                      />
                     </View>
-
-
+                    {index !== alerts.length - 1 ? <View style={styles.timelineLine} /> : null}
                   </View>
 
+                  <View style={styles.alertContent}>
+                    <View style={styles.alertTopRow}>
+                      <View style={styles.alertTitleWrap}>
+                        <Text style={styles.alertTitle}>
+                          {alert.is_test ? "Test SOS alert" : "SOS alert"}
+                        </Text>
+                        <Text style={styles.alertTime}>{displayTime(alert.triggered_at)}</Text>
+                      </View>
+                      <View style={[styles.alertStatus, active ? styles.alertStatusActive : styles.alertStatusDone]}>
+                        <Text style={[styles.alertStatusText, active && styles.alertStatusTextActive]}>
+                          {active ? "Needs acknowledgment" : "Acknowledged"}
+                        </Text>
+                      </View>
+                    </View>
 
+                    <View style={styles.alertMetaRow}>
+                      <Ionicons name="hand-left-outline" size={15} color={colors.primaryDark} />
+                      <Text style={styles.alertMeta}>{formatMethod(alert.activation_method)}</Text>
+                    </View>
+                    <View style={styles.alertMetaRow}>
+                      <Ionicons name="location-outline" size={15} color={colors.primaryDark} />
+                      <Text style={styles.alertMeta}>
+                        {hasLocation
+                          ? `${alert.latitude!.toFixed(5)}, ${alert.longitude!.toFixed(5)}`
+                          : "Location unavailable"}
+                      </Text>
+                    </View>
 
-
-                  <Text style={styles.detail}>
-
-                    Location ({trackingSource === "mobile"
-                      ? "Mobile"
-                      : trackingSource === "both"
-                      ? "Smartwatch + Mobile"
-                      : "Smartwatch"}):
-                    {
-                      alert.latitude!==null &&
-                      alert.longitude!==null
-                      ?
-                      ` ${alert.latitude.toFixed(5)}, ${alert.longitude.toFixed(5)}`
-                      :
-                      " unavailable"
-                    }
-
-                  </Text>
-
-
-
-
-                  <Text style={styles.method}>
-                    {formatMethod(alert.activation_method)}
-                  </Text>
-
-
-
-
-                  {
-                    active
-                    ?
-
-                    <SafeTrackButton
-                      label="Acknowledge SOS"
-                      icon="checkmark-circle-outline"
-                      loading={
-                        acknowledging===alert.id
-                      }
-                      onPress={()=>
-                        void acknowledge(alert)
-                      }
-                    />
-
-                    :
-
-                    <Text style={styles.done}>
-                      SOS acknowledged
-                    </Text>
-
-                  }
-
-
+                    {active ? (
+                      <View style={styles.acknowledgeWrap}>
+                        <SafeTrackButton
+                          label="Acknowledge SOS"
+                          icon="checkmark-circle-outline"
+                          loading={acknowledging === alert.id}
+                          onPress={() => void acknowledge(alert)}
+                        />
+                      </View>
+                    ) : (
+                      <View style={styles.resolvedLine}>
+                        <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
+                        <Text style={styles.resolvedText}>Acknowledgment recorded</Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
-
               );
-
-
-            }
-          )
-
-        }
-
-
-
+            })}
+          </View>
+        )}
 
         <Pressable
-          onPress={()=>
-            router.push("/safety-center")
-          }
-          style={styles.returnButton}
+          onPress={() => router.push("/safety-center")}
+          style={({ pressed }) => [styles.returnButton, pressed && styles.pressed]}
         >
-
-          <Text style={styles.returnText}>
-            Return to Safety Center
-          </Text>
-
-
-          <Ionicons
-            name="arrow-forward"
-            size={17}
-            color={colors.primaryDark}
-          />
-
+          <Text style={styles.returnText}>Return to Safety Center</Text>
+          <Ionicons name="arrow-forward" size={17} color={colors.primaryDark} />
         </Pressable>
-
-
-
       </ScrollView>
-
-
     </SafeAreaView>
-
   );
-
 }
 
-
-
-
-
-
 const styles = StyleSheet.create({
-
-safe:{
-  flex:1,
-  backgroundColor:colors.background,
-},
-
-flex:{
-  flex:1,
-},
-
-content:{
-  padding:spacing.lg,
-  paddingBottom:40,
-},
-
-
-header:{
-  flexDirection:"row",
-  alignItems:"center",
-},
-
-headerCopy:{
-  marginLeft:14,
-},
-
-
-heading:{
-  fontSize:28,
-  fontWeight:"900",
-  color:colors.ink,
-},
-
-
-subtitle:{
-  marginTop:4,
-  color:colors.muted,
-},
-
-
-notice:{
-  flexDirection:"row",
-  alignItems:"center",
-  marginTop:20,
-  padding:14,
-  borderRadius:radius.md,
-  backgroundColor:"#FFF5F5",
-},
-
-
-noticeText:{
-  flex:1,
-  marginLeft:10,
-  color:colors.muted,
-},
-
-
-loading:{
-  padding:40,
-  alignItems:"center",
-},
-
-
-card:{
-  backgroundColor:colors.white,
-  padding:16,
-  borderRadius:radius.md,
-  marginTop:14,
-},
-
-
-row:{
-  flexDirection:"row",
-  alignItems:"center",
-},
-
-
-copy:{
-  marginLeft:10,
-},
-
-
-title:{
-  fontWeight:"900",
-  color:colors.ink,
-},
-
-
-time:{
-  color:colors.muted,
-  marginTop:3,
-},
-
-
-detail:{
-  marginTop:14,
-  color:colors.muted,
-},
-
-
-method:{
-  marginTop:8,
-  color:colors.primaryDark,
-  fontWeight:"800",
-},
-
-
-done:{
-  marginTop:15,
-  color:colors.primaryDark,
-  fontWeight:"900",
-},
-
-
-empty:{
-  alignItems:"center",
-  padding:40,
-},
-
-
-emptyTitle:{
-  marginTop:10,
-  fontSize:17,
-  fontWeight:"900",
-},
-
-
-emptyText:{
-  marginTop:5,
-  color:colors.muted,
-  textAlign:"center",
-},
-
-
-returnButton:{
-  flexDirection:"row",
-  alignItems:"center",
-  justifyContent:"center",
-  marginTop:20,
-},
-
-
-returnText:{
-  marginRight:5,
-  color:colors.primaryDark,
-  fontWeight:"900",
-},
-
-
+  safe: { flex: 1, backgroundColor: colors.background },
+  flex: { flex: 1 },
+  content: {
+    width: "100%",
+    maxWidth: 1040,
+    alignSelf: "center",
+    padding: spacing.lg,
+    paddingBottom: 72,
+  },
+  header: { flexDirection: "row", alignItems: "flex-start" },
+  headerCopy: { flex: 1, marginLeft: 14, maxWidth: 700 },
+  eyebrow: { fontSize: 9.5, fontWeight: "900", letterSpacing: 1.25, color: colors.primary },
+  heading: { marginTop: 4, fontSize: 28, fontWeight: "900", letterSpacing: -0.7, color: colors.ink },
+  subtitle: { marginTop: 6, color: colors.muted, fontSize: 12.5, lineHeight: 19 },
+  statusBand: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 24,
+    paddingVertical: 15,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: colors.border,
+  },
+  statusBandActive: { borderColor: "#F0C7CB", backgroundColor: colors.dangerSoft, paddingHorizontal: 14, borderRadius: radius.md },
+  statusSymbol: { width: 42, height: 42, borderRadius: 15, backgroundColor: colors.softMint, alignItems: "center", justifyContent: "center" },
+  statusSymbolActive: { backgroundColor: colors.white },
+  statusCopy: { flex: 1 },
+  statusTitle: { color: colors.ink, fontSize: 13, fontWeight: "900" },
+  statusTitleActive: { color: colors.dangerDark },
+  statusText: { color: colors.muted, fontSize: 11.5, lineHeight: 17, marginTop: 3 },
+  listHeader: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 12, marginTop: 28, marginBottom: 10 },
+  sectionEyebrow: { color: colors.primaryDark, fontSize: 9, fontWeight: "900", letterSpacing: 1.05 },
+  sectionTitle: { color: colors.ink, fontSize: 18, fontWeight: "900", marginTop: 3 },
+  refreshAction: { minHeight: 36, flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 9, borderRadius: radius.sm },
+  refreshText: { color: colors.primaryDark, fontSize: 10.5, fontWeight: "900" },
+  loading: { minHeight: 140, alignItems: "center", justifyContent: "center", borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border },
+  loadingText: { color: colors.muted, fontSize: 11.5, marginTop: 8 },
+  empty: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 22, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border },
+  emptyIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: colors.softMint, alignItems: "center", justifyContent: "center" },
+  emptyCopy: { flex: 1 },
+  emptyTitle: { color: colors.ink, fontSize: 13.5, fontWeight: "900" },
+  emptyText: { marginTop: 3, color: colors.muted, fontSize: 11.5, lineHeight: 17 },
+  timeline: { borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border },
+  alertRow: { flexDirection: "row", paddingVertical: 18 },
+  alertRowActive: { backgroundColor: "rgba(253,235,237,0.42)" },
+  alertDivider: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  timelineRail: { width: 34, alignItems: "center" },
+  timelineDot: { width: 24, height: 24, borderRadius: 12, backgroundColor: colors.softMint, alignItems: "center", justifyContent: "center" },
+  timelineDotActive: { backgroundColor: colors.danger },
+  timelineLine: { flex: 1, width: 1, backgroundColor: colors.borderStrong, marginTop: 5, marginBottom: -23 },
+  alertContent: { flex: 1, minWidth: 0, paddingLeft: 5, paddingRight: 4 },
+  alertTopRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10 },
+  alertTitleWrap: { flex: 1 },
+  alertTitle: { color: colors.ink, fontSize: 13.5, fontWeight: "900" },
+  alertTime: { color: colors.muted, fontSize: 10.5, marginTop: 3 },
+  alertStatus: { minHeight: 25, justifyContent: "center", borderRadius: radius.pill, paddingHorizontal: 8 },
+  alertStatusActive: { backgroundColor: colors.dangerSoft },
+  alertStatusDone: { backgroundColor: colors.softMint },
+  alertStatusText: { color: colors.primaryDark, fontSize: 9, fontWeight: "900" },
+  alertStatusTextActive: { color: colors.dangerDark },
+  alertMetaRow: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 10 },
+  alertMeta: { flex: 1, color: colors.muted, fontSize: 11.5 },
+  acknowledgeWrap: { maxWidth: 320, marginTop: 14 },
+  resolvedLine: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 13 },
+  resolvedText: { color: colors.primaryDark, fontSize: 10.5, fontWeight: "800" },
+  returnButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, marginTop: 23, minHeight: 42 },
+  returnText: { color: colors.primaryDark, fontSize: 11.5, fontWeight: "900" },
+  pressed: { opacity: 0.72 },
 });
