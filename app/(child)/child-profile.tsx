@@ -6,742 +6,228 @@ import {
   Text,
   View,
 } from "react-native";
-
 import { useRouter } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 
+import { useChildMobileStore } from "../../store/childMobileStore";
 import {
-  SafeAreaView,
-} from "react-native-safe-area-context";
+  childColors as colors,
+  childRadius as radius,
+  childSpacing as spacing,
+} from "../../constants/childDesign";
 
-import {
-  Ionicons,
-} from "@expo/vector-icons";
-
-
-import {
-  useChildMobileStore,
-} from "../../store/childMobileStore";
-
-
-import {
-  safeTrackColors as colors,
-  safeTrackRadius as radius,
-  safeTrackShadow as shadow,
-  safeTrackSpacing as spacing,
-} from "../../constants/safeTrackDesign";
-
-
-
-
-function sourceLabel(source:string){
-
-  const normalized =
-    source.trim().toLowerCase();
-
-
-
-  if(normalized==="both"){
-
-    return "Smartwatch and child phone";
-
-  }
-
-
-
-  if(normalized==="mobile"){
-
-    return "Child phone";
-
-  }
-
-
-
+function sourceLabel(source: string) {
+  const normalized = source.trim().toLowerCase();
+  if (normalized === "both") return "Smartwatch and child phone";
+  if (normalized === "mobile") return "Child phone";
   return "Smartwatch";
-
 }
 
+export default function ChildProfileScreen() {
+  const router = useRouter();
+  const context = useChildMobileStore((state) => state.context);
+  const disconnect = useChildMobileStore((state) => state.disconnect);
+  const isLoading = useChildMobileStore((state) => state.isLoading);
 
+  if (!context) return null;
 
-
-
-
-export default function ChildProfileScreen(){
-
-
-  const router =
-    useRouter();
-
-
-
-  const context =
-    useChildMobileStore(
-      state=>state.context
-    );
-
-
-
-  const disconnect =
-    useChildMobileStore(
-      state=>state.disconnect
-    );
-
-
-
-  const isLoading =
-    useChildMobileStore(
-      state=>state.isLoading
-    );
-
-
-
-
-
-  if(!context){
-
-    return null;
-
-  }
-
-
-
-
-
-  const removeLink = ()=>{
-
-
+  const removeLink = () => {
     Alert.alert(
-
       "Disconnect child phone?",
-
-
       "This removes Child Dashboard access from this phone. The Guardian must generate a new temporary code before this phone can connect again.",
-
-
       [
-
+        { text: "Cancel", style: "cancel" },
         {
-          text:"Cancel",
-          style:"cancel",
-        },
-
-
-        {
-
-          text:"Disconnect",
-
-          style:"destructive",
-
-
-          onPress:async()=>{
-
-
-            try{
-
-
-              await disconnect(
-                context.deviceId ?? undefined
-              );
-
-
-              router.replace(
-                "/(auth)/child-device-link" as never
-              );
-
-
-            }
-            catch(error){
-
-
+          text: "Disconnect",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await disconnect(context.deviceId ?? undefined);
+              router.replace("/(auth)/child-device-link" as never);
+            } catch (error) {
               Alert.alert(
-
                 "Unable to disconnect child phone",
-
                 error instanceof Error
-                ?
-                error.message
-                :
-                "SafeTrack could not disconnect this child phone."
-
+                  ? error.message
+                  : "SafeTrack could not disconnect this child phone."
               );
-
-
             }
-
-
           },
-
-
         },
-
-
       ]
-
-
     );
-
-
   };
 
-
-
-
-
-
-
   return (
-
-    <SafeAreaView
-      style={styles.safe}
-      edges={[
-        "top",
-        "left",
-        "right",
-      ]}
-    >
-
-
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <ScrollView
-
-        contentContainerStyle={
-          styles.content
-        }
-
+        contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-
       >
-
-
-
-        <Text style={styles.eyebrow}>
-          CHILD PROFILE
-        </Text>
-
-
-
-        <Text style={styles.title}>
-          My SafeTrack profile
-        </Text>
-
-
-
+        <Text style={styles.eyebrow}>MY SAFETRACK</Text>
+        <Text style={styles.title}>Profile</Text>
         <Text style={styles.subtitle}>
-          Basic child device and linked Guardian information.
+          The child profile and connection details available on this linked phone.
         </Text>
 
-
-
-
-
-
-        <View style={styles.profileCard}>
-
-
+        <View style={styles.identity}>
           <View style={styles.avatar}>
-
-
-            <Text style={styles.avatarText}>
-
-              {
-                context.childName
-                .charAt(0)
-                .toUpperCase()
-              }
-
-            </Text>
-
-
+            <Text style={styles.avatarText}>{context.childName.charAt(0).toUpperCase()}</Text>
           </View>
-
-
-
-
-          <Text style={styles.name}>
-            {context.childName}
-          </Text>
-
-
-
-
-          <View style={styles.linkedPill}>
-
-
-            <Ionicons
-
-              name="shield-checkmark-outline"
-
-              size={16}
-
-              color={colors.primaryDark}
-
-            />
-
-
-            <Text style={styles.linkedText}>
-              LINKED CHILD PHONE
-            </Text>
-
-
+          <View style={styles.identityCopy}>
+            <Text style={styles.name}>{context.childName}</Text>
+            <View style={styles.linkLine}>
+              <View style={styles.linkDot} />
+              <Text style={styles.linkText}>
+                {context.mobileDeviceActive ? "Child phone linked" : "Child phone inactive"}
+              </Text>
+            </View>
           </View>
-
-
-
         </View>
 
-
-
-
-
-
-
-        <Text style={styles.sectionTitle}>
-          LINKED GUARDIAN
-        </Text>
-
-
-
-        <View style={styles.card}>
-
-
-          <Info
-
-            icon="people-outline"
-
-            label="Guardian name"
-
-            value={
-              context.guardianName ??
-              "Not available"
-            }
-
-          />
-
-
-
-          <View style={styles.divider}/>
-
-
-
-          <Info
-
-            icon="mail-outline"
-
-            label="Guardian email"
-
-            value={
-              context.guardianEmail ??
-              "Not available"
-            }
-
-          />
-
-
+        <Text style={styles.sectionLabel}>LINKED GUARDIAN</Text>
+        <View style={styles.openList}>
+          <Info icon="people-outline" label="Guardian name" value={context.guardianName ?? "Not available"} />
+          <View style={styles.divider} />
+          <Info icon="mail-outline" label="Guardian email" value={context.guardianEmail ?? "Not available"} />
         </View>
 
-
-
-
-
-
-
-
-        <Text style={styles.sectionTitle}>
-          REGISTERED DEVICE
-        </Text>
-
-
-
-        <View style={styles.card}>
-
-
+        <Text style={styles.sectionLabel}>THIS DEVICE</Text>
+        <View style={styles.openList}>
+          <Info icon="phone-portrait-outline" label="Tracking source" value={sourceLabel(context.trackingSource)} />
+          <View style={styles.divider} />
           <Info
-
-            icon="phone-portrait-outline"
-
-            label="Tracking source"
-
-            value={
-              sourceLabel(
-                context.trackingSource
-              )
-            }
-
-          />
-
-
-
-          <View style={styles.divider}/>
-
-
-
-          <Info
-
             icon="shield-checkmark-outline"
-
-            label="Child phone status"
-
-            value={
-              context.mobileDeviceActive
-              ?
-              "Active and linked"
-              :
-              "Inactive"
-            }
-
+            label="Connection status"
+            value={context.mobileDeviceActive ? "Active and linked" : "Inactive"}
           />
-
-
-
         </View>
 
-
-
-
-
-
-
-        <View style={styles.note}>
-
-
-          <Ionicons
-
-            name="lock-closed-outline"
-
-            size={19}
-
-            color={colors.primary}
-
-          />
-
-
-          <Text style={styles.noteText}>
-
-            Child access is limited to location updates, safe-zone status, and SOS. Guardian settings, reports, and historical records cannot be edited here.
-
-          </Text>
-
-
+        <View style={styles.scopeNote}>
+          <Ionicons name="lock-closed-outline" size={20} color={colors.brandDeep} />
+          <View style={styles.flex}>
+            <Text style={styles.scopeTitle}>Child access is intentionally limited</Text>
+            <Text style={styles.scopeText}>
+              This phone can send location updates, view basic safe-zone status, and use SOS. Guardian settings, reports, and historical records cannot be edited here.
+            </Text>
+          </View>
         </View>
-
-
-
-
-
-
-
 
         <Pressable
-
+          accessibilityRole="button"
           onPress={removeLink}
-
           disabled={isLoading}
-
-
-          style={({pressed})=>[
-
+          style={({ pressed }) => [
             styles.disconnectButton,
-
-            pressed &&
-            styles.pressed,
-
-
-            isLoading &&
-            styles.disabled,
-
+            pressed && styles.pressed,
+            isLoading && styles.disabled,
           ]}
-
-
         >
-
-
-          <Ionicons
-
-            name="log-out-outline"
-
-            size={21}
-
-            color={colors.danger}
-
-          />
-
-
-          <Text style={styles.disconnectText}>
-            Disconnect child phone
-          </Text>
-
-
+          <Ionicons name="log-out-outline" size={20} color={colors.dangerDeep} />
+          <Text style={styles.disconnectText}>Disconnect this child phone</Text>
         </Pressable>
-
-
-
-
-
       </ScrollView>
-
-
     </SafeAreaView>
-
-
   );
-
 }
-
-
-
-
-
-
 
 function Info({
-
   icon,
-
   label,
-
   value,
-
-}:{
-
-  icon:keyof typeof Ionicons.glyphMap;
-
-  label:string;
-
-  value:string;
-
-}){
-
-
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+}) {
   return (
-
     <View style={styles.info}>
-
-
-      <Ionicons
-
-        name={icon}
-
-        size={20}
-
-        color={colors.primary}
-
-      />
-
-
-
-      <View style={styles.infoCopy}>
-
-
-        <Text style={styles.infoLabel}>
-          {label}
-        </Text>
-
-
-        <Text style={styles.infoValue}>
-          {value}
-        </Text>
-
-
+      <View style={styles.infoIcon}>
+        <Ionicons name={icon} size={20} color={colors.brandDeep} />
       </View>
-
-
+      <View style={styles.flex}>
+        <Text style={styles.infoLabel}>{label}</Text>
+        <Text style={styles.infoValue}>{value}</Text>
+      </View>
     </View>
-
   );
-
-
 }
 
-
-
-
-
-
-
 const styles = StyleSheet.create({
-
-safe:{
-  flex:1,
-  backgroundColor:colors.background,
-},
-
-
-content:{
-  padding:spacing.lg,
-  paddingTop:40,
-  paddingBottom:115,
-},
-
-
-eyebrow:{
-  color:colors.primary,
-  fontSize:10,
-  fontWeight:"900",
-  letterSpacing:1.3,
-},
-
-
-title:{
-  color:colors.ink,
-  fontSize:30,
-  fontWeight:"900",
-  marginTop:5,
-},
-
-
-subtitle:{
-  color:colors.muted,
-  fontSize:13,
-  marginTop:6,
-},
-
-
-profileCard:{
-  alignItems:"center",
-  padding:24,
-  borderRadius:radius.lg,
-  backgroundColor:colors.white,
-  marginTop:23,
-  ...shadow.card,
-},
-
-
-avatar:{
-  width:78,
-  height:78,
-  borderRadius:26,
-  alignItems:"center",
-  justifyContent:"center",
-  backgroundColor:colors.primary,
-},
-
-
-avatarText:{
-  color:colors.white,
-  fontSize:31,
-  fontWeight:"900",
-},
-
-
-name:{
-  color:colors.ink,
-  fontSize:21,
-  fontWeight:"900",
-  marginTop:13,
-},
-
-
-linkedPill:{
-  flexDirection:"row",
-  alignItems:"center",
-  paddingHorizontal:11,
-  paddingVertical:8,
-  borderRadius:radius.pill,
-  backgroundColor:colors.softMint,
-  marginTop:9,
-},
-
-
-linkedText:{
-  color:colors.primaryDark,
-  fontSize:9,
-  fontWeight:"900",
-  marginLeft:5,
-},
-
-
-sectionTitle:{
-  color:colors.muted,
-  fontSize:10,
-  fontWeight:"900",
-  marginTop:22,
-  marginBottom:9,
-},
-
-
-card:{
-  padding:16,
-  borderRadius:radius.md,
-  backgroundColor:colors.white,
-  ...shadow.soft,
-},
-
-
-info:{
-  flexDirection:"row",
-},
-
-
-infoCopy:{
-  flex:1,
-  marginLeft:9,
-},
-
-
-infoLabel:{
-  color:colors.muted,
-  fontSize:10,
-  fontWeight:"800",
-},
-
-
-infoValue:{
-  color:colors.ink,
-  fontSize:12.5,
-  fontWeight:"800",
-  marginTop:2,
-},
-
-
-divider:{
-  height:1,
-  backgroundColor:colors.border,
-  marginVertical:14,
-},
-
-
-note:{
-  flexDirection:"row",
-  padding:15,
-  borderRadius:radius.md,
-  backgroundColor:colors.softMint,
-  marginTop:17,
-},
-
-
-noteText:{
-  flex:1,
-  color:colors.primaryDark,
-  fontSize:11,
-  lineHeight:16,
-  marginLeft:8,
-},
-
-
-disconnectButton:{
-  height:54,
-  flexDirection:"row",
-  justifyContent:"center",
-  alignItems:"center",
-  borderRadius:radius.pill,
-  backgroundColor:colors.dangerSoft,
-  marginTop:18,
-},
-
-
-disconnectText:{
-  color:colors.danger,
-  fontWeight:"900",
-  marginLeft:8,
-},
-
-
-pressed:{
-  opacity:0.8,
-},
-
-
-disabled:{
-  opacity:0.58,
-},
-
-
+  safe: { flex: 1, backgroundColor: colors.canvas },
+  content: {
+    width: "100%",
+    maxWidth: 560,
+    alignSelf: "center",
+    paddingHorizontal: spacing.lg,
+    paddingTop: 28,
+    paddingBottom: 116,
+  },
+  flex: { flex: 1 },
+  eyebrow: { color: colors.brand, fontSize: 10, fontWeight: "900", letterSpacing: 1.4 },
+  title: { color: colors.ink, fontSize: 32, fontWeight: "900", letterSpacing: -0.9, marginTop: 4 },
+  subtitle: { color: colors.muted, fontSize: 13.5, lineHeight: 20, marginTop: 7 },
+  identity: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 27,
+    paddingBottom: 23,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
+  },
+  avatar: {
+    width: 76,
+    height: 76,
+    borderRadius: 27,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.brandDeep,
+    marginRight: 15,
+  },
+  avatarText: { color: colors.white, fontSize: 31, fontWeight: "900" },
+  identityCopy: { flex: 1 },
+  name: { color: colors.ink, fontSize: 23, fontWeight: "900" },
+  linkLine: { flexDirection: "row", alignItems: "center", marginTop: 7 },
+  linkDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.brand, marginRight: 7 },
+  linkText: { color: colors.brandDeep, fontSize: 11.5, fontWeight: "800" },
+  sectionLabel: { color: colors.muted, fontSize: 9.5, fontWeight: "900", letterSpacing: 1.2, marginTop: 25, marginBottom: 5 },
+  openList: { paddingVertical: 2 },
+  info: { flexDirection: "row", alignItems: "center", paddingVertical: 13 },
+  infoIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.brandWash,
+    marginRight: 12,
+  },
+  infoLabel: { color: colors.muted, fontSize: 10, fontWeight: "800" },
+  infoValue: { color: colors.text, fontSize: 13.5, fontWeight: "900", marginTop: 3 },
+  divider: { height: 1, backgroundColor: colors.line, marginLeft: 54 },
+  scopeNote: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginTop: 25,
+    padding: 16,
+    borderRadius: radius.md,
+    backgroundColor: colors.brandWash,
+  },
+  scopeTitle: { color: colors.brandDeep, fontSize: 12.5, fontWeight: "900", marginLeft: 10 },
+  scopeText: { color: colors.text, fontSize: 10.5, lineHeight: 16, marginLeft: 10, marginTop: 3 },
+  disconnectButton: {
+    minHeight: 54,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: "#F0CACA",
+    backgroundColor: colors.surface,
+    marginTop: 22,
+  },
+  disconnectText: { color: colors.dangerDeep, fontSize: 13, fontWeight: "900", marginLeft: 8 },
+  pressed: { opacity: 0.72 },
+  disabled: { opacity: 0.56 },
 });
