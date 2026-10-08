@@ -13,7 +13,7 @@ export function AdminSearchField({
 }) {
   return (
     <View style={styles.root}>
-      <Ionicons name="search-outline" size={18} color={colors.muted} />
+      <Ionicons name="search-outline" size={18} color={colors.primaryDark} />
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -24,21 +24,22 @@ export function AdminSearchField({
         autoCorrect={false}
         accessibilityLabel={placeholder}
       />
+      {value.trim() ? <View style={styles.activeMarker} /> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: {
-    minHeight: 44,
+    minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
-    gap: 9,
+    gap: 10,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    borderColor: colors.borderStrong,
+    backgroundColor: "rgba(255,255,255,0.78)",
     borderRadius: radius.md,
-    paddingHorizontal: 13,
+    paddingHorizontal: 14,
   },
   input: {
     flex: 1,
@@ -47,4 +48,10 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     outlineStyle: "none",
   } as any,
+  activeMarker: {
+    width: 18,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: colors.primary,
+  },
 });

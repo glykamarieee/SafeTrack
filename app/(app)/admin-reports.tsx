@@ -632,107 +632,171 @@ function SummaryRow({
 
 
 const styles = StyleSheet.create({
-
   safe: { flex: 1, backgroundColor: colors.background },
-
-  scrollContent: { paddingBottom: 110 },
-
-  page: { width: "100%", maxWidth: adminLayout.pageMax, alignSelf: "center", paddingHorizontal: spacing.xl, paddingTop: 28 },
-
-  filterBand: { gap: 12, marginTop: 24, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border, paddingVertical: 16 },
-
+  scrollContent: { paddingBottom: 118 },
+  page: {
+    width: "100%",
+    maxWidth: adminLayout.pageMax,
+    alignSelf: "center",
+    paddingHorizontal: spacing.xl,
+    paddingTop: 30,
+  },
+  filterBand: {
+    gap: 12,
+    marginTop: 24,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: colors.borderStrong,
+  },
   filterBandWide: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
-
   dateFields: { gap: 10 },
-
-  dateFieldsWide: { flex: 1, maxWidth: 620, flexDirection: "row" },
-
+  dateFieldsWide: { flex: 1, maxWidth: 640, flexDirection: "row" },
   dateField: { flex: 1 },
-
-  fieldLabel: { color: colors.muted, fontSize: 10.5, fontWeight: "800", marginBottom: 6 },
-
-  inputShell: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.surface, paddingHorizontal: 12 },
-
-  input: { flex: 1, color: colors.ink, fontSize: 12, fontWeight: "700", paddingVertical: 0, outlineStyle: "none" } as any,
-
-  retrieveButton: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: radius.md, backgroundColor: colors.primary, paddingHorizontal: 16 },
-
+  fieldLabel: { color: colors.muted, fontSize: 9.5, fontWeight: "900", marginBottom: 7, letterSpacing: 1.05, textTransform: "uppercase" },
+  inputShell: {
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceMuted,
+    paddingHorizontal: 13,
+  },
+  input: { flex: 1, color: colors.ink, fontSize: 12.5, fontWeight: "700", paddingVertical: 0, outlineStyle: "none" } as any,
+  retrieveButton: {
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: radius.lg,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 18,
+    ...shadow.soft,
+  },
   retrieveText: { color: colors.white, fontSize: 12, fontWeight: "800" },
-
-  inlineError: { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: colors.dangerSoft, borderRadius: radius.md, padding: 12, marginTop: 14 },
-
+  inlineError: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 9,
+    backgroundColor: colors.dangerSoft,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: "#F0C8CB",
+    padding: 14,
+    marginTop: 14,
+  },
   inlineErrorText: { flex: 1, color: colors.danger, fontSize: 11.5, lineHeight: 17 },
-
-  stateBlock: { minHeight: 250, alignItems: "center", justifyContent: "center", borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border, marginTop: 22, padding: 24 },
-
-  stateIcon: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: colors.primarySoft },
-
-  stateTitle: { color: colors.ink, fontSize: 15, fontWeight: "800", marginTop: 13, textAlign: "center" },
-
-  stateText: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 5, textAlign: "center", maxWidth: 480 },
-
-  reportWorkspace: { marginTop: 30, gap: 30 },
-
-  reportWorkspaceWide: { flexDirection: "row", alignItems: "flex-start", gap: 38 },
-
-  summaryColumn: { flex: 1.35, minWidth: 0 },
-
-  exportColumn: { flex: 0.85, minWidth: 0 },
-
-  exportColumnWide: { borderLeftWidth: 1, borderLeftColor: colors.border, paddingLeft: 32 },
-
-  sectionHeader: { marginBottom: 10 },
-
-  sectionEyebrow: { color: colors.muted, fontSize: 9.5, fontWeight: "900", letterSpacing: 1.15 },
-
-  sectionTitle: { color: colors.ink, fontSize: 19, fontWeight: "800", letterSpacing: -0.3, marginTop: 5 },
-
-  sectionDescription: { color: colors.muted, fontSize: 11, marginTop: 4 },
-
-  summaryList: { borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border },
-
-  summaryRow: { minHeight: 61, flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10 },
-
+  stateBlock: {
+    minHeight: 280,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface,
+    marginTop: 18,
+    padding: 28,
+    ...shadow.soft,
+  },
+  stateIcon: { width: 54, height: 54, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: colors.primarySoft },
+  stateTitle: { color: colors.ink, fontSize: 16, fontWeight: "800", marginTop: 14, textAlign: "center" },
+  stateText: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 6, textAlign: "center", maxWidth: 480 },
+  reportWorkspace: { marginTop: 18, gap: 18 },
+  reportWorkspaceWide: { flexDirection: "row", alignItems: "stretch", gap: 18 },
+  summaryColumn: {
+    flex: 1.35,
+    minWidth: 0,
+    padding: 20,
+    borderRadius: radius.xl,
+    backgroundColor: colors.cream,
+    borderWidth: 1,
+    borderColor: "#E7DECC",
+  },
+  exportColumn: {
+    flex: 0.85,
+    minWidth: 0,
+    padding: 20,
+    borderRadius: radius.xl,
+    backgroundColor: colors.sky,
+    borderWidth: 1,
+    borderColor: "#C9E2E8",
+  },
+  exportColumnWide: { paddingLeft: 20 },
+  sectionHeader: { marginBottom: 12 },
+  sectionEyebrow: { color: colors.primaryBright, fontSize: 9.5, fontWeight: "900", letterSpacing: 1.2 },
+  sectionTitle: { color: colors.ink, fontSize: 20, fontWeight: "800", letterSpacing: -0.35, marginTop: 5 },
+  sectionDescription: { color: colors.muted, fontSize: 11, marginTop: 5 },
+  summaryList: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    overflow: "hidden",
+    backgroundColor: colors.surfaceMuted,
+  },
+  summaryRow: { minHeight: 64, flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 10, paddingHorizontal: 13 },
   summaryDivider: { borderBottomWidth: 1, borderBottomColor: colors.border },
-
-  summaryIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" },
-
+  summaryIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   summaryLabel: { flex: 1, color: colors.text, fontSize: 12.3, fontWeight: "700" },
-
-  summaryValue: { color: colors.ink, fontSize: 16, fontWeight: "800" },
-
+  summaryValue: { color: colors.ink, fontSize: 18, fontWeight: "800" },
   summaryValueDanger: { color: colors.danger },
-
-  totalLine: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", marginTop: 12, paddingHorizontal: 2 },
-
-  totalLabel: { color: colors.muted, fontSize: 11 },
-
-  totalValue: { color: colors.ink, fontSize: 18, fontWeight: "800" },
-
-  exportDescription: { color: colors.muted, fontSize: 12.5, lineHeight: 19, marginTop: 8 },
-
-  exportPrimary: { minHeight: 62, flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.primary, borderRadius: radius.md, paddingHorizontal: 14, marginTop: 18, ...shadow.soft },
-
-  exportSecondary: { minHeight: 62, flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.primarySoft, borderRadius: radius.md, paddingHorizontal: 14, marginTop: 10, borderWidth: 1, borderColor: colors.border },
-
+  totalLine: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    marginTop: 14,
+    padding: 14,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceStrong,
+  },
+  totalLabel: { color: colors.muted, fontSize: 10.5, fontWeight: "800", letterSpacing: 0.9, textTransform: "uppercase" },
+  totalValue: { color: colors.ink, fontSize: 22, fontWeight: "800", letterSpacing: -0.5 },
+  exportDescription: { color: colors.text, fontSize: 12.5, lineHeight: 19, marginTop: 9 },
+  exportPrimary: {
+    minHeight: 66,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+    backgroundColor: colors.primary,
+    borderRadius: radius.lg,
+    paddingHorizontal: 15,
+    marginTop: 18,
+    ...shadow.soft,
+  },
+  exportSecondary: {
+    minHeight: 66,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+    backgroundColor: colors.blueSoft,
+    borderRadius: radius.lg,
+    paddingHorizontal: 15,
+    marginTop: 11,
+    borderWidth: 1,
+    borderColor: "#C6E1E7",
+  },
   exportCopy: { flex: 1 },
-
-  exportPrimaryTitle: { color: colors.white, fontSize: 12.5, fontWeight: "800" },
-
-  exportPrimaryMeta: { color: "rgba(255,255,255,0.75)", fontSize: 10.5, marginTop: 2 },
-
-  exportSecondaryTitle: { color: colors.primaryDark, fontSize: 12.5, fontWeight: "800" },
-
-  exportSecondaryMeta: { color: colors.muted, fontSize: 10.5, marginTop: 2 },
-
-  exportUnavailable: { flexDirection: "row", alignItems: "flex-start", gap: 7, marginTop: 12, padding: 10, borderRadius: radius.md, backgroundColor: colors.background },
+  exportPrimaryTitle: { color: colors.white, fontSize: 13, fontWeight: "800" },
+  exportPrimaryMeta: { color: "rgba(255,255,255,0.78)", fontSize: 10.5, marginTop: 3 },
+  exportSecondaryTitle: { color: colors.blue, fontSize: 13, fontWeight: "800" },
+  exportSecondaryMeta: { color: colors.muted, fontSize: 10.5, marginTop: 3 },
+  exportUnavailable: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    marginTop: 12,
+    padding: 11,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   exportUnavailableText: { flex: 1, color: colors.muted, fontSize: 10.8, lineHeight: 16 },
-  privacyNote: { flexDirection: "row", alignItems: "flex-start", gap: 7, marginTop: 15 },
-
+  privacyNote: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginTop: 16, paddingTop: 14, borderTopWidth: 1, borderTopColor: colors.border },
   privacyText: { flex: 1, color: colors.muted, fontSize: 10.8, lineHeight: 16 },
-
-  pressed: { opacity: 0.72, transform: [{ scale: 0.99 }] },
-
-  disabled: { opacity: 0.52 },
-
+  pressed: { opacity: 0.8, transform: [{ scale: 0.99 }] },
+  disabled: { opacity: 0.48 },
 });

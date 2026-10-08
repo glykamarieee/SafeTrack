@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { type ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { adminColors as colors } from "../../constants/adminDesign";
 
@@ -16,7 +16,11 @@ export function AdminPageHeader({
   return (
     <View style={styles.root}>
       <View style={styles.copy}>
-        <Text style={styles.eyebrow}>{eyebrow}</Text>
+        <View style={styles.kickerRow}>
+          <View style={styles.kickerMark} />
+          <Text style={styles.eyebrow}>{eyebrow}</Text>
+          <View style={styles.kickerLine} />
+        </View>
         <Text style={styles.title}>{title}</Text>
         {description ? <Text style={styles.description}>{description}</Text> : null}
       </View>
@@ -30,28 +34,51 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: 18,
+    gap: 20,
   },
-  copy: { flex: 1, maxWidth: 760 },
+  copy: {
+    flex: 1,
+    maxWidth: 840,
+  },
+  kickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    maxWidth: 420,
+  },
+  kickerMark: {
+    width: 8,
+    height: 8,
+    borderRadius: 2,
+    backgroundColor: colors.primary,
+  },
+  kickerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.borderStrong,
+  },
   eyebrow: {
-    color: colors.primary,
+    color: colors.primaryDark,
     fontSize: 10,
     fontWeight: "900",
-    letterSpacing: 1.4,
+    letterSpacing: 1.45,
   },
   title: {
     color: colors.ink,
-    fontSize: 29,
-    lineHeight: 35,
+    fontSize: 32,
+    lineHeight: 38,
     fontWeight: "800",
-    letterSpacing: -0.7,
-    marginTop: 5,
+    letterSpacing: -0.9,
+    marginTop: 10,
   },
   description: {
-    color: colors.muted,
-    fontSize: 13,
-    lineHeight: 20,
-    marginTop: 7,
+    color: colors.text,
+    fontSize: 13.5,
+    lineHeight: 21,
+    marginTop: 8,
+    maxWidth: 800,
   },
-  action: { paddingTop: 3 },
+  action: {
+    paddingTop: 2,
+  },
 });

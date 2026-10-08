@@ -10,9 +10,20 @@ import { adminColors, adminLayout } from "../../constants/adminDesign";
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
-function NavIcon(outline: IconName, filled: IconName = outline) {
+function renderNavIcon(
+  outline: IconName,
+  filled: IconName = outline,
+  isAdmin = false,
+) {
   return ({ color, size, focused }: { color: ColorValue; size: number; focused: boolean }) => (
-    <View style={[styles.iconShell, focused && styles.iconShellActive]}>
+    <View
+      style={[
+        styles.iconShell,
+        isAdmin && styles.iconShellAdmin,
+        focused && styles.iconShellActive,
+        focused && isAdmin && styles.iconShellAdminActive,
+      ]}
+    >
       <Ionicons name={focused ? filled : outline} size={size} color={color} />
     </View>
   );
@@ -36,21 +47,28 @@ export default function AppLayout() {
         tabBarPosition: wide ? "left" : "bottom",
         tabBarVariant: wide ? "material" : "uikit",
         tabBarLabelPosition: wide ? "beside-icon" : "below-icon",
-        tabBarActiveTintColor: isAdmin ? adminColors.primary : guardianColors.primary,
-        tabBarInactiveTintColor: isAdmin ? adminColors.muted : guardianColors.muted,
+        tabBarActiveTintColor: isAdmin ? adminColors.primaryDark : guardianColors.primary,
+        tabBarInactiveTintColor: isAdmin ? adminColors.sidebarMuted : guardianColors.muted,
+        tabBarActiveBackgroundColor: isAdmin && wide ? "rgba(255,255,255,0.72)" : undefined,
         tabBarHideOnKeyboard: true,
-        tabBarLabelStyle: wide ? styles.desktopLabel : styles.mobileLabel,
-        tabBarItemStyle: wide ? styles.desktopItem : styles.mobileItem,
+        tabBarLabelStyle: wide
+          ? [styles.desktopLabel, isAdmin && styles.desktopLabelAdmin]
+          : styles.mobileLabel,
+        tabBarItemStyle: wide
+          ? [styles.desktopItem, isAdmin && styles.desktopItemAdmin]
+          : styles.mobileItem,
         tabBarStyle: wide
           ? [
               styles.sidebar,
+              isAdmin ? styles.sidebarAdmin : null,
               {
-                backgroundColor: isAdmin ? adminColors.surface : guardianColors.surface,
-                borderRightColor: isAdmin ? adminColors.border : guardianColors.border,
+                backgroundColor: isAdmin ? adminColors.sidebar : guardianColors.surface,
+                borderRightColor: isAdmin ? adminColors.sidebarBorder : guardianColors.border,
               },
             ]
           : [
               styles.bottomBar,
+              isAdmin ? styles.bottomBarAdmin : null,
               {
                 backgroundColor: isAdmin ? adminColors.surface : guardianColors.surface,
                 borderTopColor: isAdmin ? adminColors.border : guardianColors.border,
@@ -62,7 +80,7 @@ export default function AppLayout() {
         name="home"
         options={{
           title: isAdmin ? "Overview" : "Home",
-          tabBarIcon: NavIcon("home-outline", "home"),
+          tabBarIcon: renderNavIcon("home-outline", "home", isAdmin),
         }}
       />
 
@@ -71,7 +89,7 @@ export default function AppLayout() {
         options={{
           title: "Location",
           href: isGuardian ? undefined : null,
-          tabBarIcon: NavIcon("location-outline", "location"),
+          tabBarIcon: renderNavIcon("location-outline", "location", isAdmin),
         }}
       />
       <Tabs.Screen
@@ -79,7 +97,7 @@ export default function AppLayout() {
         options={{
           title: "Safety",
           href: isGuardian ? undefined : null,
-          tabBarIcon: NavIcon("shield-checkmark-outline", "shield-checkmark"),
+          tabBarIcon: renderNavIcon("shield-checkmark-outline", "shield-checkmark", isAdmin),
         }}
       />
       <Tabs.Screen
@@ -87,7 +105,7 @@ export default function AppLayout() {
         options={{
           title: "Activity",
           href: isGuardian ? undefined : null,
-          tabBarIcon: NavIcon("time-outline", "time"),
+          tabBarIcon: renderNavIcon("time-outline", "time", isAdmin),
         }}
       />
       <Tabs.Screen
@@ -95,7 +113,7 @@ export default function AppLayout() {
         options={{
           title: "Profile",
           href: isGuardian ? undefined : null,
-          tabBarIcon: NavIcon("person-outline", "person"),
+          tabBarIcon: renderNavIcon("person-outline", "person", isAdmin),
         }}
       />
 
@@ -104,7 +122,7 @@ export default function AppLayout() {
         options={{
           title: "Guardians",
           href: isAdmin ? undefined : null,
-          tabBarIcon: NavIcon("people-outline", "people"),
+          tabBarIcon: renderNavIcon("people-outline", "people", true),
         }}
       />
       <Tabs.Screen
@@ -112,7 +130,7 @@ export default function AppLayout() {
         options={{
           title: "Devices",
           href: isAdmin ? undefined : null,
-          tabBarIcon: NavIcon("watch-outline", "watch"),
+          tabBarIcon: renderNavIcon("watch-outline", "watch", true),
         }}
       />
       <Tabs.Screen
@@ -120,7 +138,7 @@ export default function AppLayout() {
         options={{
           title: "Reports",
           href: isAdmin ? undefined : null,
-          tabBarIcon: NavIcon("document-text-outline", "document-text"),
+          tabBarIcon: renderNavIcon("document-text-outline", "document-text", true),
         }}
       />
       <Tabs.Screen
@@ -128,11 +146,10 @@ export default function AppLayout() {
         options={{
           title: "Admin",
           href: isAdmin ? undefined : null,
-          tabBarIcon: NavIcon("person-circle-outline", "person-circle"),
+          tabBarIcon: renderNavIcon("person-circle-outline", "person-circle", true),
         }}
       />
 
-      {/* Existing contextual Guardian routes remain addressable but are intentionally not primary tabs. */}
       <Tabs.Screen name="notifications" options={{ href: null }} />
       <Tabs.Screen name="reports" options={{ href: null }} />
       <Tabs.Screen name="safe-zones" options={{ href: null }} />
@@ -143,7 +160,6 @@ export default function AppLayout() {
       <Tabs.Screen name="device-connection-code" options={{ href: null }} />
       <Tabs.Screen name="sos-alerts" options={{ href: null }} />
 
-      {/* Existing non-tab routes. */}
       <Tabs.Screen name="admin-dashboard" options={{ href: null }} />
       <Tabs.Screen name="child-profile" options={{ href: null }} />
       <Tabs.Screen name="activity-map" options={{ href: null }} />
@@ -158,13 +174,18 @@ export default function AppLayout() {
 
 const styles = StyleSheet.create({
   sidebar: {
-    width: 238,
-    paddingTop: Platform.OS === "web" ? 28 : 18,
+    width: 242,
+    paddingTop: Platform.OS === "web" ? 26 : 18,
     paddingHorizontal: 12,
     borderRightWidth: 1,
     borderTopWidth: 0,
     elevation: 0,
     shadowOpacity: 0,
+  },
+  sidebarAdmin: {
+    width: 264,
+    paddingTop: Platform.OS === "web" ? 30 : 18,
+    paddingHorizontal: 14,
   },
   bottomBar: {
     height: 74,
@@ -174,16 +195,31 @@ const styles = StyleSheet.create({
     elevation: 0,
     shadowOpacity: 0,
   },
-  desktopItem: {
-    minHeight: 52,
-    marginVertical: 2,
-    borderRadius: 12,
+  bottomBarAdmin: {
+    height: 78,
   },
-  mobileItem: { minHeight: 56 },
+  desktopItem: {
+    minHeight: 54,
+    marginVertical: 3,
+    borderRadius: 14,
+  },
+  desktopItemAdmin: {
+    marginVertical: 4,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  mobileItem: {
+    minHeight: 56,
+  },
   desktopLabel: {
     fontSize: 13,
     fontWeight: "700",
     letterSpacing: 0.1,
+  },
+  desktopLabelAdmin: {
+    fontSize: 12.5,
+    fontWeight: "800",
+    letterSpacing: 0.18,
   },
   mobileLabel: {
     fontSize: 10,
@@ -191,13 +227,26 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   iconShell: {
-    width: 32,
-    height: 32,
-    borderRadius: 11,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
+  iconShellAdmin: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.42)",
+    borderWidth: 1,
+    borderColor: "rgba(22,122,92,0.05)",
+  },
   iconShellActive: {
     backgroundColor: "rgba(31, 166, 117, 0.10)",
+  },
+  iconShellAdminActive: {
+    backgroundColor: "#DDF0E7",
+    borderWidth: 1,
+    borderColor: "#BDDCCF",
   },
 });
