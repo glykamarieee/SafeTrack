@@ -17,6 +17,20 @@ Child-safety tracking app. Three kinds of user:
 - **Child**: tracked through a Wear OS **smartwatch** (separate app, not in this
   repo: `C:\SAFETRACK-FINAL\safe-track-wear-os`, Kotlin + Compose for Wear OS), an Android/iOS **phone** running this app in child mode, or both.
 
+**Two projects only:**
+
+```
+C:\SAFETRACK-FINAL\
+  safe-track\           this repo (github.com/glykamarieee/SafeTrack)
+    app/ components/ services/ store/ hooks/   Expo app (guardian, child phone, admin)
+    supabase/            migrations + edge functions
+    ai-service/          Python FastAPI anomaly service (runs separately; see "AI service")
+  safe-track-wear-os\   watch app repo (github.com/glykamarieee/SafeTrack-Wear-Os)
+```
+
+The old standalone `safe-track-ai` folder was merged into `ai-service/` on
+2026-10-15 and deleted.
+
 Stack: Expo 57 / React Native 0.86 / expo-router, Zustand stores, Supabase
 (Postgres, Auth, Storage, Edge Functions). Supabase project ref `evffpbkxnjpizwqsrlqx`.
 
@@ -31,6 +45,8 @@ Stack: Expo 57 / React Native 0.86 / expo-router, Zustand stores, Supabase
 | `store/` | Zustand stores (`authStore`, `childMobileStore`, ...) |
 | `supabase/migrations/` | Schema changes, applied by hand in the SQL Editor (see below) |
 | `supabase/functions/` | The few remaining edge functions |
+| `ai-service/` | Python FastAPI AI service, tests, model, Dockerfile; has its own README |
+| `hooks/` | `useGuardianPushRegistration`, `useGuardianSosRealtime` (used by `app/(app)/_layout.tsx`) |
 
 Every file under `app/` is a route: an empty or export-less file breaks the
 router ("missing the required default export"). Every screen in `app/(app)` must
@@ -78,6 +94,7 @@ Key RPCs:
   - `link_watch_to_my_child`, `unlink_watch_from_my_child`
   - `generate_watch_pairing_code`, `generate_child_phone_code`
   - `register_my_push_token`
+  - `delete_my_account` (soft delete; `20261015_accounts_notifications_fixes.sql`)
   - `get_my_child_safety_timeline`, `acknowledge_my_sos_alert`
   - `get_my_child_activity_days` (History calendar; `20261014_child_activity_days.sql`)
 - **Child phone** (callable by `anon`; authenticated by a device token inside the function):
@@ -119,13 +136,41 @@ Only these **edge functions** remain, each for a reason SQL cannot cover:
   `anomaly-detection` reviews one `{childId, locationLogId}` on demand; the app
   does not call it.
 
-**AI service** (`C:\SAFETRACK-FINAL\safe-track-ai`, FastAPI): `_shared/anomaly.ts`
-calls `POST {AI_SERVICE_URL}/score` only when `AI_ENABLED=true`, sending header
-`X-SafeTrack-AI-Key: {AI_SERVICE_KEY}`. The service rejects every data endpoint
-unless the same `AI_SERVICE_KEY` is set in its environment (it holds the
-service-role key). The current location is scored against strictly earlier
-points of the same child. After changing the features, rerun `train_model.py`; a
-saved model with the wrong feature count is treated as missing (`ready: false`).
+**AI service** (`ai-service/`, FastAPI, Python 3.13; full instructions in
+`ai-service/README.md`). It runs as its own process or container, never inside
+the Expo app.
+
+- **How it is called:** `_shared/anomaly.ts` (used by `scheduled-safety-scan` and
+  `anomaly-detection`) calls `POST {AI_SERVICE_URL}/score` only when
+  `AI_ENABLED=true`, with header `X-SafeTrack-AI-Key: {AI_SERVICE_KEY}`. It only
+  calls once a child has 100+ earlier points spanning 14+ days, and sends at most
+  one notice per 15 minutes.
+- **What `/score` checks:**
+  - Every data endpoint is rejected unless the same `AI_SERVICE_KEY` is set in
+    the service's own environment (it holds the service-role key).
+  - The current point must be valid, otherwise it returns 422.
+  - Only strictly earlier history is used, sorted, at most 500 points.
+- **Result:** a notice is written to `geofence_events` (`possible_anomaly`, with
+  the reasons in `details`), and the push trigger notifies the guardian.
+- **Features:** distance, speed, the hour in **Philippine time** (UTC+8; changed
+  from UTC on 2026-10-15), accuracy, interval, stationary and source. A saved
+  model with a different feature count is treated as missing (`ready: false`).
+- **Retraining required:** the committed `models/isolation_forest.pkl` has **4
+  features**, but the code uses **7**, so it returns `ready: false` until
+  `train_model.py` is run against real data.
+- **Commands** (in `ai-service/`):
+
+  | Task | Command |
+  |---|---|
+  | Set up | `python -m venv .venv` and `.venv\Scripts\python -m pip install -r requirements-dev.txt` |
+  | Test | `.venv\Scripts\python -m pytest -q` (21 tests; no Supabase needed) |
+  | Run | `.venv\Scripts\python -m uvicorn app:app --port 8000` |
+  | Retrain | `.venv\Scripts\python train_model.py` (reads all `location_logs` with the service key) |
+
+- **Deployment:** any HTTPS host (`ai-service/Dockerfile`). Then set the edge
+  function secrets `AI_SERVICE_URL`, `AI_SERVICE_KEY` and `AI_ENABLED=true`.
+- **Live cron jobs:** `safetrack-sos-realert` and `safetrack-safety-scan` both run
+  every minute (seen in `cron.job`, 2026-10-15).
 - **Legacy, unused:** `watch-pair`, `watch-ingest`. The watch app switched to the
   smartwatch database functions; delete these once no deployed watch app uses them
   (`npx supabase functions delete <name>`). Device tokens use the same hash, so
@@ -344,12 +389,45 @@ a token shows "Map token missing" instead of a blank map.
 
 ## Notifications
 
-Guardian push notifications are sent **only by database triggers** through `pg_net`
-to Expo's push API: `sos_alerts` insert and `realert_count` increase, and any
-`geofence_events` insert. Never send pushes from app or edge-function code: insert
-the row and the trigger does the rest. Tokens are in
-`guardian_push_tokens.push_token`. Registration is skipped in Expo Go and when no
-EAS project ID is configured.
+Guardian push notifications are sent **only by database triggers**. Never send
+pushes from app or edge-function code: insert the row and the trigger does the
+rest.
+
+- **Server:**
+  - `sos_alerts_notify_guardian` (insert, and `realert_count` increase while
+    active) and `geofence_events_notify_guardian` (every insert) call
+    `send_guardian_push`.
+  - `send_guardian_push` posts to Expo's push API through `pg_net`, using Android
+    channel **`safetrack-alerts`**.
+  - It skips categories the guardian turned off in
+    `guardian_notification_preferences` (`safe_zone`, `anomaly`, `device`). **SOS
+    and re-alerts are always sent.**
+- **App:**
+  - `useGuardianPushRegistration` (in `app/(app)/_layout.tsx`) asks for
+    permission, creates the `safetrack-alerts` channel, gets an Expo token and
+    calls `register_my_push_token`. Tapping a notification opens SOS Alerts,
+    History or AI notices.
+  - Logout switches the token off (`unregisterGuardianPushToken`).
+  - While the app is open, `useGuardianSosRealtime` keeps SOS alerts live
+    (Supabase Realtime on `sos_alerts`; needs `sos_alerts` in the
+    `supabase_realtime` publication, added by migration 20261015).
+- **Required configuration** (without it registration stops quietly and nothing
+  is delivered):
+  1. **Expo project ID:** run `npx eas init`, which writes
+     `extra.eas.projectId` into `app.json`.
+  2. **Firebase for Android:** create a Firebase project with Android package
+     `com.amawachoya.SafeTrack`, and put `google-services.json` in the project
+     root. `app.config.ts` adds it only when the file exists.
+  3. **FCM key for Expo:** upload the Firebase service-account key (FCM V1) with
+     `npx eas credentials`, under Android → Push Notifications.
+  4. **Rebuild** the app. Expo Go cannot receive Android remote push.
+- **Troubleshooting:**
+  - `select count(*) from guardian_push_tokens where is_active;` should be at
+    least 1 after a guardian logs in on a build.
+  - If it stays 0, check the device log for `[SafeTrack push registration]`.
+  - The token pattern in `register_my_push_token` and `send_guardian_push` must
+    be `'^Expo(nent)?PushToken\[[^\]]+\]$'` with **single** backslashes;
+    migration 20261015 rewrites both.
 
 ## Database rules that have bitten us
 
@@ -372,6 +450,62 @@ EAS project ID is configured.
 - In React Native, `instanceof Response` fails; duck-type (`typeof x.json === "function"`).
 - In `returns table (...)` plpgsql functions, output column names shadow table
   columns: always qualify columns with a table alias.
+
+## Accounts
+
+- **Registration:** `signUp` with `emailRedirectTo` = `authRedirectUrl("/login")`.
+  Login then shows "Account created…". If Supabase requires email confirmation
+  (dashboard: Authentication → Sign In / Providers → Email → "Confirm email"),
+  login shows **Resend confirmation email** (`supabase.auth.resend`).
+- **Password reset:**
+  - `resetPasswordForEmail` with `redirectTo` = `authRedirectUrl("/reset-password")`.
+  - The `app/(auth)/reset-password.tsx` screen turns the link into a session
+    (`startPasswordRecovery` handles both `#access_token…` and `?code=`) and
+    saves the new password.
+  - Every redirect URL must be allowed under Supabase → Authentication → URL
+    Configuration → Redirect URLs: `safetrack://**`, the web origin, and for Expo
+    Go `exp://**`.
+- **Change password:** `app/(app)/change-password.tsx`, for guardians and admins.
+  It re-checks the current password, then calls `updateUser`.
+- **Delete account:** `app/(app)/delete-account.tsx` re-checks the password,
+  then calls `delete_my_account()`, which:
+  - removes each child exactly as `delete_my_child` does (unless another
+    guardian is still linked),
+  - turns off safe zones, deletes push tokens and preferences, deactivates
+    roles,
+  - blanks the name, email, phone and photo,
+  - deletes auth sessions and sets `banned_until` (skipped if auth-schema
+    writes are not allowed).
+
+  Rows are never hard-deleted (RESTRICT foreign keys keep history owners).
+  Login refuses inactive `persons` (`InactiveAccountError`), so a deleted or
+  deactivated account can't be re-provisioned by `ensure_guardian_profile`.
+- **Notification preferences:** `app/(app)/notification-settings.tsx` writes
+  `guardian_notification_preferences` (RLS: own row only).
+
+## Child phone location
+
+- **Manual:** "Share latest location" sends one fix (`record_child_phone_location`).
+- **Automatic (optional):** the child turns on "Share location automatically"
+  (`components/location/AutoShareToggle.tsx`, `services/childBackgroundLocation.ts`).
+  - It needs "Allow all the time" location access.
+  - It runs as an Android foreground service with a visible notification, or the
+    iOS background-location indicator.
+  - It saves at most every 5 minutes, unless the phone moved 100 m.
+  - It stops when the phone is unlinked.
+  - The task is registered at startup (`app/_layout.tsx` imports the service).
+  - It needs a build (`expo-location` background options in `app.json`, plus
+    `expo-task-manager`); **not Expo Go or web**.
+  - After a reboot it resumes when SafeTrack is next opened.
+  - Not yet tested on a device. Google Play requires a background-location
+    declaration before publishing.
+
+## Administrator records
+
+`app/(app)/admin-records.tsx` (the Records tab) lists SOS alerts, location records
+and safety events for a date range, 50 per page, through
+`services/adminRecordsService.ts`. These are plain selects allowed by the
+`is_safetrack_admin()` SELECT policies, with child names read from `persons`.
 
 ## Working in this repo
 
@@ -396,6 +530,17 @@ EAS project ID is configured.
   schema questions go through the user's SQL Editor.
 - **Screens:** Edit Child Profile takes a `childId` route param; without it, it opens
   the guardian's first child (oldest), the same child the Home screen uses.
+- **Builds:** `npm run build:android` runs prebuild, then Gradle `assembleRelease`
+  (~15 minutes the first time). Needed after any native change: Mapbox, push
+  notifications, background location, a new Expo module or `google-services.json`.
+  JavaScript-only changes can be tested with `npx expo start -c`.
+- **Wear OS app** (`C:\SAFETRACK-FINAL\safe-track-wear-os`): build and unit-test
+  with `gradlew.bat assembleDebug testDebugUnitTest` (3 unit tests, passing on
+  2026-10-15). Its RPC contract is under "Devices and pairing"; don't rename `p_*`
+  parameters.
+- **Migrations waiting to be applied** (run in order in the SQL Editor, then
+  confirm with the user):
+  `20261014_child_activity_days.sql`, `20261015_accounts_notifications_fixes.sql`.
 
 ## Known open issues
 
@@ -404,13 +549,21 @@ EAS project ID is configured.
   `pair_watch` has the same exposure, limited to a known Watch ID.
 - The child-phone device token is stored unencrypted (AsyncStorage);
   `expo-secure-store` is not installed.
-- Child phones only send location when the child taps "Send latest location";
-  there is no background tracking.
 - Because linking registers unknown Watch IDs, a guardian can claim a well-formed
   ID before its real owner does, and the owner then sees "already linked to
   another child profile". An admin must resolve it.
-- `anomaly_events` has an INSERT policy of `true` for `public`.
-- The app calls `trigger_my_test_sos_alert` and `resolve_my_sos_alert`, which do not
-  exist in the database.
-- `admin_update_device_status` references a nonexistent `device_status` column, and
-  `acknowledge_my_qr_assistance_alert` references a nonexistent table.
+- Guardian screens other than History still show only the oldest child
+  (`linkedChildren[0]`).
+- The AI model must be retrained (see "AI service") before AI notices can appear,
+  and the AI service is not hosted yet.
+- **Fixed in code; the database part takes effect once migration 20261015 is applied:**
+  - **Open insert policy:** the `anomaly_events` INSERT policy of `true` for
+    `public` is dropped.
+  - **`admin_update_device_status`:** wrote a nonexistent `device_status` column;
+    it now delegates to `update_admin_smartwatch_device_status`.
+  - **`acknowledge_my_qr_assistance_alert`:** referenced a missing table; dropped.
+  - **Missing SOS functions:** the app no longer calls `trigger_my_test_sos_alert`
+    or `resolve_my_sos_alert` (the dead `ChildHome` and `components/sos/*` were
+    removed).
+  - **`safety_events`:** the anomaly service read this nonexistent table; it now
+    reads `geofence_events`.
