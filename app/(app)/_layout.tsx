@@ -157,6 +157,9 @@ export default function AppLayout() {
       <Tabs.Screen name="notifications" options={{ href: null }} />
       <Tabs.Screen name="reports" options={{ href: null }} />
       <Tabs.Screen name="safe-zones" options={{ href: null }} />
+      <Tabs.Screen name="change-password" options={{ href: null }} />
+      <Tabs.Screen name="notification-settings" options={{ href: null }} />
+      <Tabs.Screen name="delete-account" options={{ href: null }} />
       <Tabs.Screen name="help-support" options={{ href: null }} />
       <Tabs.Screen name="manage-access" options={{ href: null }} />
       <Tabs.Screen name="connection-code" options={{ href: null }} />

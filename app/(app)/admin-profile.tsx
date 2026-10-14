@@ -266,6 +266,19 @@ export default function AdminProfileScreen() {
 
                 <Pressable
                   accessibilityRole="button"
+                  accessibilityLabel="Change password"
+                  onPress={() => router.push("/(app)/change-password")}
+                  style={({ pressed }) => [
+                    styles.passwordButton,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Ionicons name="key-outline" size={18} color={colors.ink} />
+                  <Text style={styles.passwordText}>Change password</Text>
+                </Pressable>
+
+                <Pressable
+                  accessibilityRole="button"
                   accessibilityLabel="Log out of administrator session"
                   onPress={handleLogout}
                   style={({ pressed }) => [
@@ -746,6 +759,26 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontWeight: "700",
     marginTop: 2,
+  },
+
+  passwordButton: {
+    minHeight: 46,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+    backgroundColor: colors.white,
+  },
+
+  passwordText: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "800",
   },
 
   logoutButton: {

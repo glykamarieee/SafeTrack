@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeTrackBackButton } from "../../components/common/SafeTrackBackButton";
 import { useAuthStore } from "../../store/authStore";
+import { MIN_PASSWORD_LENGTH } from "../../services/supabaseAuthService";
 import { safeTrackColors as colors, safeTrackRadius as radius, safeTrackShadow as shadow, safeTrackSpacing as spacing } from "../../constants/safeTrackDesign";
 
 function validEmail(value: string) { return /^\S+@\S+\.\S+$/.test(value); }
@@ -39,12 +40,12 @@ export default function RegisterScreen() {
     clearError(); setLocalError(null);
     if (fullName.trim().length < 2) return setLocalError("Enter your full name.");
     if (!validEmail(email.trim())) return setLocalError("Enter a valid email address.");
-    if (password.length < 6) return setLocalError("Password must contain at least 6 characters.");
+    if (password.length < MIN_PASSWORD_LENGTH) return setLocalError(`Password must contain at least ${MIN_PASSWORD_LENGTH} characters.`);
     if (password !== confirmPassword) return setLocalError("Passwords do not match.");
     try {
       await register(fullName.trim(), email.trim().toLowerCase(), password);
       await logout();
-      router.replace("/(auth)/login");
+      router.replace({ pathname: "/(auth)/login", params: { notice: "registered", email: email.trim().toLowerCase() } });
     } catch {
       // Store exposes the relevant registration message.
     }

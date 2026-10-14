@@ -10,11 +10,12 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Link, useRouter } from "expo-router";
+import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAuthStore } from "../../store/authStore";
+import { resendVerificationEmail } from "../../services/supabaseAuthService";
 import {
   safeTrackColors as colors,
   safeTrackRadius as radius,
@@ -26,15 +27,25 @@ function validEmail(value: string) {
   return /^\S+@\S+\.\S+$/.test(value);
 }
 
+const NOTICES: Record<string, string> = {
+  registered:
+    "Account created. If SafeTrack sent you a confirmation email, open its link first, then log in.",
+  "password-updated": "Password updated. Log in with your new password.",
+  "account-deleted": "Your account was deleted.",
+};
+
 export default function LoginScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ notice?: string; email?: string }>();
+  const notice = params.notice ? NOTICES[params.notice] : undefined;
+  const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
 
   const login = useAuthStore((state) => state.login);
   const isLoading = useAuthStore((state) => state.isLoading);
   const authError = useAuthStore((state) => state.error);
   const clearError = useAuthStore((state) => state.clearError);
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(typeof params.email === "string" ? params.email : "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -88,6 +99,23 @@ export default function LoginScreen() {
   };
 
   const displayError = localError ?? authError;
+  const needsVerification = Boolean(displayError && /confirm your email/i.test(displayError));
+
+  const resend = async () => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!validEmail(normalizedEmail)) {
+      setLocalError("Enter your email address to resend the confirmation link.");
+      return;
+    }
+    setResendState("sending");
+    try {
+      await resendVerificationEmail(normalizedEmail);
+      setResendState("sent");
+    } catch (reason) {
+      setResendState("idle");
+      setLocalError(reason instanceof Error ? reason.message : "The confirmation email could not be sent.");
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
@@ -207,6 +235,13 @@ export default function LoginScreen() {
               Forgot password?
             </Link>
 
+            {notice && !displayError ? (
+              <View style={styles.noticeBox}>
+                <Ionicons name="checkmark-circle-outline" size={21} color={colors.primaryDark} />
+                <Text style={styles.noticeText}>{notice}</Text>
+              </View>
+            ) : null}
+
             {displayError ? (
               <View style={styles.errorBox}>
                 <Ionicons
@@ -217,6 +252,24 @@ export default function LoginScreen() {
 
                 <Text style={styles.errorText}>{displayError}</Text>
               </View>
+            ) : null}
+
+            {needsVerification ? (
+              <Pressable
+                accessibilityRole="button"
+                disabled={resendState !== "idle"}
+                onPress={() => void resend()}
+                style={({ pressed }) => [styles.resendButton, pressed && styles.pressed]}
+              >
+                <Ionicons name="mail-outline" size={17} color={colors.primaryDark} />
+                <Text style={styles.resendText}>
+                  {resendState === "sent"
+                    ? "Confirmation email sent. Check your inbox."
+                    : resendState === "sending"
+                      ? "Sending…"
+                      : "Resend confirmation email"}
+                </Text>
+              </Pressable>
             ) : null}
 
             <Pressable
@@ -444,6 +497,28 @@ const styles = StyleSheet.create({
     marginTop: 13,
   },
 
+  noticeBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: colors.softMint,
+  },
+  noticeText: { flex: 1, color: colors.primaryDark, fontSize: 12.5, lineHeight: 18 },
+  resendButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    marginTop: 10,
+    minHeight: 42,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  resendText: { color: colors.primaryDark, fontSize: 12.5, fontWeight: "800" },
   errorBox: {
     flexDirection: "row",
     alignItems: "flex-start",

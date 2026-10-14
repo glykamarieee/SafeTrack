@@ -1,5 +1,16 @@
 import type { Session, User } from "@supabase/supabase-js";
+import * as Linking from "expo-linking";
 import { supabase } from "../lib/supabase";
+
+/**
+ * Where email links (sign-up confirmation, password reset) return to: the
+ * `safetrack://` scheme in a build, the site origin on web, `exp://…` in Expo
+ * Go. Each must be listed under Supabase → Authentication → URL Configuration
+ * → Redirect URLs.
+ */
+export function authRedirectUrl(path: "/login" | "/reset-password") {
+  return Linking.createURL(path);
+}
 
 export type SafeTrackRole = "admin" | "guardian";
 
@@ -24,7 +35,16 @@ type PersonRow = {
   auth_user_id: string;
   full_name: string | null;
   email: string | null;
+  is_active: boolean | null;
 };
+
+/** A deleted (or administrator-deactivated) account trying to sign in. */
+export class InactiveAccountError extends Error {
+  constructor() {
+    super("This SafeTrack account has been deleted or deactivated.");
+    this.name = "InactiveAccountError";
+  }
+}
 
 type PersonRoleRow = {
   roles?:
@@ -114,7 +134,7 @@ async function findPersonForUser(
 ): Promise<SafeTrackPerson | null> {
   const { data: personData, error: personError } = await supabase
     .from("persons")
-    .select("id,auth_user_id,full_name,email")
+    .select("id,auth_user_id,full_name,email,is_active")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
@@ -127,6 +147,13 @@ async function findPersonForUser(
   }
 
   const person = personData as PersonRow;
+
+  // Deleted accounts keep their row (soft delete); never let them back in or
+  // let ensure_guardian_profile re-provision them.
+  if (person.is_active === false) {
+    await supabase.auth.signOut().catch(() => undefined);
+    throw new InactiveAccountError();
+  }
 
   const { data: roleData, error: roleError } = await supabase
     .from("person_roles")
@@ -226,6 +253,8 @@ export async function signUpGuardian(
       data: {
         full_name: fullName.trim(),
       },
+      // The confirmation link (when email confirmation is on) returns here.
+      emailRedirectTo: authRedirectUrl("/login"),
     },
   });
 
@@ -242,12 +271,116 @@ export async function sendPasswordReset(
   const normalizedEmail = email.trim().toLowerCase();
 
   const { error } = await supabase.auth.resetPasswordForEmail(
-    normalizedEmail
+    normalizedEmail,
+    { redirectTo: authRedirectUrl("/reset-password") }
   );
 
   if (error) {
     throw new Error(getSafeErrorMessage(error.message));
   }
+}
+
+/** Sends the sign-up confirmation email again. */
+export async function resendVerificationEmail(email: string): Promise<void> {
+  const { error } = await supabase.auth.resend({
+    type: "signup",
+    email: email.trim().toLowerCase(),
+    options: { emailRedirectTo: authRedirectUrl("/login") },
+  });
+
+  if (error) {
+    throw new Error(getSafeErrorMessage(error.message));
+  }
+}
+
+/**
+ * Turns the link from a password-reset email into a session, so the new
+ * password can be saved. Handles both link styles Supabase sends:
+ * `#access_token=…&refresh_token=…&type=recovery` and `?code=…`.
+ */
+export async function startPasswordRecovery(url: string): Promise<void> {
+  const [beforeHash, hash = ""] = url.split("#");
+  const query = beforeHash!.includes("?") ? beforeHash!.split("?")[1]! : "";
+  const params = new URLSearchParams(`${query}&${hash}`);
+
+  const failure = params.get("error_description") ?? params.get("error");
+  if (failure) {
+    throw new Error(
+      /expired|invalid/i.test(failure)
+        ? "This reset link has expired or was already used. Request a new one."
+        : failure.replaceAll("+", " ")
+    );
+  }
+
+  const code = params.get("code");
+  if (code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) throw new Error("This reset link has expired or was already used. Request a new one.");
+    return;
+  }
+
+  const accessToken = params.get("access_token");
+  const refreshToken = params.get("refresh_token");
+  if (accessToken && refreshToken) {
+    const { error } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
+    if (error) throw new Error("This reset link has expired or was already used. Request a new one.");
+    return;
+  }
+
+  throw new Error("Open the reset link from your email on this device.");
+}
+
+export const MIN_PASSWORD_LENGTH = 8;
+
+export function passwordProblem(password: string, confirm: string): string | null {
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
+  }
+  if (password !== confirm) return "The passwords do not match.";
+
+  return null;
+}
+
+/** Saves a new password for the signed-in user (after recovery or re-authentication). */
+export async function updateMyPassword(newPassword: string): Promise<void> {
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+
+  if (error) {
+    throw new Error(
+      /different from the old|same password/i.test(error.message)
+        ? "The new password must be different from the current one."
+        : getSafeErrorMessage(error.message)
+    );
+  }
+}
+
+/**
+ * Confirms the current password before a sensitive change. Signing in again
+ * with the same account keeps the session.
+ */
+export async function verifyCurrentPassword(password: string): Promise<void> {
+  const { data } = await supabase.auth.getUser();
+  const email = data.user?.email;
+
+  if (!email) throw new Error("Your session has expired. Log in again.");
+
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    throw new Error(
+      /invalid login credentials/i.test(error.message)
+        ? "The current password is incorrect."
+        : getSafeErrorMessage(error.message)
+    );
+  }
+}
+
+export async function changeMyPassword(currentPassword: string, newPassword: string): Promise<void> {
+  await verifyCurrentPassword(currentPassword);
+  await updateMyPassword(newPassword);
 }
 
 export async function signOut(): Promise<void> {

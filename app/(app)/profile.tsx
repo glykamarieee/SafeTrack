@@ -648,6 +648,18 @@ export default function ProfileScreen(){
             detail="Edit your stored account details and profile picture"
             onPress={() => router.push("/(app)/edit-guardian-profile")}
           />
+          <Row
+            icon="key-outline"
+            title="Change password"
+            detail="Update the password for this account"
+            onPress={() => router.push("/(app)/change-password")}
+          />
+          <Row
+            icon="notifications-outline"
+            title="Notifications"
+            detail="Choose which safety alerts you receive (SOS is always on)"
+            onPress={() => router.push("/(app)/notification-settings")}
+          />
         </View>
 
         <Text style={styles.section}>
@@ -808,13 +820,13 @@ export default function ProfileScreen(){
 
         <Row
 
-          icon="lock-closed-outline"
+          icon="trash-outline"
 
-          title="Data and privacy"
+          title="Delete account"
 
-          detail="Guardian access and child safety-data protection"
+          detail="Close your guardian account and remove your personal details"
 
-          onPress={()=>{}}
+          onPress={() => router.push("/(app)/delete-account")}
 
         />
 
