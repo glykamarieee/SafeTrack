@@ -552,6 +552,18 @@ and safety events for a date range, 50 per page, through
 - Because linking registers unknown Watch IDs, a guardian can claim a well-formed
   ID before its real owner does, and the owner then sees "already linked to
   another child profile". An admin must resolve it.
+- **Auth emails:** sent through custom SMTP (Gmail App Password, set up on
+  2026-10-15 under Authentication → Emails → SMTP Settings).
+  - A **Send Email hook** (Authentication → Auth Hooks) pointed to an edge
+    function `send-email-hook` that is **not in this repo** and returned 500, so
+    every reset and confirmation email failed ("Unexpected status code returned
+    from hook: 500" in Logs → Auth).
+  - The hook was disabled on 2026-10-15. Keep it disabled, or the hook replaces
+    SMTP entirely.
+  - The deployed `send-email-hook` function can be deleted once nobody needs it
+    (`npx supabase functions delete send-email-hook`).
+  - Gmail is meant for personal mail (about 500 emails a day, may land in spam).
+    Switch to a transactional sender such as Brevo or Resend for real use.
 - Guardian screens other than History still show only the oldest child
   (`linkedChildren[0]`).
 - The AI model must be retrained (see "AI service") before AI notices can appear,
