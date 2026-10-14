@@ -59,6 +59,13 @@
       "expo-video",
       "expo-sharing",
       "expo-image"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "6ef937bd-2a17-444d-a8c1-4cb5d44f101a"
+      }
+    },
+    "owner": "glykamarieee"
   }
 }
