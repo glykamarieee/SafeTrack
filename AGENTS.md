@@ -155,9 +155,11 @@ the Expo app.
 - **Features:** distance, speed, the hour in **Philippine time** (UTC+8; changed
   from UTC on 2026-10-15), accuracy, interval, stationary and source. A saved
   model with a different feature count is treated as missing (`ready: false`).
-- **Retraining required:** the committed `models/isolation_forest.pkl` has **4
-  features**, but the code uses **7**, so it returns `ready: false` until
-  `train_model.py` is run against real data.
+- **Model:** retrained on 2026-10-15 from 652 `location_logs` rows (7 features).
+  624 of those rows came from one child, so retrain once more children have
+  history. Only children with 100+ records over 14+ days are scored.
+  `AI_SERVICE_KEY` is generated in `ai-service/.env`; the same value must be set
+  as the edge functions' secret.
 - **Commands** (in `ai-service/`):
 
   | Task | Command |
@@ -566,8 +568,8 @@ and safety events for a date range, 50 per page, through
     Switch to a transactional sender such as Brevo or Resend for real use.
 - Guardian screens other than History still show only the oldest child
   (`linkedChildren[0]`).
-- The AI model must be retrained (see "AI service") before AI notices can appear,
-  and the AI service is not hosted yet.
+- The AI service is not hosted yet, so no AI notices are produced (the model
+  is retrained and ready).
 - **Fixed in code; the database part takes effect once migration 20261015 is applied:**
   - **Open insert policy:** the `anomaly_events` INSERT policy of `true` for
     `public` is dropped.
