@@ -45,3 +45,6 @@ yarn-error.*
 supabase-backup-before-integration/
 
 .vscode/
+# Firebase service-account keys are secret (upload them to Expo, never commit)
+*firebase-adminsdk*.json
+*service-account*.json
