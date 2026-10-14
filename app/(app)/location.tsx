@@ -1,7 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -12,7 +11,12 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { useAuthStore } from "../../store/authStore";
 import { useLocationStore } from "../../store/locationStore";
+import { useGeofenceStore } from "../../store/geofenceStore";
 import { LocationMapCard } from "../../components/location/LocationMapCard";
+import { toZoneCircles } from "../../components/location/zoneCircles";
+import { MapAwareScrollView } from "../../components/location/MapScrollLock";
+import { useSosStore } from "../../store/sosStore";
+import { fetchSmartwatchForChild, type SmartwatchStatus } from "../../services/smartwatchService";
 
 import {
   guardianColors as colors,
@@ -57,6 +61,14 @@ export default function LocationScreen() {
   const location = useLocationStore((state) => state.latest);
   const loading = useLocationStore((state) => state.isLoading);
   const load = useLocationStore((state) => state.loadForChild);
+  const subscribe = useLocationStore((state) => state.subscribeToChildLocation);
+  const guardianId = useAuthStore((state) => state.guardian?.id);
+  const zones = useGeofenceStore((state) => state.zones);
+  const zoneEvents = useGeofenceStore((state) => state.events);
+  const loadZones = useGeofenceStore((state) => state.load);
+  const sosAlerts = useSosStore((state) => state.alerts);
+  const loadSos = useSosStore((state) => state.loadForChild);
+  const [watch, setWatch] = useState<SmartwatchStatus | null>(null);
 
   const trackingSource = primaryChild?.trackingSource ?? "mobile";
   const supportedTrackingSource =
@@ -70,6 +82,46 @@ export default function LocationScreen() {
     }
   }, [primaryChild?.id]);
 
+  // New locations arrive through realtime; the map moves the marker in place
+  // without moving the camera.
+  useEffect(() => {
+    if (!primaryChild?.id) return;
+
+    return subscribe(primaryChild.id, primaryChild.fullName ?? "Child");
+  }, [primaryChild?.id, primaryChild?.fullName, subscribe]);
+
+  useEffect(() => {
+    if (guardianId && primaryChild?.id) {
+      void loadZones(guardianId, primaryChild.id);
+    }
+  }, [guardianId, primaryChild?.id, loadZones]);
+
+  // Active SOS (red ring) and the watch's current battery for the child marker.
+  useEffect(() => {
+    if (!primaryChild?.id) return;
+    void loadSos(primaryChild.id, primaryChild.fullName ?? "Child");
+
+    if (trackingSource === "mobile") {
+      setWatch(null);
+      return;
+    }
+    let active = true;
+    fetchSmartwatchForChild(primaryChild.id)
+      .then((value) => active && setWatch(value))
+      .catch(() => active && setWatch(null));
+
+    return () => {
+      active = false;
+    };
+  }, [primaryChild?.id, primaryChild?.fullName, trackingSource, loadSos]);
+
+  const sosActive = sosAlerts.some((alert) => alert.childId === primaryChild?.id && alert.status === "active");
+
+  const zoneCircles = useMemo(
+    () => toZoneCircles(zones, zoneEvents),
+    [zones, zoneEvents],
+  );
+
   const refresh = () => {
     if (primaryChild?.id) {
       void load(primaryChild.id);
@@ -78,7 +130,7 @@ export default function LocationScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <ScrollView
+      <MapAwareScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
       >
@@ -129,7 +181,7 @@ export default function LocationScreen() {
         <View style={styles.mapHeaderRow}>
           <View>
             <Text style={styles.mapTitle}>Explore the latest position</Text>
-            <Text style={styles.mapCaption}>Pinch, zoom, switch map style, or recenter.</Text>
+            <Text style={styles.mapCaption}>Drag, pinch or scroll to explore. Safe Zones are shown to scale.</Text>
           </View>
           <View style={styles.mapHintIcon}>
             <Ionicons name="map-outline" size={18} color={colors.primaryDark} />
@@ -142,6 +194,12 @@ export default function LocationScreen() {
           loading={loading}
           trackingSource={supportedTrackingSource}
           onRefresh={refresh}
+          zones={zoneCircles}
+          avatarPath={primaryChild?.avatarPath}
+          avatarUrl={primaryChild?.avatarUrl}
+          sosActive={sosActive}
+          batteryPercent={watch?.batteryPercent ?? null}
+          networkType={watch?.networkType ?? null}
         />
 
         <View style={styles.metaRail}>
@@ -180,7 +238,7 @@ export default function LocationScreen() {
             update appears.
           </Text>
         </View>
-      </ScrollView>
+      </MapAwareScrollView>
     </SafeAreaView>
   );
 }

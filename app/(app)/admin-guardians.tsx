@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -11,6 +10,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { showAlert } from "../../lib/platformAlert";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
@@ -55,16 +55,17 @@ export default function AdminGuardiansScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const loadAccounts = useCallback(
-    async (isRefresh = false) => {
+    // silent: a realtime reload that keeps the current list on screen.
+    async (isRefresh = false, silent = false) => {
       if (isRefresh) setRefreshing(true);
-      else setLoading(true);
-      setError(null);
+      else if (!silent) setLoading(true);
+      if (!silent) setError(null);
 
       try {
         const data = await fetchAdminGuardianAccounts(search);
         setAccounts(data);
       } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Unable to load Guardian accounts.");
+        if (!silent) setError(reason instanceof Error ? reason.message : "Unable to load Guardian accounts.");
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -75,7 +76,7 @@ export default function AdminGuardiansScreen() {
 
   useEffect(() => {
     const timer = setTimeout(() => void loadAccounts(), 300);
-    const unsubscribe = subscribeAdminUpdates(() => void loadAccounts());
+    const unsubscribe = subscribeAdminUpdates(() => void loadAccounts(false, true));
     return () => {
       clearTimeout(timer);
       unsubscribe();
@@ -85,7 +86,7 @@ export default function AdminGuardiansScreen() {
   const changeStatus = (account: AdminGuardianAccount) => {
     const nextStatus = account.accountStatus === "active" ? "inactive" : "active";
 
-    Alert.alert(
+    showAlert(
       `${nextStatus === "active" ? "Activate" : "Deactivate"} Guardian account?`,
       `${account.fullName} will be marked as ${nextStatus}.`,
       [
@@ -102,9 +103,9 @@ export default function AdminGuardiansScreen() {
                   item.guardianId === account.guardianId ? { ...item, accountStatus: nextStatus } : item,
                 ),
               );
-              Alert.alert("Account status saved", `${account.fullName} is now ${nextStatus}.`);
+              showAlert("Account status saved", `${account.fullName} is now ${nextStatus}.`);
             } catch (reason) {
-              Alert.alert(
+              showAlert(
                 "Guardian account update error",
                 reason instanceof Error ? reason.message : "SafeTrack could not save the Guardian account status.",
               );

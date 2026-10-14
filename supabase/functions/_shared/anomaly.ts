@@ -3,27 +3,43 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 // Must match geofence_events_event_type_check.
 const ANOMALY_EVENT_TYPE = "possible_anomaly";
 
+const LOCATION_COLUMNS = "latitude, longitude, accuracy_meters, source, recorded_at";
+
 export async function reviewAnomaly(args: {
   supabase: SupabaseClient;
   childId: string;
   locationLogId: string;
-  latitude: number;
-  longitude: number;
-  recordedAt: string;
 }) {
   const aiEnabled = (Deno.env.get("AI_ENABLED") ?? "false").toLowerCase() === "true";
   const aiUrl = Deno.env.get("AI_SERVICE_URL");
+  const aiKey = Deno.env.get("AI_SERVICE_KEY");
 
   if (!aiEnabled || !aiUrl) return;
 
-  const {
-    supabase,
-    childId,
-    locationLogId,
-    latitude,
-    longitude,
-    recordedAt,
-  } = args;
+  if (!aiKey) {
+    console.error("AI_SERVICE_KEY is not set; skipping AI review");
+    return;
+  }
+
+  const { supabase, childId, locationLogId } = args;
+
+  // Score the stored row, and only if it belongs to this child.
+  const { data: current, error: currentError } = await supabase
+    .from("location_logs")
+    .select(`child_id, ${LOCATION_COLUMNS}`)
+    .eq("id", locationLogId)
+    .maybeSingle();
+
+  if (currentError) {
+    console.error("AI current location query failed", currentError);
+    return;
+  }
+
+  if (!current || current.child_id !== childId) return;
+
+  const latitude = Number(current.latitude);
+  const longitude = Number(current.longitude);
+  const recordedAt = current.recorded_at as string;
 
   const { data: recentNotice } = await supabase
     .from("geofence_events")
@@ -43,8 +59,10 @@ export async function reviewAnomaly(args: {
 
   const { data: history, error } = await supabase
     .from("location_logs")
-    .select("latitude, longitude, accuracy_meters, recorded_at")
+    .select(LOCATION_COLUMNS)
     .eq("child_id", childId)
+    // Earlier points only: the current one is sent separately.
+    .lt("recorded_at", recordedAt)
     .order("recorded_at", { ascending: false })
     .limit(500);
 
@@ -70,13 +88,17 @@ export async function reviewAnomaly(args: {
 
   const response = await fetch(`${aiUrl.replace(/\/$/, "")}/score`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-SafeTrack-AI-Key": aiKey,
+    },
     body: JSON.stringify({
       history: sorted,
       current: {
         latitude,
         longitude,
-        accuracy_meters: null,
+        accuracy_meters: current.accuracy_meters,
+        source: current.source,
         recorded_at: recordedAt,
       },
     }),

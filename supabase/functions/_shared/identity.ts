@@ -69,39 +69,11 @@ async function findPersonForUser(
     throw error;
   }
 
-  if (data) {
-    return data as SafeTrackPerson;
-  }
-
   //
-  // Compatibility fallback using email.
+  // No email fallback: persons.auth_user_id = auth.uid() is enforced, and
+  // matching by email could give another auth account an admin's identity.
   //
-  if (user.email) {
-    const {
-      data: byEmail,
-      error: emailError,
-    } = await supabase
-      .from("persons")
-      .select(
-        "id, auth_user_id, full_name, email, is_active",
-      )
-      .eq(
-        "email",
-        user.email.trim(),
-      )
-      .limit(1)
-      .maybeSingle();
-
-    if (emailError) {
-      throw emailError;
-    }
-
-    if (byEmail) {
-      return byEmail as SafeTrackPerson;
-    }
-  }
-
-  return null;
+  return (data as SafeTrackPerson | null) ?? null;
 }
 
 async function personHasRole(

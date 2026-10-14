@@ -7,7 +7,6 @@ import {
 
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -21,6 +20,11 @@ import {
 
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { showAlert } from "../../lib/platformAlert";
+import { childRing, toZoneCircles } from "../../components/location/zoneCircles";
+import { MapAwareScrollView } from "../../components/location/MapScrollLock";
+import { useAvatarUrl } from "../../components/location/useAvatarUrl";
+import { colorFor, freshness, initialsOf } from "../../components/location/mapTypes";
 
 import { useAuthStore } from "../../store/authStore";
 import { useGeofenceStore } from "../../store/geofenceStore";
@@ -30,6 +34,7 @@ import type { Geofence, LocationLog } from "../../types/safetrack";
 import {
   SafeTrackInteractiveMap,
   type SafeTrackMapCircle,
+  type SafeTrackMapFocus,
   type SafeTrackMapMarker,
 } from "../../components/location/SafeTrackInteractiveMap";
 
@@ -261,6 +266,7 @@ export default function SafeZonesScreen() {
 
   const {
     zones,
+    events: zoneEvents,
     isLoading,
     isSaving,
     error,
@@ -296,6 +302,19 @@ export default function SafeZonesScreen() {
 
   const [recenterSignal, setRecenterSignal] =
     useState(0);
+
+  const [focus, setFocus] =
+    useState<SafeTrackMapFocus | null>(null);
+
+  const focusOn = (
+    point: Coordinate,
+    radiusMeters?: number
+  ) =>
+    setFocus({
+      ...point,
+      radiusMeters,
+      key: Date.now(),
+    });
 
   const latestPoint = useMemo(
     () => locationCoordinate(latestLocation),
@@ -363,45 +382,47 @@ export default function SafeZonesScreen() {
     void loadLatestLocation();
   }, [loadZones, loadLatestLocation]);
 
+  const childPhoto = useAvatarUrl(child?.avatarPath, child?.avatarUrl);
+
+  // Saved zones only (no draft), for the child's ring colour.
+  const zoneCirclesOnly = useMemo(
+    () => toZoneCircles(zones, zoneEvents),
+    [zones, zoneEvents]
+  );
+
   const mapMarkers = useMemo<SafeTrackMapMarker[]>(
     () => {
       const showDraft =
         Boolean(selectedPoint) &&
         (modalVisible || pickingLocation);
 
-      const savedMarkers = zones
-        .filter(
-          (zone) =>
-            !showDraft || zone.id !== editingId
-        )
-        .map((zone) => ({
-          id: `zone-${zone.id}`,
-          latitude: Number(zone.latitude),
-          longitude: Number(zone.longitude),
-          title: zone.name,
-          detail: `${formatRadius(
-            Number(zone.radiusMeters)
-          )} Safe Zone${
-            zone.isEnabled ? "" : " • Disabled"
-          }`,
-          kind: "zone" as const,
-        }));
-
-      const markers: SafeTrackMapMarker[] = [
-        ...savedMarkers,
-      ];
+      const markers: SafeTrackMapMarker[] = [];
 
       if (latestPoint) {
+        const minutes = latestLocation?.recordedAt
+          ? (Date.now() - Date.parse(latestLocation.recordedAt)) / 60000
+          : Infinity;
+
         markers.push({
           id: "child-latest-location",
           latitude: latestPoint.latitude,
           longitude: latestPoint.longitude,
-          title:
-            child?.fullName ?? "Child location",
-          detail: `Latest available location • ${sourceLabel(
-            latestLocation?.source
-          )}`,
-          kind: "location",
+          title: child?.fullName ?? "Child location",
+          detail: latestLocation?.locationLabel ?? `Latest available location • ${sourceLabel(latestLocation?.source)}`,
+          kind: "child",
+          initials: initialsOf(child?.fullName),
+          color: colorFor(child?.fullName),
+          photoUrl: childPhoto,
+          photoKey: child?.avatarPath ?? null,
+          ring: childRing(zoneCirclesOnly, { freshness: freshness(latestLocation?.recordedAt) }),
+          status: freshness(latestLocation?.recordedAt),
+          recordedAt: latestLocation?.recordedAt ?? null,
+          source:
+            latestLocation?.source === "smartwatch" ||
+            latestLocation?.source === "mobile"
+              ? latestLocation.source
+              : null,
+          accuracyMeters: latestLocation?.accuracyMeters ?? null,
         });
       }
 
@@ -415,20 +436,24 @@ export default function SafeZonesScreen() {
           detail: `${formatRadius(
             selectedRadius
           )} radius • ${selectionLabel(pointSource)}`,
-          kind: "zone",
+          kind: "draft",
         });
       }
 
       return markers;
     },
     [
-      zones,
-      editingId,
       modalVisible,
       pickingLocation,
       latestPoint,
       latestLocation?.source,
+      latestLocation?.recordedAt,
+      latestLocation?.accuracyMeters,
+      latestLocation?.locationLabel,
       child?.fullName,
+      child?.avatarPath,
+      childPhoto,
+      zoneCirclesOnly,
       selectedPoint,
       form.name,
       selectedRadius,
@@ -442,19 +467,14 @@ export default function SafeZonesScreen() {
         Boolean(selectedPoint) &&
         (modalVisible || pickingLocation);
 
-      const savedCircles = zones
-        .filter(
+      const circles = toZoneCircles(
+        zones.filter(
           (zone) =>
             !showDraft || zone.id !== editingId
-        )
-        .map((zone) => ({
-          id: `zone-circle-${zone.id}`,
-          latitude: Number(zone.latitude),
-          longitude: Number(zone.longitude),
-          radiusMeters: Number(zone.radiusMeters),
-          label: zone.name,
-          enabled: zone.isEnabled,
-        }));
+        ),
+        zoneEvents,
+        { editable: true }
+      );
 
       if (
         showDraft &&
@@ -462,20 +482,21 @@ export default function SafeZonesScreen() {
         Number.isFinite(selectedRadius) &&
         selectedRadius > 0
       ) {
-        savedCircles.push({
+        circles.push({
           id: "safe-zone-draft-circle",
           latitude: selectedPoint.latitude,
           longitude: selectedPoint.longitude,
           radiusMeters: selectedRadius,
           label: form.name.trim() || "New Safe Zone",
-          enabled: true,
+          status: "draft",
         });
       }
 
-      return savedCircles;
+      return circles;
     },
     [
       zones,
+      zoneEvents,
       editingId,
       modalVisible,
       pickingLocation,
@@ -538,7 +559,7 @@ export default function SafeZonesScreen() {
 
   const openCreateFromChild = () => {
     if (!latestPoint) {
-      Alert.alert(
+      showAlert(
         "No child location available",
         "SafeTrack has not received a usable location for this child yet. You can still choose the Safe Zone center directly on the SafeTrack map."
       );
@@ -554,7 +575,7 @@ export default function SafeZonesScreen() {
       longitude: formatCoordinate(latestPoint.longitude),
     });
     setModalVisible(true);
-    setRecenterSignal((value) => value + 1);
+    focusOn(latestPoint);
   };
 
   const openEdit = (zone: Geofence) => {
@@ -575,7 +596,13 @@ export default function SafeZonesScreen() {
       ),
     });
     setModalVisible(true);
-    setRecenterSignal((value) => value + 1);
+    focusOn(
+      {
+        latitude: Number(zone.latitude),
+        longitude: Number(zone.longitude),
+      },
+      Number(zone.radiusMeters)
+    );
   };
 
   const useChildLocation = async () => {
@@ -587,7 +614,7 @@ export default function SafeZonesScreen() {
     }
 
     if (!point) {
-      Alert.alert(
+      showAlert(
         "No child location available",
         "SafeTrack has not received a usable latest location for this child yet. Keep the child's tracking device connected or choose the location directly on the SafeTrack map."
       );
@@ -600,13 +627,16 @@ export default function SafeZonesScreen() {
       longitude: formatCoordinate(point.longitude),
     }));
     setPointSource("child");
-    setRecenterSignal((value) => value + 1);
+    focusOn(point);
   };
 
   const startMapPick = () => {
     setPickingLocation(true);
     setModalVisible(false);
-    setRecenterSignal((value) => value + 1);
+
+    // Start near the current choice, or the child; the guardian zooms from there.
+    const start = selectedPoint ?? latestPoint;
+    if (start) focusOn(start);
   };
 
   const cancelMapPick = () => {
@@ -635,7 +665,6 @@ export default function SafeZonesScreen() {
     }));
     setPointSource("map");
     setPickingLocation(false);
-    setRecenterSignal((value) => value + 1);
 
     setTimeout(() => {
       setModalVisible(true);
@@ -653,7 +682,7 @@ export default function SafeZonesScreen() {
 
   const save = async () => {
     if (!guardian?.id || !child?.id) {
-      Alert.alert(
+      showAlert(
         "Unable to save",
         "SafeTrack could not find the linked Guardian and child information."
       );
@@ -664,7 +693,7 @@ export default function SafeZonesScreen() {
     const radiusMeters = Number(form.radius);
 
     if (!form.name.trim()) {
-      Alert.alert(
+      showAlert(
         "Safe Zone name required",
         "Enter a name such as Home, School, or Grandmother's House."
       );
@@ -672,7 +701,7 @@ export default function SafeZonesScreen() {
     }
 
     if (!point) {
-      Alert.alert(
+      showAlert(
         "Choose a Safe Zone center",
         "Use the child's latest available location or choose the center directly on the SafeTrack map."
       );
@@ -684,7 +713,7 @@ export default function SafeZonesScreen() {
       radiusMeters < 50 ||
       radiusMeters > 5000
     ) {
-      Alert.alert(
+      showAlert(
         "Invalid radius",
         "Enter a radius from 50 to 5000 meters."
       );
@@ -718,12 +747,12 @@ export default function SafeZonesScreen() {
       resetEditor();
       await loadZones();
 
-      Alert.alert(
+      showAlert(
         editingId ? "Safe Zone updated" : "Safe Zone created",
         "The Safe Zone center and radius were saved using the location selected in SafeTrack."
       );
     } catch (reason) {
-      Alert.alert(
+      showAlert(
         "Unable to save Safe Zone",
         reason instanceof Error
           ? reason.message
@@ -743,7 +772,7 @@ export default function SafeZonesScreen() {
         isEnabled: !zone.isEnabled,
       });
     } catch (reason) {
-      Alert.alert(
+      showAlert(
         "Update failed",
         reason instanceof Error
           ? reason.message
@@ -753,7 +782,7 @@ export default function SafeZonesScreen() {
   };
 
   const deleteZone = (zone: Geofence) => {
-    Alert.alert(
+    showAlert(
       "Delete Safe Zone?",
       `Remove ${zone.name}?`,
       [
@@ -773,7 +802,7 @@ export default function SafeZonesScreen() {
                 resetEditor();
               }
             } catch (reason) {
-              Alert.alert(
+              showAlert(
                 "Delete failed",
                 reason instanceof Error
                   ? reason.message
@@ -788,7 +817,7 @@ export default function SafeZonesScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView
+      <MapAwareScrollView
         style={styles.flex}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -818,7 +847,13 @@ export default function SafeZonesScreen() {
             circles={mapCircles}
             height={390}
             recenterSignal={recenterSignal}
+            focus={focus}
+            picking={pickingLocation}
             onMapPress={handleMapPress}
+            onZoneAction={(id, action) => {
+              const zone = zones.find((item) => item.id === id);
+              if (zone && action === "edit") openEdit(zone);
+            }}
           />
 
           {pickingLocation ? (
@@ -1169,7 +1204,7 @@ export default function SafeZonesScreen() {
             </View>
           ))
         )}
-      </ScrollView>
+      </MapAwareScrollView>
 
       <Modal
         visible={modalVisible}

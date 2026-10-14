@@ -1,5 +1,4 @@
 import {
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -8,6 +7,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { showAlert } from "../../lib/platformAlert";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -38,7 +38,7 @@ export default function AdminProfileScreen() {
       .join("") || "A";
 
   const handleLogout = () => {
-    Alert.alert(
+    showAlert(
       "Log out?",
       "You will be signed out of the SafeTrack Administrator Module.",
       [

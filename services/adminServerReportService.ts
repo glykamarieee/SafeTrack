@@ -120,18 +120,17 @@ async function downloadOnWeb(
 
   const browserUrl = browserUrlApi.createObjectURL(blob);
 
-  try {
-    const anchor = browserDocument.createElement("a");
-    anchor.href = browserUrl;
-    anchor.download = filename;
-    anchor.style.display = "none";
+  const anchor = browserDocument.createElement("a");
+  anchor.href = browserUrl;
+  anchor.download = filename;
+  anchor.style.display = "none";
 
-    browserDocument.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-  } finally {
-    browserUrlApi.revokeObjectURL(browserUrl);
-  }
+  browserDocument.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+
+  // Revoking immediately can cancel the download in Firefox and Safari.
+  setTimeout(() => browserUrlApi.revokeObjectURL(browserUrl), 60_000);
 }
 
 async function downloadOnNative(

@@ -1,14 +1,15 @@
 import { json, options } from "../_shared/response.ts";
+import { safeEqual } from "../_shared/crypto.ts";
 import { serviceClient } from "../_shared/supabase.ts";
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return options();
 
   try {
-    const expectedSecret = Deno.env.get("CRON_SECRET");
-    const providedSecret = request.headers.get("x-cron-secret");
+    const expectedSecret = Deno.env.get("CRON_SECRET") ?? "";
+    const providedSecret = request.headers.get("x-cron-secret") ?? "";
 
-    if (!expectedSecret || providedSecret !== expectedSecret) {
+    if (!expectedSecret || !safeEqual(providedSecret, expectedSecret)) {
       return json({ error: "Unauthorized scheduled request." }, 401);
     }
 

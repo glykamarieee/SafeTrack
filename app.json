@@ -53,7 +53,8 @@
         }
       ],
       "expo-video",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-image"
     ]
   }
 }

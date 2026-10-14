@@ -1,10 +1,15 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useMemo } from "react";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import {
   SafeTrackInteractiveMap,
+  type SafeTrackMapCircle,
   type SafeTrackMapMarker,
 } from "./SafeTrackInteractiveMap";
+import { childRing } from "./zoneCircles";
+import { useAvatarUrl } from "./useAvatarUrl";
+import { colorFor, freshness, initialsOf } from "./mapTypes";
 import type { LocationLog } from "../../types/safetrack";
 import {
   guardianColors as colors,
@@ -18,7 +23,23 @@ export type LocationMapCardProps = {
   loading?: boolean;
   trackingSource?: "mobile" | "smartwatch" | "both";
   onRefresh?: () => void;
+  /** Safe Zones to draw around the child's position. */
+  zones?: SafeTrackMapCircle[];
+  /** The child's profile photo (storage path, or an already signed URL). */
+  avatarPath?: string | null;
+  avatarUrl?: string | null;
+  /** An active SOS turns the ring red and pulsing. */
+  sosActive?: boolean;
+  /** The watch's current battery and network (not historical values). */
+  batteryPercent?: number | null;
+  networkType?: string | null;
 };
+
+const NO_ZONES: SafeTrackMapCircle[] = [];
+
+// The info card covers the bottom of the map. On Android/iOS the map padding
+// lifts the Google logo and the camera centre above it.
+const MAP_PADDING = { bottom: 96 };
 
 function relativeTime(value?: string | null) {
   if (!value) return "No update yet";
@@ -46,30 +67,79 @@ export function LocationMapCard({
   loading = false,
   trackingSource,
   onRefresh,
+  zones = NO_ZONES,
+  avatarPath,
+  avatarUrl,
+  sosActive = false,
+  batteryPercent = null,
+  networkType = null,
 }: LocationMapCardProps) {
   const validLocation =
     Boolean(location) &&
     Number.isFinite(location?.latitude) &&
     Number.isFinite(location?.longitude);
 
-  const markers: SafeTrackMapMarker[] = validLocation && location
-    ? [
-        {
-          id: "latest-location",
-          latitude: location.latitude,
-          longitude: location.longitude,
-          title: location.childName ? `${location.childName}'s latest location` : "Latest available location",
-          detail: relativeTime(location.recordedAt),
-          kind: "location",
-        },
-      ]
-    : [];
+  const photoUrl = useAvatarUrl(avatarPath, avatarUrl);
+  const fresh = freshness(location?.recordedAt);
+  const ring = childRing(zones, { sosActive, freshness: fresh });
+  const isWatch = location?.source === "smartwatch";
+
+  // Memoized on the values, so unrelated re-renders never reach the map.
+  const markers = useMemo<SafeTrackMapMarker[]>(
+    () =>
+      validLocation && location
+        ? [
+            {
+              id: "child-latest",
+              latitude: location.latitude,
+              longitude: location.longitude,
+              title: location.childName ?? "Latest available location",
+              detail: location.locationLabel ?? undefined,
+              kind: "child",
+              initials: initialsOf(location.childName),
+              color: colorFor(location.childName),
+              photoUrl,
+              photoKey: avatarPath ?? null,
+              ring,
+              status: fresh,
+              recordedAt: location.recordedAt,
+              source: isWatch ? "smartwatch" : location.source === "mobile" ? "mobile" : null,
+              // Battery and network belong to the watch, so only on watch fixes.
+              batteryPercent: isWatch ? batteryPercent : null,
+              networkType: isWatch ? networkType : null,
+              accuracyMeters: location.accuracyMeters ?? null,
+            },
+          ]
+        : [],
+    [
+      validLocation,
+      location?.latitude,
+      location?.longitude,
+      location?.childName,
+      location?.recordedAt,
+      location?.source,
+      location?.accuracyMeters,
+      location?.locationLabel,
+      photoUrl,
+      avatarPath,
+      ring,
+      fresh,
+      isWatch,
+      batteryPercent,
+      networkType,
+    ],
+  );
 
   return (
     <View style={[styles.container, { height }]}>
       {validLocation && location ? (
         <>
-          <SafeTrackInteractiveMap markers={markers} height={height} mapStyleControlTop={58} mapStyleControlLeft={14} />
+          <SafeTrackInteractiveMap
+            markers={markers}
+            circles={zones}
+            height={height}
+            mapPadding={MAP_PADDING}
+          />
 
           <View pointerEvents="none" style={styles.liveBadge}>
             <View style={styles.liveDot} />
@@ -163,9 +233,10 @@ const styles = StyleSheet.create({
   },
   locationGlass: {
     position: "absolute",
-    left: 14,
-    right: 76,
-    bottom: 14,
+    left: 12,
+    right: 12,
+    // Web cannot move the Google logo, so the card sits above it there.
+    bottom: Platform.OS === "web" ? 32 : 14,
     minHeight: 64,
     padding: 9,
     paddingRight: 10,

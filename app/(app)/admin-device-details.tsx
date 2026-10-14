@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,6 +9,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { showAlert } from "../../lib/platformAlert";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -61,19 +61,22 @@ export default function AdminDeviceDetailsScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadDetail = useCallback(async () => {
+  // silent: a realtime reload that keeps the current details on screen.
+  const loadDetail = useCallback(async (silent = false) => {
     if (!deviceId) {
       setError("Smartwatch device ID is missing.");
       setLoading(false);
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       setDetail(await fetchAdminSmartwatchDeviceDetail(deviceId));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to load smartwatch device details.");
+      if (!silent) setError(reason instanceof Error ? reason.message : "Unable to load smartwatch device details.");
     } finally {
       setLoading(false);
     }
@@ -81,7 +84,7 @@ export default function AdminDeviceDetailsScreen() {
 
   useEffect(() => {
     void loadDetail();
-    const unsubscribe = subscribeAdminUpdates(() => void loadDetail());
+    const unsubscribe = subscribeAdminUpdates(() => void loadDetail(true));
     return unsubscribe;
   }, [loadDetail]);
 
@@ -89,7 +92,7 @@ export default function AdminDeviceDetailsScreen() {
     if (!detail) return;
     const nextStatus: AccountStatus = detail.isActive ? "inactive" : "active";
 
-    Alert.alert(
+    showAlert(
       `${nextStatus === "active" ? "Activate" : "Deactivate"} smartwatch device?`,
       `${detail.watchId} will be marked as ${nextStatus}.`,
       [
@@ -102,9 +105,9 @@ export default function AdminDeviceDetailsScreen() {
             try {
               await updateAdminSmartwatchDeviceStatus(detail.deviceId, nextStatus);
               setDetail((current) => (current ? { ...current, isActive: nextStatus === "active" } : current));
-              Alert.alert("Device status saved", `${detail.watchId} is now ${nextStatus}.`);
+              showAlert("Device status saved", `${detail.watchId} is now ${nextStatus}.`);
             } catch (reason) {
-              Alert.alert(
+              showAlert(
                 "Smartwatch device update error",
                 reason instanceof Error ? reason.message : "SafeTrack could not save the device status.",
               );
@@ -147,7 +150,7 @@ export default function AdminDeviceDetailsScreen() {
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.page}>
-          <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.back, pressed && styles.pressed]}>
+          <Pressable onPress={() => router.navigate("/(app)/admin-devices")} style={({ pressed }) => [styles.back, pressed && styles.pressed]}>
             <Ionicons name="arrow-back" size={18} color={colors.primaryDark} />
             <Text style={styles.backText}>Smartwatch devices</Text>
           </Pressable>

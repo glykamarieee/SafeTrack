@@ -134,9 +134,6 @@ Deno.serve(async (request) => {
         supabase,
         childId: device.child_id,
         locationLogId: location.id,
-        latitude: Number(location.latitude),
-        longitude: Number(location.longitude),
-        recordedAt: location.recorded_at,
       });
 
       return json({

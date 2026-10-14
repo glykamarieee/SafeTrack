@@ -367,9 +367,23 @@ export async function fetchAdminReportSummary(
     sosRecords: toCount(row.sos_records),
   };
 }
+
+// Watches insert locations every few minutes; coalesce bursts of changes
+// into one reload instead of one per row.
+const ADMIN_UPDATE_DEBOUNCE_MS = 2000;
+
 export function subscribeAdminUpdates(
-  callback: () => void
+  onUpdate: () => void
 ) {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const callback = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      onUpdate();
+    }, ADMIN_UPDATE_DEBOUNCE_MS);
+  };
 
   const channel =
     supabase
@@ -441,6 +455,7 @@ export function subscribeAdminUpdates(
 
 
   return () => {
+    if (timer) clearTimeout(timer);
     supabase.removeChannel(channel);
   };
 

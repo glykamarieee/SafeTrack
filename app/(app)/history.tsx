@@ -1,45 +1,60 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Linking,
   Pressable,
-  ScrollView,
+  RefreshControl,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect, useRouter } from "expo-router";
 
+import { useAuthStore } from "../../store/authStore";
 import {
-  SafeAreaView,
-} from "react-native-safe-area-context";
-
-import {
-  Ionicons,
-} from "@expo/vector-icons";
-
-
-import {
-  useAuthStore,
-} from "../../store/authStore";
-
-
-import {
-  supabase,
-} from "../../lib/supabase";
-
-
+  estimateStops,
+  loadDailyActivity,
+  loadHistoryZones,
+  minutesInZones,
+  philippineDayRange,
+  routeDistance,
+  MAX_SPEED_MPS,
+  MIN_MOVE_METERS,
+  STOP_MIN_MINUTES,
+  STOP_RADIUS_METERS,
+  errorMessage,
+  type ActivityEvent,
+  type ActivityLocationPoint,
+  type ActivityStop,
+  type ZoneTransition,
+} from "../../services/activityHistoryService";
 import {
   SafeTrackInteractiveMap,
+  type SafeTrackMapFocus,
   type SafeTrackMapMarker,
 } from "../../components/location/SafeTrackInteractiveMap";
-
-
+import { MapAwareScrollView } from "../../components/location/MapScrollLock";
+import { MapSheet, SheetButton, SheetRow, sheetStyles } from "../../components/location/MapSheet";
+import { toZoneCircles } from "../../components/location/zoneCircles";
+import { useAvatarUrl } from "../../components/location/useAvatarUrl";
+import { colorFor, directionsUrl, initialsOf } from "../../components/location/mapTypes";
+import { ReplaySlider } from "../../components/history/ReplaySlider";
+import { HistoryCalendar } from "../../components/history/HistoryCalendar";
+import { EventSheet } from "../../components/history/EventSheet";
+import { EVENT_FILTERS, eventCategory, eventLook, type EventFilter } from "../../components/history/eventLook";
+import {
+  dateLabel,
+  distanceLabel,
+  durationLabel,
+  moveDate,
+  timeLabel,
+  todayKey,
+} from "../../components/history/dates";
+import { showAlert } from "../../lib/platformAlert";
+import type { Child, Geofence } from "../../types/safetrack";
 import {
   guardianColors as colors,
   guardianRadius as radius,
@@ -47,1850 +62,1009 @@ import {
   guardianSpacing as spacing,
 } from "../../constants/guardianDesign";
 
-
-
-
-
-type LocationPoint = {
-
-  id:string;
-
-  latitude:number;
-
-  longitude:number;
-
-  source:string;
-
-  label:string|null;
-
-  accuracy:number|null;
-
-  recordedAt:string;
-
-};
-
-
-
-
-
-type HistoryEvent = {
-
-  id:string;
-
-  type:
-    | "geofence"
-    | "sos"
-    | "anomaly"
-    | "watch_disconnected"
-    | "prolonged_inactivity";
-
-  title:string;
-
-  detail:string;
-
-  occurredAt:string;
-
-  latitude?:number|null;
-
-  longitude?:number|null;
-
-};
-
-
-
-
-
-
-
-
-
-function getDateKey(
-  date=new Date()
-){
-
-  const parts =
-    new Intl.DateTimeFormat(
-      "en-US",
-      {
-        timeZone:"Asia/Manila",
-        year:"numeric",
-        month:"2-digit",
-        day:"2-digit",
-      }
-    )
-    .formatToParts(date);
-
-
-
-  const year =
-    parts.find(
-      item=>item.type==="year"
-    )
-    ?.value
-    ??
-    "2026";
-
-
-
-  const month =
-    parts.find(
-      item=>item.type==="month"
-    )
-    ?.value
-    ??
-    "01";
-
-
-
-  const day =
-    parts.find(
-      item=>item.type==="day"
-    )
-    ?.value
-    ??
-    "01";
-
-
-
-  return `${year}-${month}-${day}`;
-
-}
-
-
-
-
-
-
-
-function moveDate(
-  value:string,
-  days:number
-){
-
-
-  const [
-    year,
-    month,
-    day
-  ] =
-  value
-  .split("-")
-  .map(Number);
-
-
-
-  const date =
-    new Date(
-      Date.UTC(
-        year,
-        month-1,
-        day,
-        12
-      )
-    );
-
-
-
-  date.setUTCDate(
-    date.getUTCDate()+days
-  );
-
-
-
-  return `${date.getUTCFullYear()}-${String(
-    date.getUTCMonth()+1
-  ).padStart(2,"0")}-${String(
-    date.getUTCDate()
-  ).padStart(2,"0")}`;
-
-}
-
-
-
-
-
-
-
-function getDateRange(
-  value:string
-){
-
-  const start =
-    new Date(
-      `${value}T00:00:00+08:00`
-    );
-
-
+type StatId = "records" | "distance" | "span" | "zones" | "sos";
+
+type PointInfo = { title: string; point: ActivityLocationPoint };
+
+const SPEEDS = [1, 4, 16] as const;
+// 1x replays one recorded minute per second.
+const TICK_MS = 100;
+
+/** Where the child was at `time`, interpolated between the two nearest records. */
+function positionAt(points: ActivityLocationPoint[], time: number) {
+  if (!points.length) return null;
+  const times = points.map((point) => Date.parse(point.recordedAt));
+  if (time <= times[0]!) return { latitude: points[0]!.latitude, longitude: points[0]!.longitude };
+  const last = points.length - 1;
+  if (time >= times[last]!) return { latitude: points[last]!.latitude, longitude: points[last]!.longitude };
+
+  let low = 0;
+  let high = last;
+  while (high - low > 1) {
+    const middle = (low + high) >> 1;
+    if (times[middle]! <= time) low = middle;
+    else high = middle;
+  }
+  const span = times[high]! - times[low]! || 1;
+  const ratio = (time - times[low]!) / span;
 
   return {
-
-    start:
-      start.toISOString(),
-
-
-    end:
-      new Date(
-        start.getTime()
-        +
-        86400000
-      )
-      .toISOString(),
-
+    latitude: points[low]!.latitude + (points[high]!.latitude - points[low]!.latitude) * ratio,
+    longitude: points[low]!.longitude + (points[high]!.longitude - points[low]!.longitude) * ratio,
   };
-
 }
 
-
-
-
-
-
-
-function dateLabel(
-  value:string,
-  today:string
-){
-
-
-  if(value===today){
-
-    return "Today";
-
-  }
-
-
-
-  if(
-    value===moveDate(
-      today,
-      -1
-    )
-  ){
-
-    return "Yesterday";
-
-  }
-
-
-
-  return new Date(
-    `${value}T12:00:00+08:00`
-  )
-  .toLocaleDateString(
-    "en-PH",
-    {
-      month:"short",
-      day:"numeric",
-      year:"numeric",
-    }
-  );
-
-}
-
-
-
-
-
-
-
-function timeLabel(
-  value:string
-){
-
-  return new Date(value)
-    .toLocaleTimeString(
-      "en-PH",
-      {
-        timeZone:"Asia/Manila",
-        hour:"numeric",
-        minute:"2-digit",
-      }
-    );
-
-}
-
-
-
-
-
-
-
-function validCoordinate(
-  latitude:number,
-  longitude:number
-){
-
-  return (
-
-    Number.isFinite(latitude)
-
-    &&
-
-    Number.isFinite(longitude)
-
-    &&
-
-    latitude>=-90
-
-    &&
-
-    latitude<=90
-
-    &&
-
-    longitude>=-180
-
-    &&
-
-    longitude<=180
-
-  );
-
-}
-
-
-
-
-
-
-
-function calculateDistance(
-  first:LocationPoint,
-  second:LocationPoint
-){
-
-
-  const radians =
-    (value:number)=>
-      value*Math.PI/180;
-
-
-
-  const earthRadius =
-    6371000;
-
-
-
-  const latitudeDifference =
-    radians(
-      second.latitude-first.latitude
-    );
-
-
-
-  const longitudeDifference =
-    radians(
-      second.longitude-first.longitude
-    );
-
-
-
-  const calculation =
-
-    Math.sin(
-      latitudeDifference/2
-    ) ** 2
-
-    +
-
-    Math.cos(
-      radians(first.latitude)
-    )
-
-    *
-
-    Math.cos(
-      radians(second.latitude)
-    )
-
-    *
-
-    Math.sin(
-      longitudeDifference/2
-    ) ** 2;
-
-
-
-  return (
-    earthRadius
-    *
-    2
-    *
-    Math.atan2(
-      Math.sqrt(calculation),
-      Math.sqrt(
-        1-calculation
-      )
-    )
-  );
-
-}
-
-
-
-
-
-
-
-function totalDistance(
-  points:LocationPoint[]
-){
-
-  return points.reduce(
-    (
-      total,
-      point,
-      index
-    )=>{
-
-      if(index===0){
-
-        return total;
-
-      }
-
-
-      return (
-        total
-        +
-        calculateDistance(
-          points[index-1],
-          point
-        )
-      );
-
-
-    },
-    0
-  );
-
-}
-
-
-
-
-
-
-
-function distanceLabel(
-  meters:number
-){
-
-  if(!meters){
-
-    return "No route";
-
-  }
-
-
-
-  if(meters<1000){
-
-    return `${Math.round(meters)} m`;
-
-  }
-
-
-
-  return `${(
-    meters/1000
-  ).toFixed(1)} km`;
-
-}
-
-
-
-
-
-
-
-export default function HistoryScreen(){
-
+export default function HistoryScreen() {
+  const router = useRouter();
   const { width } = useWindowDimensions();
   const wide = width >= 1040;
 
+  const guardian = useAuthStore((state) => state.guardian);
+  const children = useAuthStore((state) => state.linkedChildren);
+  const [childId, setChildId] = useState<string | null>(children[0]?.id ?? null);
+  const child: Child | null = children.find((item) => item.id === childId) ?? children[0] ?? null;
+  const childPhoto = useAvatarUrl(child?.avatarPath, child?.avatarUrl);
 
-  const child =
-  useAuthStore(
-    state=>state.linkedChildren?.[0] ?? null
-  );
+  // Recomputed each render so "Today" stays right if the app stays open past midnight.
+  const today = todayKey();
+  const [selectedDate, setSelectedDate] = useState(today);
 
-  const trackingSource =
-child?.trackingSource ??
-"mobile";
+  const [points, setPoints] = useState<ActivityLocationPoint[]>([]);
+  const [events, setEvents] = useState<ActivityEvent[]>([]);
+  const [transitions, setTransitions] = useState<ZoneTransition[]>([]);
+  const [zones, setZones] = useState<Geofence[]>([]);
+  const [problems, setProblems] = useState<string[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
 
+  const [recenterSignal, setRecenterSignal] = useState(0);
+  const [focus, setFocus] = useState<SafeTrackMapFocus | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [statOpen, setStatOpen] = useState<StatId | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<ActivityEvent | null>(null);
+  const [pointInfo, setPointInfo] = useState<PointInfo | null>(null);
+  const [filter, setFilter] = useState<EventFilter>("all");
 
+  const [replayTime, setReplayTime] = useState<number | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(4);
 
-  const today =
-    useMemo(
-      ()=>getDateKey(),
-      []
-    );
+  useEffect(() => {
+    if (!childId && children[0]) setChildId(children[0].id);
+  }, [childId, children]);
 
+  // Ignore responses for a day or child that is no longer selected.
+  const request = useRef(0);
 
+  const loadHistory = useCallback(
+    async (isRefresh = false) => {
+      const id = ++request.current;
 
-  const [
-    selectedDate,
-    setSelectedDate
-  ] =
-  useState(today);
-
-
-
-  const [
-    points,
-    setPoints
-  ] =
-  useState<LocationPoint[]>([]);
-
-
-
-  const [
-    events,
-    setEvents
-  ] =
-  useState<HistoryEvent[]>([]);
-
-
-
-  const [
-    loading,
-    setLoading
-  ] =
-  useState(true);
-
-
-
-  const [
-    message,
-    setMessage
-  ] =
-  useState("");
-
-
-
-  const [
-    recenterSignal,
-    setRecenterSignal
-  ] =
-  useState(0);
-
-  const loadHistory =
-  useCallback(
-    async()=>{
-
-      if(!child?.id){
-
+      if (!child?.id) {
         setPoints([]);
-
         setEvents([]);
-
+        setTransitions([]);
+        setProblems([]);
         setLoading(false);
-
-        setMessage(
-          "No child profile is available."
-        );
-
+        setLoadError("No child profile is available yet. Register a child to see their history.");
         return;
-
       }
 
-
-
-      setLoading(true);
-
-      setMessage("");
-
-
-
-      try{
-
-
-        const {
-          start,
-          end
-        } =
-        getDateRange(
-          selectedDate
-        );
-
-
-
-        const [
-
-          locationsResult,
-
-          safetyEventsResult,
-
-          sosResult,
-
-        ] = await Promise.all([
-
-
-          supabase
-
-          .from("location_logs")
-
-          .select(
-            `
-            id,
-            latitude,
-            longitude,
-            source,
-            location_label,
-            accuracy_meters,
-            recorded_at
-            `
-          )
-
-          .eq(
-            "child_id",
-            child.id
-          )
-
-          .gte(
-            "recorded_at",
-            start
-          )
-
-          .lt(
-            "recorded_at",
-            end
-          )
-
-          .in(
-            "source",
-            trackingSource === "mobile"
-              ? ["mobile", "child_mobile"]
-              : trackingSource === "smartwatch"
-              ? ["smartwatch", "watch"]
-              : ["mobile", "child_mobile", "smartwatch", "watch"]
-          )
-
-          .order(
-            "recorded_at",
-            {
-              ascending:true
-            }
-          ),
-
-
-
-
-
-
-          supabase
-
-          .from("safety_events")
-
-          .select(
-            `
-            id,
-            event_type,
-            title,
-            details,
-            latitude,
-            longitude,
-            occurred_at
-            `
-          )
-
-          .eq(
-            "child_id",
-            child.id
-          )
-
-          .gte(
-            "occurred_at",
-            start
-          )
-
-          .lt(
-            "occurred_at",
-            end
-          )
-
-          .order(
-            "occurred_at",
-            {
-              ascending:false
-            }
-          ),
-
-
-
-
-
-
-          supabase
-
-          .from("sos_alerts")
-
-          .select(
-            `
-            id,
-            activation_method,
-            triggered_at,
-            latitude,
-            longitude
-            `
-          )
-
-          .eq(
-            "child_id",
-            child.id
-          )
-
-          .gte(
-            "triggered_at",
-            start
-          )
-
-          .lt(
-            "triggered_at",
-            end
-          )
-
-          .order(
-            "triggered_at",
-            {
-              ascending:false
-            }
-          ),
-
-        ]);
-
-
-
-
-
-        if(locationsResult.error){
-
-          throw locationsResult.error;
-
-        }
-
-
-
-        if(safetyEventsResult.error){
-
-          throw safetyEventsResult.error;
-
-        }
-
-
-
-        if(sosResult.error){
-
-          throw sosResult.error;
-
-        }
-
-
-
-
-
-
-
-        const locationPoints:LocationPoint[] =
-
-          (locationsResult.data ?? [])
-
-          .map(
-            row=>({
-
-              id:String(row.id),
-
-              latitude:Number(
-                row.latitude
-              ),
-
-              longitude:Number(
-                row.longitude
-              ),
-
-              source:
-                String(
-                  row.source ??
-                  "smartwatch"
-                ),
-
-
-              label:
-                row.location_label
-                ?
-                String(
-                  row.location_label
-                )
-                :
-                null,
-
-
-              accuracy:
-                row.accuracy_meters===null
-                ?
-                null
-                :
-                Number(
-                  row.accuracy_meters
-                ),
-
-
-              recordedAt:
-                String(
-                  row.recorded_at
-                ),
-
-            })
-          )
-
-          .filter(
-            point=>
-              validCoordinate(
-                point.latitude,
-                point.longitude
-              )
-          );
-
-
-
-
-
-
-
-
-
-        const safetyEvents:HistoryEvent[] =
-
-
-          (safetyEventsResult.data ?? [])
-
-          .map(
-            row=>{
-
-
-              const eventType =
-                String(
-                  row.event_type
-                );
-
-
-
-              let type:
-              HistoryEvent["type"] =
-                "geofence";
-
-
-
-              if(
-                eventType==="possible_anomaly"
-              ){
-
-                type="anomaly";
-
-              }
-
-              else if(
-                eventType==="watch_disconnected"
-              ){
-
-                type="watch_disconnected";
-
-              }
-
-              else if(
-                eventType==="prolonged_inactivity"
-              ){
-
-                type="prolonged_inactivity";
-
-              }
-
-
-
-              return {
-
-                id:String(
-                  row.id
-                ),
-
-
-                type,
-
-
-                title:
-                  String(
-                    row.title ??
-                    "Safety event"
-                  ),
-
-
-                detail:
-                  String(
-                    row.details ??
-                    eventType.replaceAll(
-                      "_",
-                      " "
-                    )
-                  ),
-
-
-                occurredAt:
-                  String(
-                    row.occurred_at
-                  ),
-
-
-                latitude:
-                  row.latitude===null
-                  ?
-                  null
-                  :
-                  Number(
-                    row.latitude
-                  ),
-
-
-                longitude:
-                  row.longitude===null
-                  ?
-                  null
-                  :
-                  Number(
-                    row.longitude
-                  ),
-
-              };
-
-            }
-
-          );
-
-
-
-
-
-
-
-
-
-        const sosEvents:HistoryEvent[] =
-
-
-          (sosResult.data ?? [])
-
-          .map(
-            row=>({
-
-              id:
-                String(
-                  row.id
-                ),
-
-
-              type:
-                "sos" as const,
-
-
-              title:
-                "SOS Alert",
-
-
-              detail:
-                `Activation method: ${
-                  String(
-                    row.activation_method ??
-                    "unknown"
-                  )
-                  .replaceAll(
-                    "_",
-                    " "
-                  )
-                }`,
-
-
-              occurredAt:
-                String(
-                  row.triggered_at
-                ),
-
-
-              latitude:
-                row.latitude===null
-                ?
-                null
-                :
-                Number(
-                  row.latitude
-                ),
-
-
-              longitude:
-                row.longitude===null
-                ?
-                null
-                :
-                Number(
-                  row.longitude
-                ),
-
-            })
-
-          );
-
-
-
-
-
-
-
-
-        setPoints(
-          locationPoints
-        );
-
-
-
-        setEvents(
-
-          [
-
-            ...safetyEvents,
-
-            ...sosEvents,
-
-          ]
-
-          .sort(
-            (
-              first,
-              second
-            )=>
-
-              new Date(
-                second.occurredAt
-              )
-              .getTime()
-
-              -
-
-              new Date(
-                first.occurredAt
-              )
-              .getTime()
-
-          )
-
-        );
-
-
-
-      }
-
-      catch(reason){
-
-
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
+      setLoadError(null);
+
+      try {
+        const activity = await loadDailyActivity(child.id, selectedDate);
+        if (id !== request.current) return;
+        setPoints(activity.points);
+        setEvents(activity.events);
+        setTransitions(activity.zoneTransitions);
+        setProblems(activity.problems);
+        setLoadedKey(`${child.id}:${selectedDate}`);
+      } catch (reason) {
+        if (id !== request.current) return;
         setPoints([]);
-
         setEvents([]);
-
-
-
-        setMessage(
-
-          reason instanceof Error
-
-          ?
-
-          reason.message
-
-          :
-
-          "Unable to load daily activity history."
-
-        );
-
-
+        setTransitions([]);
+        setProblems([]);
+        setLoadError(errorMessage(reason));
+      } finally {
+        if (id === request.current) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
-
-
-      finally{
-
-
-        setLoading(false);
-
-
-      }
-
-
     },
-
-    [
-      child?.id,
-      selectedDate,
-      trackingSource,
-    ]
-
+    [child?.id, selectedDate],
   );
 
-
-
-
-
-
-useEffect(
-  ()=>{
-
-    void loadHistory();
-
-  },
-
-  [
-    loadHistory
-  ]
-
-);
-
-
-
-
-
-
-
-
-
-const mapPath =
-
-  useMemo(
-
-    ()=>
-
-
-      points.map(
-        point=>({
-
-          latitude:
-            point.latitude,
-
-
-          longitude:
-            point.longitude,
-
-        })
-
-      ),
-
-
-    [
-      points
-    ]
-
+  // The (app) tabs stay mounted, so reload whenever this screen is shown,
+  // as well as when the child or date changes.
+  useFocusEffect(
+    useCallback(() => {
+      void loadHistory();
+    }, [loadHistory]),
   );
 
+  useEffect(() => {
+    if (!guardian?.id || !child?.id) {
+      setZones([]);
+      return;
+    }
+    let active = true;
+    loadHistoryZones(guardian.id, child.id)
+      .then((value) => active && setZones(value))
+      .catch((reason) => {
+        if (active) setProblems((current) => [...current, `Safe Zones could not be loaded (${errorMessage(reason)}).`]);
+      });
 
+    return () => {
+      active = false;
+    };
+  }, [guardian?.id, child?.id]);
 
+  // A new day or child: stop the replay and clear selections.
+  useEffect(() => {
+    setPlaying(false);
+    setReplayTime(null);
+    setFilter("all");
+  }, [selectedDate, child?.id]);
 
+  // ---- Day statistics.
+  const stops = useMemo(() => estimateStops(points), [points]);
+  const distance = useMemo(() => routeDistance(points), [points]);
+  const firstPoint = points[0] ?? null;
+  const latestPoint = points[points.length - 1] ?? null;
+  const spanMinutes =
+    firstPoint && latestPoint ? Math.max(0, (Date.parse(latestPoint.recordedAt) - Date.parse(firstPoint.recordedAt)) / 60000) : 0;
+  const enabledZoneIds = useMemo(() => new Set(zones.filter((zone) => zone.isEnabled).map((zone) => zone.id)), [zones]);
+  const zoneMinutes = useMemo(
+    () => minutesInZones(transitions, selectedDate, enabledZoneIds),
+    [transitions, selectedDate, enabledZoneIds],
+  );
+  const sosEvents = events.filter((event) => event.type === "sos");
+  const activeSos = sosEvents.filter((event) => event.sosStatus === "active").length;
+  const sources = Array.from(new Set(points.map((point) => (point.source === "mobile" ? "phone" : "smartwatch"))));
 
+  // ---- Map content (memoized so unrelated renders never reach the map).
+  const path = useMemo(() => points.map(({ latitude, longitude }) => ({ latitude, longitude })), [points]);
 
+  const zoneCircles = useMemo(() => toZoneCircles(zones, transitions), [zones, transitions]);
 
+  const staticMarkers = useMemo<SafeTrackMapMarker[]>(() => {
+    const list: SafeTrackMapMarker[] = [];
+    if (firstPoint) {
+      list.push({
+        id: "start",
+        latitude: firstPoint.latitude,
+        longitude: firstPoint.longitude,
+        title: "Starting location",
+        detail: `Recorded ${timeLabel(firstPoint.recordedAt)}`,
+        kind: "start",
+      });
+    }
+    stops.forEach((stop) =>
+      list.push({
+        id: stop.id,
+        latitude: stop.latitude,
+        longitude: stop.longitude,
+        title: `Stop ${stop.index}`,
+        kind: "stop",
+        label: String(stop.index),
+      }),
+    );
+    events.forEach((event) => {
+      if (event.latitude == null || event.longitude == null) return;
+      const look = eventLook(event);
+      list.push({
+        id: `event:${event.type}:${event.id}`,
+        latitude: event.latitude,
+        longitude: event.longitude,
+        title: event.title,
+        kind: "event",
+        tint: look.tint,
+        icon: look.icon,
+      });
+    });
+    if (latestPoint && points.length > 1) {
+      list.push({
+        id: "latest",
+        latitude: latestPoint.latitude,
+        longitude: latestPoint.longitude,
+        title: latestPoint.label ?? "Latest location",
+        detail: `Recorded ${timeLabel(latestPoint.recordedAt)}`,
+        kind: "end",
+      });
+    }
+    return list;
+  }, [firstPoint, latestPoint, points.length, stops, events]);
 
+  const replayPosition = replayTime === null ? null : positionAt(points, replayTime);
 
-const mapMarkers =
-
-  useMemo<SafeTrackMapMarker[]>(
-
-    ()=>{
-
-
-      if(!points.length){
-
-        return [];
-
-      }
-
-
-
-      const first =
-        points[0];
-
-
-
-      const latest =
-        points[
-          points.length-1
-        ];
-
-
-
-
-      return [
-
-        {
-
-          id:
-            `${first.id}-start`,
-
-
-          latitude:
-            first.latitude,
-
-
-          longitude:
-            first.longitude,
-
-
-          title:
-            "Starting location",
-
-
-          detail:
-            `Recorded ${timeLabel(first.recordedAt)}`,
-
-
-          kind:
-            "start",
-
-        },
-
-
-
-        {
-
-          id:
-            `${latest.id}-latest`,
-
-
-          latitude:
-            latest.latitude,
-
-
-          longitude:
-            latest.longitude,
-
-
-          title:
-            latest.label ??
-            "Latest location",
-
-
-          detail:
-            `Recorded ${timeLabel(latest.recordedAt)}`,
-
-
-          kind:
-            "end",
-
-        },
-
-
-      ];
-
-
-    },
-
-    [
-      points
-    ]
-
+  const replayMarker = useMemo<SafeTrackMapMarker | null>(
+    () =>
+      replayPosition
+        ? {
+            id: "replay",
+            latitude: replayPosition.latitude,
+            longitude: replayPosition.longitude,
+            title: child?.fullName ?? "Replay",
+            kind: "replay",
+            initials: initialsOf(child?.fullName),
+            color: colorFor(child?.fullName),
+            photoUrl: childPhoto,
+            photoKey: child?.avatarPath ?? null,
+            ring: "neutral",
+          }
+        : null,
+    [replayPosition?.latitude, replayPosition?.longitude, child?.fullName, child?.avatarPath, childPhoto],
   );
 
-
-
-
-
-
-
-
-
-const routeDistance =
-  totalDistance(
-    points
+  const mapMarkers = useMemo(
+    () => (replayMarker ? [...staticMarkers, replayMarker] : staticMarkers),
+    [staticMarkers, replayMarker],
   );
 
+  // ---- Replay.
+  const startTime = firstPoint ? Date.parse(firstPoint.recordedAt) : 0;
+  const endTime = latestPoint ? Date.parse(latestPoint.recordedAt) : 0;
+  const canReplay = points.length > 1 && endTime > startTime;
 
+  useEffect(() => {
+    if (!playing) return;
+    const timer = setInterval(() => {
+      setReplayTime((current) => {
+        const next = (current ?? startTime) + speed * 60_000 * (TICK_MS / 1000);
+        if (next >= endTime) {
+          setPlaying(false);
+          return endTime;
+        }
+        return next;
+      });
+    }, TICK_MS);
 
+    return () => clearInterval(timer);
+  }, [playing, speed, startTime, endTime]);
 
-const firstPoint =
-  points[0];
-
-
-
-const latestPoint =
-  points[
-    points.length-1
-  ];
-
-
-
-
-const recordedSpan =
-
-  firstPoint && latestPoint
-
-  ?
-
-  Math.max(
-
-    0,
-
-    Math.floor(
-
-      (
-
-        new Date(
-          latestPoint.recordedAt
-        )
-        .getTime()
-
-        -
-
-        new Date(
-          firstPoint.recordedAt
-        )
-        .getTime()
-
-      )
-
-      /
-
-      60000
-
-    )
-
-  )
-
-  :
-
-  0;
-
-
-
-
-
-
-const selectedLabel =
-  dateLabel(
-    selectedDate,
-    today
-  );
-
-
-  const eventIcon = (type: HistoryEvent["type"]): keyof typeof Ionicons.glyphMap => {
-    if (type === "sos") return "warning-outline";
-    if (type === "anomaly") return "analytics-outline";
-    if (type === "watch_disconnected") return "watch-outline";
-    if (type === "prolonged_inactivity") return "hourglass-outline";
-    return "shield-checkmark-outline";
+  const togglePlay = () => {
+    if (!canReplay) return;
+    if (!playing && (replayTime === null || replayTime >= endTime)) setReplayTime(startTime);
+    setPlaying((value) => !value);
   };
+
+  const replayProgress = canReplay && replayTime !== null ? (replayTime - startTime) / (endTime - startTime) : 0;
+
+  // ---- Interactions.
+  const focusOn = (point: { latitude: number; longitude: number }, radiusMeters?: number) =>
+    setFocus({ latitude: point.latitude, longitude: point.longitude, radiusMeters, key: Date.now() });
+
+  const onMarkerPress = useCallback(
+    (id: string) => {
+      if (id === "start" && firstPoint) setPointInfo({ title: "Starting location", point: firstPoint });
+      else if (id === "latest" && latestPoint) setPointInfo({ title: "Latest location", point: latestPoint });
+      else if (id.startsWith("event:")) {
+        const eventId = id.split(":").slice(2).join(":");
+        const type = id.split(":")[1];
+        setSelectedEvent(events.find((event) => event.id === eventId && event.type === type) ?? null);
+      } else {
+        const stop = stops.find((item) => item.id === id);
+        if (stop) focusOn(stop, STOP_RADIUS_METERS * 2);
+      }
+    },
+    [firstPoint, latestPoint, events, stops],
+  );
+
+  const visibleEvents = useMemo(
+    () => (filter === "all" ? events : events.filter((event) => eventCategory(event) === filter)),
+    [events, filter],
+  );
+
+  const initialLoad = loading && loadedKey !== `${child?.id}:${selectedDate}`;
+  const selectedLabel = dateLabel(selectedDate, today);
+  const childName = child?.fullName ?? "Your child";
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <ScrollView
-        style={styles.flex}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={styles.eyebrow}>DAILY ACTIVITY HISTORY</Text>
-        <Text style={styles.heading}>A day, retraced with context.</Text>
-        <Text style={styles.subtitle}>
-          Review recorded route points and safety events for {child?.fullName ?? "your child"}.
-        </Text>
+      {/* Header: back, title, date stepper. */}
+      <View style={styles.header}>
+        <View style={styles.headerRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to home"
+            onPress={() => router.navigate("/(app)/home")}
+            style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+          >
+            <Ionicons name="arrow-back" size={20} color={colors.primaryDeep} />
+          </Pressable>
+          <View style={styles.headerCopy}>
+            <Text style={styles.title}>Daily route history</Text>
+            <Text numberOfLines={1} style={styles.subtitle}>
+              {childName}'s available records
+            </Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Fit the whole day"
+            onPress={() => setRecenterSignal((value) => value + 1)}
+            style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+          >
+            <Ionicons name="scan-outline" size={19} color={colors.primaryDeep} />
+          </Pressable>
+        </View>
+
+        {children.length > 1 ? (
+          <View style={styles.childRow}>
+            {children.map((item) => {
+              const selected = item.id === child?.id;
+              return (
+                <Pressable
+                  key={item.id}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  onPress={() => setChildId(item.id)}
+                  style={[styles.childChip, selected && styles.childChipSelected]}
+                >
+                  <View style={[styles.childDot, { backgroundColor: colorFor(item.fullName) }]}>
+                    <Text style={styles.childDotText}>{initialsOf(item.fullName)}</Text>
+                  </View>
+                  <Text numberOfLines={1} style={[styles.childChipText, selected && styles.childChipTextSelected]}>
+                    {item.fullName}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
 
         <View style={styles.dateDeck}>
           <Pressable
-            accessibilityLabel="Previous date"
+            accessibilityRole="button"
+            accessibilityLabel="Previous day"
             onPress={() => setSelectedDate((value) => moveDate(value, -1))}
             style={({ pressed }) => [styles.dateArrow, pressed && styles.pressed]}
           >
             <Ionicons name="chevron-back" size={20} color={colors.primaryDeep} />
           </Pressable>
-
-          <View style={styles.dateCenter}>
-            <Text style={styles.dateEyebrow}>SELECTED DATE</Text>
-            <Text style={styles.dateTitle}>{selectedLabel}</Text>
-          </View>
-
           <Pressable
-            accessibilityLabel="Next date"
+            accessibilityRole="button"
+            accessibilityLabel={`Selected day ${selectedLabel}. Open calendar`}
+            onPress={() => setCalendarOpen(true)}
+            style={({ pressed }) => [styles.dateCenter, pressed && styles.pressed]}
+          >
+            <Ionicons name="calendar-outline" size={16} color={colors.primaryDark} />
+            <Text style={styles.dateTitle}>{selectedLabel}</Text>
+            <Ionicons name="chevron-down" size={14} color={colors.muted} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Next day"
             disabled={selectedDate >= today}
             onPress={() => setSelectedDate((value) => moveDate(value, 1))}
-            style={({ pressed }) => [
-              styles.dateArrow,
-              selectedDate >= today && styles.disabled,
-              pressed && styles.pressed,
-            ]}
+            style={({ pressed }) => [styles.dateArrow, selectedDate >= today && styles.disabled, pressed && styles.pressed]}
           >
             <Ionicons name="chevron-forward" size={20} color={colors.primaryDeep} />
           </Pressable>
         </View>
+      </View>
 
-        <View style={styles.mapTopline}>
-          <View>
-            <Text style={styles.mapTitle}>Route canvas</Text>
-            <Text style={styles.mapSubtitle}>Start, latest point, and recorded path for the day.</Text>
-          </View>
-          <Pressable
-            onPress={() => setRecenterSignal((value) => value + 1)}
-            style={({ pressed }) => [styles.fitButton, pressed && styles.pressed]}
-          >
-            <Ionicons name="scan-outline" size={15} color={colors.primaryDark} />
-            <Text style={styles.fitText}>Fit</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.mapContainer}>
+      <MapAwareScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => void loadHistory(true)} tintColor={colors.primary} />
+        }
+      >
+        {/* Map. */}
+        <View style={[styles.mapCard, { height: wide ? 520 : 380 }]}>
           <SafeTrackInteractiveMap
             markers={mapMarkers}
-            path={mapPath}
-            height={wide ? 520 : 370}
+            circles={zoneCircles}
+            path={path}
+            height={wide ? 520 : 380}
             recenterSignal={recenterSignal}
-            mapStyleControlTop={16}
-            mapStyleControlLeft={16}
+            focus={focus}
+            showMyLocation={false}
+            onMarkerPress={onMarkerPress}
           />
 
-          {loading && (
-            <View style={styles.loadingOverlay}>
+          {initialLoad ? (
+            <View pointerEvents="none" style={styles.mapLoading}>
               <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={styles.loadingText}>Loading history</Text>
+              <Text style={styles.mapLoadingText}>Loading {selectedLabel.toLowerCase()}</Text>
             </View>
-          )}
+          ) : null}
 
-          {!loading && points.length === 0 && (
-            <View style={styles.emptyMap}>
-              <View style={styles.emptyMapIcon}>
-                <Ionicons name="map-outline" size={26} color={colors.primaryDark} />
-              </View>
-              <Text style={styles.emptyTitle}>No route recorded</Text>
-              <Text style={styles.emptyText}>
-                {message || "No stored location data is available for this date."}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.metricsRail}>
-          <View style={styles.metric}>
-            <Text style={styles.metricValue}>{points.length}</Text>
-            <Text style={styles.metricLabel}>Records</Text>
-          </View>
-          <View style={styles.metricDivider} />
-          <View style={styles.metric}>
-            <Text style={styles.metricValue}>{distanceLabel(routeDistance)}</Text>
-            <Text style={styles.metricLabel}>Distance</Text>
-          </View>
-          <View style={styles.metricDivider} />
-          <View style={styles.metric}>
-            <Text style={styles.metricValue}>{recordedSpan} min</Text>
-            <Text style={styles.metricLabel}>Recorded span</Text>
-          </View>
-        </View>
-
-        <View style={styles.timelineHeader}>
-          <View>
-            <Text style={styles.sectionEyebrow}>SAFETY TIMELINE</Text>
-            <Text style={styles.sectionTitle}>Events in chronological context</Text>
-          </View>
-          <View style={styles.eventCountChip}>
-            <Text style={styles.eventCountText}>{events.length} event{events.length === 1 ? "" : "s"}</Text>
-          </View>
-        </View>
-
-        {events.length > 0 ? (
-          <View style={styles.timeline}>
-            {events.map((event, index) => {
-              const isDanger = event.type === "sos";
-              const isWarning = event.type === "anomaly";
-              return (
-                <View key={`${event.type}-${event.id}`} style={styles.timelineItem}>
-                  <View style={styles.timelineRail}>
-                    <View
-                      style={[
-                        styles.timelineDot,
-                        isDanger && styles.timelineDotDanger,
-                        isWarning && styles.timelineDotWarning,
-                      ]}
-                    >
-                      <Ionicons
-                        name={eventIcon(event.type)}
-                        size={15}
-                        color={isDanger ? colors.danger : isWarning ? colors.warning : colors.primaryDark}
-                      />
-                    </View>
-                    {index < events.length - 1 && <View style={styles.timelineLine} />}
-                  </View>
-
-                  <View style={styles.eventBody}>
-                    <View style={styles.eventTitleRow}>
-                      <Text style={styles.eventTitle}>{event.title}</Text>
-                      <Text style={styles.eventTime}>{timeLabel(event.occurredAt)}</Text>
-                    </View>
-                    <Text style={styles.eventText}>{event.detail}</Text>
-                  </View>
+          {!loading && !loadError && points.length === 0 ? (
+            <View pointerEvents="box-none" style={styles.emptyWrap}>
+              <View style={styles.emptyCard}>
+                <View style={styles.emptyIcon}>
+                  <Ionicons name="map-outline" size={24} color={colors.primaryDark} />
                 </View>
-              );
-            })}
+                <Text style={styles.emptyTitle}>No route recorded</Text>
+                <Text style={styles.emptyText}>
+                  No location records were stored for {childName} on this day.
+                  {events.length ? " Safety events are listed below." : ""}
+                </Text>
+                <Pressable onPress={() => setCalendarOpen(true)} style={({ pressed }) => [styles.emptyButton, pressed && styles.pressed]}>
+                  <Ionicons name="calendar-outline" size={15} color={colors.white} />
+                  <Text style={styles.emptyButtonText}>Pick another day</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+        </View>
+
+        {/* Replay. */}
+        <View style={[styles.replay, !canReplay && styles.replayDisabled]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={playing ? "Pause replay" : "Play replay"}
+            disabled={!canReplay}
+            onPress={togglePlay}
+            style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}
+          >
+            <Ionicons name={playing ? "pause" : "play"} size={20} color={colors.white} />
+          </Pressable>
+          <View style={styles.replayMiddle}>
+            <ReplaySlider
+              accessibilityLabel="Replay position"
+              value={replayProgress}
+              onSlidingStart={() => setPlaying(false)}
+              onChange={(value) => canReplay && setReplayTime(startTime + value * (endTime - startTime))}
+            />
+            <Text style={styles.replayTime}>
+              {canReplay
+                ? replayTime === null
+                  ? `Replay ${timeLabel(firstPoint!.recordedAt)} – ${timeLabel(latestPoint!.recordedAt)}`
+                  : timeLabel(new Date(replayTime).toISOString())
+                : "Replay needs at least two records"}
+            </Text>
+          </View>
+          <View style={styles.speeds}>
+            {SPEEDS.map((value) => (
+              <Pressable
+                key={value}
+                accessibilityRole="button"
+                accessibilityLabel={`Replay speed ${value}x`}
+                accessibilityState={{ selected: speed === value }}
+                onPress={() => setSpeed(value)}
+                style={[styles.speedChip, speed === value && styles.speedChipSelected]}
+              >
+                <Text style={[styles.speedText, speed === value && styles.speedTextSelected]}>{value}×</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        {/* Errors. */}
+        {loadError ? (
+          <View style={styles.errorCard}>
+            <Ionicons name="cloud-offline-outline" size={20} color={colors.danger} />
+            <View style={styles.errorCopy}>
+              <Text style={styles.errorTitle}>History could not be loaded</Text>
+              <Text style={styles.errorText}>{loadError}</Text>
+            </View>
+            {child ? (
+              <Pressable onPress={() => void loadHistory()} style={({ pressed }) => [styles.retry, pressed && styles.pressed]}>
+                <Text style={styles.retryText}>Retry</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+
+        {problems.length > 0 ? (
+          <View style={styles.problems}>
+            <Ionicons name="alert-circle-outline" size={18} color={colors.danger} />
+            <Text style={styles.problemsText}>{problems.join(" ")}</Text>
+          </View>
+        ) : null}
+
+        {/* Stats. */}
+        {initialLoad ? (
+          <View style={styles.statsCard}>
+            {Array.from({ length: 5 }, (_, index) => (
+              <View key={index} style={styles.stat}>
+                <View style={[styles.skeleton, { width: 44, height: 16 }]} />
+                <View style={[styles.skeleton, { width: 56, height: 10, marginTop: 6 }]} />
+              </View>
+            ))}
           </View>
         ) : (
+          <View style={styles.statsCard}>
+            <Stat id="records" value={String(points.length)} label="Records" onPress={setStatOpen} />
+            <Stat id="distance" value={distanceLabel(distance.meters)} label="Distance" onPress={setStatOpen} />
+            <Stat id="span" value={durationLabel(spanMinutes, true)} label="Span" onPress={setStatOpen} />
+            <Stat id="zones" value={durationLabel(zoneMinutes, true)} label="In Safe Zones" onPress={setStatOpen} />
+            <Stat id="sos" value={String(sosEvents.length)} label="SOS" danger={activeSos > 0} onPress={setStatOpen} />
+          </View>
+        )}
+        <Text style={styles.statHint}>Tap a number to see how it is worked out.</Text>
+
+        {/* Stops. */}
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.sectionEyebrow}>POSSIBLE RECORDED STOPS</Text>
+            <Text style={styles.sectionTitle}>Places {childName} stayed a while</Text>
+          </View>
+          <View style={styles.countChip}>
+            <Text style={styles.countText}>{stops.length}</Text>
+          </View>
+        </View>
+        {initialLoad ? (
+          <View style={[styles.skeleton, styles.skeletonCard]} />
+        ) : stops.length ? (
+          <StopList stops={stops} onFocus={(stop) => focusOn(stop, STOP_RADIUS_METERS * 2)} />
+        ) : (
+          <Text style={styles.quiet}>
+            No stops of {STOP_MIN_MINUTES} minutes or more within {STOP_RADIUS_METERS} m were found in the records.
+          </Text>
+        )}
+
+        {/* Safety timeline. */}
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.sectionEyebrow}>SAFETY EVENTS</Text>
+            <Text style={styles.sectionTitle}>What happened, in order</Text>
+          </View>
+          <View style={styles.countChip}>
+            <Text style={styles.countText}>{events.length}</Text>
+          </View>
+        </View>
+        <View style={styles.filters}>
+          {EVENT_FILTERS.map((item) => {
+            const count = item.id === "all" ? events.length : events.filter((event) => eventCategory(event) === item.id).length;
+            const selected = filter === item.id;
+            return (
+              <Pressable
+                key={item.id}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                onPress={() => setFilter(item.id)}
+                style={[styles.filterChip, selected && styles.filterChipSelected]}
+              >
+                <Text style={[styles.filterText, selected && styles.filterTextSelected]}>
+                  {item.label} {count ? `(${count})` : ""}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        {initialLoad ? (
+          <View style={[styles.skeleton, styles.skeletonCard]} />
+        ) : visibleEvents.length ? (
+          <Timeline events={visibleEvents} onOpen={setSelectedEvent} />
+        ) : (
           <View style={styles.noEvents}>
-            <View style={styles.noEventsIcon}>
-              <Ionicons name="checkmark" size={18} color={colors.primaryDark} />
-            </View>
-            <View style={styles.noEventsCopy}>
-              <Text style={styles.noEventsTitle}>Quiet day in the safety timeline</Text>
-              <Text style={styles.noEventsText}>No safety events were recorded for this selected date.</Text>
-            </View>
+            <Ionicons name="checkmark-circle-outline" size={20} color={colors.primaryDark} />
+            <Text style={styles.noEventsText}>
+              {events.length ? "No events of this kind on this day." : "No safety events were recorded on this day."}
+            </Text>
           </View>
         )}
 
         <View style={styles.note}>
-          <Ionicons name="information-circle-outline" size={18} color={colors.primaryDark} />
+          <Ionicons name="information-circle-outline" size={17} color={colors.primaryDark} />
           <Text style={styles.noteText}>
-            History contains only successfully stored records from the child&apos;s selected tracking source: {trackingSource === "mobile" ? "mobile device." : trackingSource === "smartwatch" ? "smartwatch." : "smartwatch and mobile devices."}
+            History shows only records that reached SafeTrack, from the smartwatch and the phone. Pull down to refresh.
           </Text>
         </View>
-      </ScrollView>
+      </MapAwareScrollView>
+
+      <HistoryCalendar
+        visible={calendarOpen}
+        childId={child?.id ?? null}
+        selected={selectedDate}
+        today={today}
+        onSelect={setSelectedDate}
+        onClose={() => setCalendarOpen(false)}
+      />
+
+      <EventSheet
+        event={selectedEvent}
+        onClose={() => setSelectedEvent(null)}
+        onShowOnMap={(event) => focusOn({ latitude: event.latitude!, longitude: event.longitude! })}
+        onAcknowledged={() => {
+          showAlert("SOS acknowledged", "The alert is marked as acknowledged.");
+          void loadHistory(true);
+        }}
+      />
+
+      <MapSheet
+        visible={Boolean(pointInfo)}
+        title={pointInfo?.title ?? ""}
+        subtitle={pointInfo ? `Recorded ${timeLabel(pointInfo.point.recordedAt)}` : undefined}
+        onClose={() => setPointInfo(null)}
+      >
+        {pointInfo ? (
+          <>
+            {pointInfo.point.label ? <SheetRow icon="location-outline" label="Place" value={pointInfo.point.label} /> : null}
+            <SheetRow
+              icon={pointInfo.point.source === "mobile" ? "phone-portrait-outline" : "watch-outline"}
+              label="Device"
+              value={pointInfo.point.source === "mobile" ? "Phone" : "Smartwatch"}
+            />
+            {pointInfo.point.accuracy != null ? (
+              <SheetRow icon="locate-outline" label="Accuracy" value={`±${Math.round(pointInfo.point.accuracy)} m`} />
+            ) : null}
+            <SheetRow
+              icon="navigate-circle-outline"
+              label="Position"
+              value={`${pointInfo.point.latitude.toFixed(5)}, ${pointInfo.point.longitude.toFixed(5)}`}
+            />
+            <View style={sheetStyles.actions}>
+              <SheetButton
+                icon="locate-outline"
+                label="Focus"
+                onPress={() => {
+                  focusOn(pointInfo.point);
+                  setPointInfo(null);
+                }}
+              />
+              <SheetButton
+                icon="navigate-outline"
+                label="Directions"
+                primary
+                onPress={() =>
+                  void Linking.openURL(directionsUrl(pointInfo.point)).catch(() =>
+                    showAlert("Directions unavailable", "Google Maps could not be opened on this device."),
+                  )
+                }
+              />
+            </View>
+          </>
+        ) : null}
+      </MapSheet>
+
+      <MapSheet
+        visible={Boolean(statOpen)}
+        title={statOpen ? STAT_TITLES[statOpen] : ""}
+        onClose={() => setStatOpen(null)}
+      >
+        <Text style={styles.explain}>
+          {statOpen === "records"
+            ? `${points.length} location record${points.length === 1 ? "" : "s"} were stored for ${childName} on ${selectedLabel.toLowerCase() === "today" ? "today" : selectedLabel}${sources.length ? `, from the ${sources.join(" and ")}` : ""}. Only records that reached SafeTrack's server are counted; nothing is estimated.`
+            : statOpen === "distance"
+              ? `Straight lines between records, added up: ${distance.counted} move${distance.counted === 1 ? "" : "s"} counted. ${distance.ignoredSmall} small move${distance.ignoredSmall === 1 ? " was" : "s were"} left out because they were within the GPS accuracy of the two records (at least ${MIN_MOVE_METERS} m), which is the position wobbling while ${childName} stays still.${distance.ignoredJumps ? ` ${distance.ignoredJumps} impossible jump${distance.ignoredJumps === 1 ? " was" : "s were"} skipped (faster than ${Math.round(MAX_SPEED_MPS * 3.6)} km/h).` : ""} Travel along roads is usually a little longer.`
+              : statOpen === "span"
+                ? firstPoint && latestPoint
+                  ? `From the first record at ${timeLabel(firstPoint.recordedAt)} to the latest at ${timeLabel(latestPoint.recordedAt)}. Gaps without records are included.`
+                  : "There are no records on this day."
+                : statOpen === "zones"
+                  ? `From the server's Safe Zone entry and exit events: each entry starts a stay that the zone's next exit ends. A stay that began before midnight counts from midnight; one still open counts until ${selectedDate === today ? "now" : "the end of the day"}. Overlapping zones are counted once, and turned-off zones are left out.`
+                  : `SOS alerts triggered on this day, whatever their status. ${activeSos ? `${activeSos} still active.` : "None is still active."}`}
+        </Text>
+        <Text style={sheetStyles.note}>Day range: {philippineDayRange(selectedDate).start.slice(0, 10)} (Philippine time).</Text>
+      </MapSheet>
     </SafeAreaView>
   );
 }
 
+const STAT_TITLES: Record<StatId, string> = {
+  records: "Records",
+  distance: "Distance",
+  span: "Recorded span",
+  zones: "Time in Safe Zones",
+  sos: "SOS alerts",
+};
+
+function Stat({
+  id,
+  value,
+  label,
+  danger = false,
+  onPress,
+}: {
+  id: StatId;
+  value: string;
+  label: string;
+  danger?: boolean;
+  onPress(id: StatId): void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${label}: ${value}. How is this calculated?`}
+      onPress={() => onPress(id)}
+      style={({ pressed }) => [styles.stat, pressed && styles.pressed]}
+    >
+      <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.statValue, danger && styles.statDanger]}>
+        {value}
+      </Text>
+      <Text numberOfLines={1} style={styles.statLabel}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+const StopList = memo(function StopList({ stops, onFocus }: { stops: ActivityStop[]; onFocus(stop: ActivityStop): void }) {
+  return (
+    <View style={styles.stops}>
+      {stops.map((stop) => (
+        <Pressable
+          key={stop.id}
+          accessibilityRole="button"
+          accessibilityLabel={`Stop ${stop.index}, ${durationLabel(stop.minutes)}. Show on map`}
+          onPress={() => onFocus(stop)}
+          style={({ pressed }) => [styles.stopCard, pressed && styles.pressed]}
+        >
+          <View style={styles.stopBadge}>
+            <Text style={styles.stopBadgeText}>{stop.index}</Text>
+          </View>
+          <View style={styles.stopCopy}>
+            <Text numberOfLines={1} style={styles.stopTitle}>
+              {stop.label ?? `Stop ${stop.index}`}
+            </Text>
+            <Text style={styles.stopMeta}>
+              {timeLabel(stop.startedAt)} – {timeLabel(stop.endedAt)} · {durationLabel(stop.minutes)} · {stop.records} records
+            </Text>
+          </View>
+          <Ionicons name="locate-outline" size={18} color={colors.primaryDark} />
+        </Pressable>
+      ))}
+    </View>
+  );
+});
+
+const Timeline = memo(function Timeline({ events, onOpen }: { events: ActivityEvent[]; onOpen(event: ActivityEvent): void }) {
+  return (
+    <View>
+      {events.map((event, index) => {
+        const look = eventLook(event);
+        return (
+          <Pressable
+            key={`${event.type}-${event.id}`}
+            accessibilityRole="button"
+            accessibilityLabel={`${event.title} at ${timeLabel(event.occurredAt)}. Open details`}
+            onPress={() => onOpen(event)}
+            style={({ pressed }) => [styles.timelineItem, pressed && styles.pressed]}
+          >
+            <View style={styles.timelineRail}>
+              <View style={[styles.timelineDot, { backgroundColor: look.soft, borderColor: look.tint }]}>
+                <Ionicons name={look.icon} size={15} color={look.tint} />
+              </View>
+              {index < events.length - 1 ? <View style={styles.timelineLine} /> : null}
+            </View>
+            <View style={styles.eventBody}>
+              <View style={styles.eventTitleRow}>
+                <Text numberOfLines={1} style={styles.eventTitle}>
+                  {event.title}
+                </Text>
+                <Text style={styles.eventTime}>{timeLabel(event.occurredAt)}</Text>
+              </View>
+              <View style={styles.eventMetaRow}>
+                <View style={[styles.eventTag, { backgroundColor: look.soft }]}>
+                  <Text style={[styles.eventTagText, { color: look.tint }]}>{look.label}</Text>
+                </View>
+                <Text numberOfLines={2} style={styles.eventText}>
+                  {event.detail}
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+});
+
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  flex: {
-    flex: 1,
-  },
-  content: {
+  safe: { flex: 1, backgroundColor: colors.background },
+  flex: { flex: 1 },
+  header: {
     width: "100%",
     maxWidth: 1160,
     alignSelf: "center",
     paddingHorizontal: spacing.lg,
-    paddingTop: 30,
-    paddingBottom: 120,
+    paddingTop: 12,
+    paddingBottom: 10,
   },
-  eyebrow: {
-    color: colors.primary,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-  },
-  heading: {
-    maxWidth: 360,
-    marginTop: 7,
-    color: colors.ink,
-    fontSize: 29,
-    lineHeight: 34,
-    fontWeight: "900",
-    letterSpacing: -0.85,
-  },
-  subtitle: {
-    maxWidth: 360,
-    marginTop: 7,
-    color: colors.muted,
-    fontSize: 12.5,
-    lineHeight: 18,
-  },
-  dateDeck: {
-    minHeight: 74,
-    marginTop: 22,
-    paddingHorizontal: 10,
-    borderRadius: 24,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadow.soft,
-  },
-  dateArrow: {
+  headerRow: { flexDirection: "row", alignItems: "center" },
+  iconButton: {
     width: 42,
     height: 42,
     borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.softMint,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  dateCenter: {
-    flex: 1,
-    alignItems: "center",
-  },
-  dateEyebrow: {
-    color: colors.muted,
-    fontSize: 8.5,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
-  dateTitle: {
-    marginTop: 3,
-    color: colors.ink,
-    fontSize: 15,
-    fontWeight: "900",
-  },
-  disabled: {
-    opacity: 0.3,
-  },
-  mapTopline: {
-    marginTop: 24,
-    marginBottom: 11,
+  headerCopy: { flex: 1, minWidth: 0, marginHorizontal: 12 },
+  title: { color: colors.ink, fontSize: 20, fontWeight: "900", letterSpacing: -0.4 },
+  subtitle: { marginTop: 2, color: colors.muted, fontSize: 12.5 },
+  childRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
+  childChip: {
+    maxWidth: 200,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-  },
-  mapTitle: {
-    color: colors.ink,
-    fontSize: 16.5,
-    fontWeight: "900",
-  },
-  mapSubtitle: {
-    marginTop: 3,
-    color: colors.muted,
-    fontSize: 10.5,
-  },
-  fitButton: {
-    minHeight: 36,
-    paddingHorizontal: 11,
+    gap: 7,
+    paddingLeft: 4,
+    paddingRight: 12,
+    height: 36,
     borderRadius: radius.pill,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  childChipSelected: { borderColor: colors.primary, backgroundColor: colors.softMint },
+  childDot: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  childDotText: { color: colors.white, fontSize: 10.5, fontWeight: "800" },
+  childChipText: { flexShrink: 1, color: colors.ink, fontSize: 12.5, fontWeight: "700" },
+  childChipTextSelected: { color: colors.primaryDeep },
+  dateDeck: {
+    marginTop: 12,
+    minHeight: 56,
+    paddingHorizontal: 7,
+    borderRadius: 20,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.softMint,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.soft,
   },
-  fitText: {
-    marginLeft: 5,
-    color: colors.primaryDark,
-    fontSize: 10,
-    fontWeight: "900",
+  dateArrow: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: colors.softMint },
+  dateCenter: { flex: 1, height: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
+  dateTitle: { color: colors.ink, fontSize: 15, fontWeight: "900" },
+  disabled: { opacity: 0.3 },
+  content: {
+    width: "100%",
+    maxWidth: 1160,
+    alignSelf: "center",
+    paddingHorizontal: spacing.lg,
+    paddingTop: 4,
+    paddingBottom: 120,
   },
-  mapContainer: {
-    height: 370,
-    borderRadius: radius.xl,
-    overflow: "hidden",
-    ...shadow.card,
-  },
-  loadingOverlay: {
+  mapCard: { borderRadius: radius.xl, overflow: "hidden", ...shadow.card },
+  mapLoading: {
     position: "absolute",
-    left: 16,
-    bottom: 16,
-    minHeight: 38,
+    left: 14,
+    top: 14,
+    minHeight: 36,
     paddingHorizontal: 12,
     borderRadius: radius.pill,
     flexDirection: "row",
     alignItems: "center",
+    gap: 7,
     backgroundColor: colors.glass,
     ...shadow.soft,
   },
-  loadingText: {
-    marginLeft: 7,
-    color: colors.muted,
-    fontSize: 10.5,
-    fontWeight: "700",
-  },
-  emptyMap: {
-    position: "absolute",
-    left: 26,
-    right: 26,
-    top: 112,
-    paddingVertical: 21,
-    paddingHorizontal: 20,
-    borderRadius: 24,
+  mapLoadingText: { color: colors.muted, fontSize: 11.5, fontWeight: "700" },
+  emptyWrap: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, alignItems: "center", justifyContent: "center", padding: 24 },
+  emptyCard: {
+    maxWidth: 300,
+    paddingVertical: 18,
+    paddingHorizontal: 18,
+    borderRadius: 22,
     alignItems: "center",
     backgroundColor: colors.glass,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,.9)",
     ...shadow.floating,
   },
-  emptyMapIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.softMint,
-  },
-  emptyTitle: {
-    marginTop: 10,
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: "900",
-  },
-  emptyText: {
-    marginTop: 5,
-    textAlign: "center",
-    color: colors.muted,
-    fontSize: 10.5,
-    lineHeight: 15.5,
-  },
-  metricsRail: {
-    minHeight: 88,
-    marginTop: 14,
-    borderRadius: 24,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  metric: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 4,
-  },
-  metricValue: {
-    color: colors.ink,
-    fontSize: 15,
-    fontWeight: "900",
-  },
-  metricLabel: {
-    marginTop: 4,
-    color: colors.muted,
-    fontSize: 9.5,
-    fontWeight: "700",
-  },
-  metricDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: colors.border,
-  },
-  timelineHeader: {
-    marginTop: 31,
-    marginBottom: 15,
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-  },
-  sectionEyebrow: {
-    color: colors.primaryDark,
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-  },
-  sectionTitle: {
-    marginTop: 3,
-    color: colors.ink,
-    fontSize: 16.5,
-    fontWeight: "900",
-  },
-  eventCountChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+  emptyIcon: { width: 46, height: 46, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: colors.softMint },
+  emptyTitle: { marginTop: 9, color: colors.ink, fontSize: 14.5, fontWeight: "900" },
+  emptyText: { marginTop: 4, textAlign: "center", color: colors.muted, fontSize: 11.5, lineHeight: 16 },
+  emptyButton: {
+    marginTop: 12,
+    minHeight: 38,
+    paddingHorizontal: 14,
     borderRadius: radius.pill,
-    backgroundColor: colors.surfaceMuted,
-  },
-  eventCountText: {
-    color: colors.primaryDark,
-    fontSize: 9,
-    fontWeight: "900",
-  },
-  timeline: {
-    paddingLeft: 2,
-  },
-  timelineItem: {
-    minHeight: 88,
     flexDirection: "row",
-  },
-  timelineRail: {
-    width: 44,
     alignItems: "center",
+    gap: 6,
+    backgroundColor: colors.primaryDark,
   },
-  timelineDot: {
-    width: 34,
-    height: 34,
-    borderRadius: 13,
+  emptyButtonText: { color: colors.white, fontSize: 12, fontWeight: "800" },
+  replay: {
+    marginTop: 12,
+    padding: 10,
+    borderRadius: 20,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.softMint,
+    gap: 10,
+    backgroundColor: colors.white,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  timelineDotDanger: {
+  replayDisabled: { opacity: 0.6 },
+  playButton: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: colors.primaryDark },
+  replayMiddle: { flex: 1, minWidth: 0 },
+  replayTime: { marginTop: -4, color: colors.muted, fontSize: 11, fontWeight: "700" },
+  speeds: { flexDirection: "row", gap: 4 },
+  speedChip: { minWidth: 34, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceMuted },
+  speedChipSelected: { backgroundColor: colors.primaryDark },
+  speedText: { color: colors.primaryDark, fontSize: 11.5, fontWeight: "800" },
+  speedTextSelected: { color: colors.white },
+  errorCard: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: radius.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
     backgroundColor: colors.dangerSoft,
-    borderColor: "#F4C5C9",
   },
-  timelineDotWarning: {
-    backgroundColor: colors.warningSoft,
-    borderColor: "#F3D7A0",
-  },
-  timelineLine: {
-    flex: 1,
-    width: 1.5,
-    marginVertical: 5,
-    backgroundColor: colors.border,
-  },
-  eventBody: {
-    flex: 1,
-    paddingLeft: 9,
-    paddingBottom: 18,
-  },
-  eventTitleRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-  },
-  eventTitle: {
-    flex: 1,
-    color: colors.ink,
-    fontSize: 12.5,
-    fontWeight: "900",
-  },
-  eventTime: {
-    marginLeft: 10,
-    color: colors.primaryDark,
-    fontSize: 9.5,
-    fontWeight: "800",
-  },
-  eventText: {
-    marginTop: 5,
-    color: colors.muted,
-    fontSize: 10.5,
-    lineHeight: 15.5,
-  },
-  noEvents: {
-    padding: 15,
-    borderRadius: 22,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.softMint,
-  },
-  noEventsIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.white,
-  },
-  noEventsCopy: {
-    flex: 1,
-    marginLeft: 11,
-  },
-  noEventsTitle: {
-    color: colors.ink,
-    fontSize: 11.5,
-    fontWeight: "900",
-  },
-  noEventsText: {
-    marginTop: 3,
-    color: colors.muted,
-    fontSize: 10.5,
-    lineHeight: 15,
-  },
-  note: {
-    marginTop: 25,
-    paddingHorizontal: 5,
+  errorCopy: { flex: 1 },
+  errorTitle: { color: colors.dangerDark, fontSize: 13, fontWeight: "800" },
+  errorText: { marginTop: 2, color: colors.dangerDark, fontSize: 11.5, lineHeight: 16 },
+  retry: { paddingHorizontal: 14, height: 36, borderRadius: radius.pill, justifyContent: "center", backgroundColor: colors.white },
+  retryText: { color: colors.dangerDark, fontSize: 12, fontWeight: "800" },
+  problems: {
+    marginTop: 12,
+    padding: 12,
     flexDirection: "row",
     alignItems: "flex-start",
+    borderRadius: radius.md,
+    backgroundColor: colors.dangerSoft,
   },
-  noteText: {
-    flex: 1,
-    marginLeft: 8,
-    color: colors.muted,
-    fontSize: 10.5,
-    lineHeight: 15.5,
+  problemsText: { flex: 1, marginLeft: 8, color: colors.dangerDark, fontSize: 11.5, lineHeight: 16 },
+  statsCard: {
+    marginTop: 12,
+    minHeight: 78,
+    borderRadius: 22,
+    flexDirection: "row",
+    alignItems: "stretch",
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  pressed: {
-    opacity: 0.82,
-    transform: [{ scale: 0.985 }],
+  stat: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 3, paddingVertical: 12 },
+  statValue: { color: colors.ink, fontSize: 15, fontWeight: "900" },
+  statDanger: { color: colors.danger },
+  statLabel: { marginTop: 4, color: colors.muted, fontSize: 9.5, fontWeight: "700" },
+  statHint: { marginTop: 6, color: colors.muted, fontSize: 10.5, textAlign: "center" },
+  skeleton: { borderRadius: 6, backgroundColor: "#E4EAE7" },
+  skeletonCard: { height: 70, borderRadius: 18 },
+  sectionHeader: { marginTop: 26, marginBottom: 12, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
+  sectionEyebrow: { color: colors.primaryDark, fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
+  sectionTitle: { marginTop: 3, color: colors.ink, fontSize: 16, fontWeight: "900" },
+  countChip: { minWidth: 30, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, alignItems: "center", backgroundColor: colors.surfaceMuted },
+  countText: { color: colors.primaryDark, fontSize: 11, fontWeight: "900" },
+  quiet: { color: colors.muted, fontSize: 12, lineHeight: 17 },
+  stops: { gap: 8 },
+  stopCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+    padding: 11,
+    borderRadius: 18,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
+  stopBadge: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: "#0B5E3E" },
+  stopBadgeText: { color: colors.white, fontSize: 12, fontWeight: "900" },
+  stopCopy: { flex: 1, minWidth: 0 },
+  stopTitle: { color: colors.ink, fontSize: 13, fontWeight: "800" },
+  stopMeta: { marginTop: 3, color: colors.muted, fontSize: 11 },
+  filters: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginBottom: 12 },
+  filterChip: { paddingHorizontal: 12, height: 32, borderRadius: radius.pill, justifyContent: "center", backgroundColor: colors.white, borderWidth: 1, borderColor: colors.border },
+  filterChipSelected: { backgroundColor: colors.primaryDark, borderColor: colors.primaryDark },
+  filterText: { color: colors.ink, fontSize: 11.5, fontWeight: "700" },
+  filterTextSelected: { color: colors.white },
+  timelineItem: { minHeight: 76, flexDirection: "row", alignItems: "flex-start" },
+  timelineRail: { width: 42, alignItems: "center", alignSelf: "stretch" },
+  timelineDot: { width: 32, height: 32, borderRadius: 12, alignItems: "center", justifyContent: "center", borderWidth: 1 },
+  timelineLine: { flex: 1, width: 1.5, marginVertical: 4, backgroundColor: colors.border },
+  eventBody: { flex: 1, paddingLeft: 8, paddingBottom: 16 },
+  eventTitleRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" },
+  eventTitle: { flex: 1, color: colors.ink, fontSize: 13, fontWeight: "900" },
+  eventTime: { marginLeft: 10, color: colors.primaryDark, fontSize: 10.5, fontWeight: "800" },
+  eventMetaRow: { marginTop: 5 },
+  eventTag: { alignSelf: "flex-start", paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.pill, marginBottom: 4 },
+  eventTagText: { fontSize: 10, fontWeight: "800" },
+  eventText: { color: colors.muted, fontSize: 11.5, lineHeight: 16 },
+  noEvents: { padding: 14, borderRadius: 18, flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.softMint },
+  noEventsText: { flex: 1, color: colors.primaryDeep, fontSize: 12, lineHeight: 17 },
+  note: { marginTop: 22, paddingHorizontal: 4, flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  noteText: { flex: 1, color: colors.muted, fontSize: 11, lineHeight: 16 },
+  explain: { color: "#33413B", fontSize: 13.5, lineHeight: 20 },
+  pressed: { opacity: 0.82 },
 });

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -21,6 +20,8 @@ import {
   type SmartwatchStatus,
 } from "../../services/smartwatchService";
 import { LocationMapCard } from "../location/LocationMapCard";
+import { MapAwareScrollView } from "../location/MapScrollLock";
+import { toZoneCircles } from "../location/zoneCircles";
 
 import {
   guardianColors as colors,
@@ -69,6 +70,7 @@ export function GuardianHome() {
   const loadSos = useSosStore((state) => state.loadForChild);
 
   const zones = useGeofenceStore((state) => state.zones);
+  const zoneEvents = useGeofenceStore((state) => state.events);
   const loadZones = useGeofenceStore((state) => state.load);
 
   const latestAnomaly = useAnomalyStore((state) => state.latestAnomaly);
@@ -95,6 +97,8 @@ export function GuardianHome() {
       setWatch(null);
     }
   }, [child?.id, hasWatch]);
+
+  const zoneCircles = useMemo(() => toZoneCircles(zones, zoneEvents), [zones, zoneEvents]);
 
   const activeSOS = useMemo(
     () => sosAlerts.find((item) => item.status === "active"),
@@ -124,7 +128,7 @@ export function GuardianHome() {
         : "Watch not recently connected";
 
   return (
-    <ScrollView
+    <MapAwareScrollView
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.container}
     >
@@ -254,6 +258,12 @@ export function GuardianHome() {
         }
         height={wide ? 500 : 385}
         onRefresh={() => child && loadLocation(child.id, child.fullName)}
+        zones={zoneCircles}
+        avatarPath={child?.avatarPath}
+        avatarUrl={child?.avatarUrl}
+        sosActive={Boolean(activeSOS)}
+        batteryPercent={watch?.batteryPercent ?? null}
+        networkType={watch?.networkType ?? null}
       />
 
       <View style={styles.locationFootnote}>
@@ -362,7 +372,7 @@ export function GuardianHome() {
           <Text style={styles.quickLabel}>Notices</Text>
         </Pressable>
       </View>
-    </ScrollView>
+    </MapAwareScrollView>
   );
 }
 

@@ -1,6 +1,7 @@
 import { json, options } from "../_shared/response.ts";
 import { serviceClient } from "../_shared/supabase.ts";
 import { reviewAnomaly } from "../_shared/anomaly.ts";
+import { safeEqual } from "../_shared/crypto.ts";
 
 function seconds(value: string | undefined, fallback: number) {
   const parsed = Number(value ?? fallback);
@@ -72,7 +73,7 @@ Deno.serve(async (request: Request) => {
   const expectedSecret = Deno.env.get("CRON_SECRET") ?? "";
   const providedSecret = request.headers.get("x-cron-secret") ?? "";
 
-  if (!expectedSecret || expectedSecret !== providedSecret) {
+  if (!expectedSecret || !safeEqual(providedSecret, expectedSecret)) {
     return json({ error: "Unauthorized scheduled request." }, 401);
   }
 
@@ -126,7 +127,7 @@ Deno.serve(async (request: Request) => {
         try {
           const { data: latest } = await supabase
             .from("location_logs")
-            .select("id, latitude, longitude, recorded_at")
+            .select("id")
             .eq("child_id", child.id)
             .eq("source", "smartwatch")
             .order("recorded_at", { ascending: false })
@@ -138,9 +139,6 @@ Deno.serve(async (request: Request) => {
               supabase,
               childId: child.id,
               locationLogId: latest.id,
-              latitude: Number(latest.latitude),
-              longitude: Number(latest.longitude),
-              recordedAt: latest.recorded_at,
             });
             aiReviewed += 1;
           }

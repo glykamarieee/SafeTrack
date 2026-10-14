@@ -4,7 +4,6 @@ import {
 
   ActivityIndicator,
 
-  Alert,
 
   Pressable,
 
@@ -25,6 +24,7 @@ import {
 } from "react-native";
 
 import { SafeAreaView } from "react-native-safe-area-context";
+import { showAlert } from "../../lib/platformAlert";
 
 import { Ionicons } from "@expo/vector-icons";
 
@@ -68,9 +68,15 @@ import {
 
 
 
+// Local calendar date; toISOString() would give the UTC date, a day early
+// before 8 AM in the Philippines.
 function toIsoDate(date: Date) {
 
-  return date.toISOString().slice(0, 10);
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${date.getFullYear()}-${month}-${day}`;
 
 }
 
@@ -104,6 +110,9 @@ export default function AdminReportsScreen() {
 
   const [endDate, setEndDate] = useState(() => toIsoDate(new Date()));
 
+  // The range the summary and exports use; the inputs apply on "Retrieve records".
+  const [range, setRange] = useState(() => ({ start: startDate, end: endDate }));
+
   const [summary, setSummary] = useState<AdminReportSummary | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -120,28 +129,6 @@ export default function AdminReportsScreen() {
 
     async (isRefresh = false) => {
 
-      if (!isValidDate(startDate) || !isValidDate(endDate)) {
-
-        setError("Use YYYY-MM-DD format for both report dates.");
-
-        setLoading(false);
-
-        return;
-
-      }
-
-      if (startDate > endDate) {
-
-        setError("The start date cannot be later than the end date.");
-
-        setLoading(false);
-
-        return;
-
-      }
-
-
-
       if (isRefresh) setRefreshing(true);
 
       else setLoading(true);
@@ -152,7 +139,7 @@ export default function AdminReportsScreen() {
 
       try {
 
-        setSummary(await fetchAdminReportSummary(startDate, endDate));
+        setSummary(await fetchAdminReportSummary(range.start, range.end));
 
       } catch (reason) {
 
@@ -168,9 +155,41 @@ export default function AdminReportsScreen() {
 
     },
 
-    [endDate, startDate],
+    [range],
 
   );
+
+
+
+  const applyRange = () => {
+
+    if (!isValidDate(startDate) || !isValidDate(endDate)) {
+
+      setError("Use YYYY-MM-DD format for both report dates.");
+
+      return;
+
+    }
+
+    if (startDate > endDate) {
+
+      setError("The start date cannot be later than the end date.");
+
+      return;
+
+    }
+
+    if (startDate === range.start && endDate === range.end) {
+
+      void loadSummary();
+
+      return;
+
+    }
+
+    setRange({ start: startDate, end: endDate });
+
+  };
 
 
 
@@ -231,16 +250,8 @@ export default function AdminReportsScreen() {
   const exportReport = async (format: ServerReportFormat) => {
     if (!summary || exporting) return;
 
-    if (!isValidDate(startDate) || !isValidDate(endDate) || startDate > endDate) {
-      Alert.alert(
-        "Invalid report dates",
-        "Check the selected report date range first.",
-      );
-      return;
-    }
-
     if (noExportableActivity) {
-      Alert.alert(
+      showAlert(
         "No report records",
         "There are no stored location, safe-zone, or SOS records in the selected period to export.",
       );
@@ -252,25 +263,25 @@ export default function AdminReportsScreen() {
     try {
       const result = await generateServerActivityReport({
         format,
-        dateFrom: startDate,
-        dateTo: endDate,
+        dateFrom: range.start,
+        dateTo: range.end,
         reportTitle: "SafeTrack Activity Report",
       });
 
       await downloadGeneratedServerActivityReport(
         result,
-        startDate,
-        endDate,
+        range.start,
+        range.end,
       );
 
-      Alert.alert(
+      showAlert(
         format === "pdf" ? "PDF report ready" : "Excel report ready",
         format === "pdf"
           ? "The SafeTrack PDF report was generated successfully."
           : "The SafeTrack Excel workbook was generated successfully.",
       );
     } catch (reason) {
-      Alert.alert(
+      showAlert(
         format === "pdf" ? "PDF export error" : "Excel export error",
         reason instanceof Error
           ? reason.message
@@ -326,7 +337,7 @@ export default function AdminReportsScreen() {
 
             <Pressable
 
-              onPress={() => void loadSummary()}
+              onPress={applyRange}
 
               style={({ pressed }) => [styles.retrieveButton, pressed && styles.pressed]}
 
@@ -400,7 +411,7 @@ export default function AdminReportsScreen() {
 
                   <Text style={styles.sectionTitle}>System record summary</Text>
 
-                  <Text style={styles.sectionDescription}>{startDate} to {endDate}</Text>
+                  <Text style={styles.sectionDescription}>{range.start} to {range.end}</Text>
 
                 </View>
 

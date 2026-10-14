@@ -19,3 +19,6 @@ verify_jwt = false
 
 [functions.scheduled-safety-scan]
 verify_jwt = false
+
+[functions.anomaly-detection]
+verify_jwt = false

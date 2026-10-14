@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -11,6 +10,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { showAlert } from "../../lib/platformAlert";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
@@ -56,15 +56,16 @@ export default function AdminDevicesScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const loadDevices = useCallback(
-    async (isRefresh = false) => {
+    // silent: a realtime reload that keeps the current list on screen.
+    async (isRefresh = false, silent = false) => {
       if (isRefresh) setRefreshing(true);
-      else setLoading(true);
-      setError(null);
+      else if (!silent) setLoading(true);
+      if (!silent) setError(null);
 
       try {
         setDevices(await fetchAdminSmartwatchDevices(search));
       } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Unable to load smartwatch devices.");
+        if (!silent) setError(reason instanceof Error ? reason.message : "Unable to load smartwatch devices.");
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -75,7 +76,7 @@ export default function AdminDevicesScreen() {
 
   useEffect(() => {
     const timer = setTimeout(() => void loadDevices(), 300);
-    const unsubscribe = subscribeAdminUpdates(() => void loadDevices());
+    const unsubscribe = subscribeAdminUpdates(() => void loadDevices(false, true));
     return () => {
       clearTimeout(timer);
       unsubscribe();
@@ -85,7 +86,7 @@ export default function AdminDevicesScreen() {
   const changeStatus = (device: AdminSmartwatchDevice) => {
     const nextStatus = device.isActive ? "inactive" : "active";
 
-    Alert.alert(
+    showAlert(
       `${nextStatus === "active" ? "Activate" : "Deactivate"} smartwatch device?`,
       `${device.watchId} will be marked as ${nextStatus}.`,
       [
@@ -102,9 +103,9 @@ export default function AdminDevicesScreen() {
                   item.deviceId === device.deviceId ? { ...item, isActive: nextStatus === "active" } : item,
                 ),
               );
-              Alert.alert("Device status saved", `${device.watchId} is now ${nextStatus}.`);
+              showAlert("Device status saved", `${device.watchId} is now ${nextStatus}.`);
             } catch (reason) {
-              Alert.alert(
+              showAlert(
                 "Smartwatch device update error",
                 reason instanceof Error ? reason.message : "SafeTrack could not save the device status.",
               );

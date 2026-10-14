@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,6 +9,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { showAlert } from "../../lib/platformAlert";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -53,19 +53,22 @@ export default function AdminGuardianDetailsScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadDetail = useCallback(async () => {
+  // silent: a realtime reload that keeps the current details on screen.
+  const loadDetail = useCallback(async (silent = false) => {
     if (!guardianId) {
       setError("Guardian account ID is missing.");
       setLoading(false);
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       setDetail(await fetchAdminGuardianDetail(guardianId));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to load Guardian account details.");
+      if (!silent) setError(reason instanceof Error ? reason.message : "Unable to load Guardian account details.");
     } finally {
       setLoading(false);
     }
@@ -73,7 +76,7 @@ export default function AdminGuardianDetailsScreen() {
 
   useEffect(() => {
     void loadDetail();
-    const unsubscribe = subscribeAdminUpdates(() => void loadDetail());
+    const unsubscribe = subscribeAdminUpdates(() => void loadDetail(true));
     return unsubscribe;
   }, [loadDetail]);
 
@@ -81,7 +84,7 @@ export default function AdminGuardianDetailsScreen() {
     if (!detail) return;
     const nextStatus: AccountStatus = detail.accountStatus === "active" ? "inactive" : "active";
 
-    Alert.alert(
+    showAlert(
       `${nextStatus === "active" ? "Activate" : "Deactivate"} account?`,
       `${detail.fullName} will be marked as ${nextStatus}.`,
       [
@@ -94,9 +97,9 @@ export default function AdminGuardianDetailsScreen() {
             try {
               await updateAdminGuardianAccountStatus(detail.guardianId, nextStatus);
               setDetail((current) => (current ? { ...current, accountStatus: nextStatus } : current));
-              Alert.alert("Account status saved", `${detail.fullName} is now ${nextStatus}.`);
+              showAlert("Account status saved", `${detail.fullName} is now ${nextStatus}.`);
             } catch (reason) {
-              Alert.alert(
+              showAlert(
                 "Guardian account update error",
                 reason instanceof Error ? reason.message : "SafeTrack could not save the account status.",
               );
@@ -139,7 +142,7 @@ export default function AdminGuardianDetailsScreen() {
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.page}>
-          <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.back, pressed && styles.pressed]}>
+          <Pressable onPress={() => router.navigate("/(app)/admin-guardians")} style={({ pressed }) => [styles.back, pressed && styles.pressed]}>
             <Ionicons name="arrow-back" size={18} color={colors.primaryDark} />
             <Text style={styles.backText}>Guardian accounts</Text>
           </Pressable>
