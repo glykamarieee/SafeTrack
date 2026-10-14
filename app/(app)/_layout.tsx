@@ -138,6 +138,14 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="admin-records"
+        options={{
+          title: "Records",
+          href: isAdmin ? undefined : null,
+          tabBarIcon: renderNavIcon("list-outline", "list", true),
+        }}
+      />
+      <Tabs.Screen
         name="admin-reports"
         options={{
           title: "Reports",
