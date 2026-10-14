@@ -58,7 +58,7 @@ import {
 type AlertStatus =
   | "active"
   | "acknowledged"
-  | "resolved"
+  | "cancelled"
   | string;
 
 

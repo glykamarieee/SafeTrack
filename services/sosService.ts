@@ -1,7 +1,7 @@
 import { supabase } from "../lib/supabase";
 import type { SosAlert, SosAlertStatus } from "../types/safetrack";
 
-function mapRow(row: any, childName = "Child"): SosAlert {
+export function mapSosRow(row: any, childName = "Child"): SosAlert {
   return {
     id: row.id,
     childId: row.child_id,
@@ -41,7 +41,7 @@ export async function fetchSosAlertsForChild(
     .order("triggered_at", { ascending: false });
 
   if (error) throw error;
-  return (data ?? []).map((row) => mapRow(row, childName));
+  return (data ?? []).map((row) => mapSosRow(row, childName));
 }
 
 export async function fetchAllSosAlerts(): Promise<SosAlert[]> {
@@ -51,23 +51,7 @@ export async function fetchAllSosAlerts(): Promise<SosAlert[]> {
     .order("triggered_at", { ascending: false });
 
   if (error) throw error;
-  return (data ?? []).map((row) => mapRow(row));
-}
-
-export async function triggerTestSosAlert(
-  childId: string,
-  childName = "Child"
-): Promise<SosAlert> {
-  const { data, error } = await supabase.rpc("trigger_my_test_sos_alert", {
-    p_child_id: childId,
-  });
-
-  if (error) throw error;
-  if (!data || typeof data !== "object") {
-    throw new Error("SafeTrack did not receive the test SOS alert.");
-  }
-
-  return mapRow(data, childName);
+  return (data ?? []).map((row) => mapSosRow(row));
 }
 
 export async function acknowledgeSosAlert(alertId: string): Promise<void> {
@@ -78,10 +62,24 @@ export async function acknowledgeSosAlert(alertId: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function resolveSosAlert(alertId: string): Promise<void> {
-  const { error } = await supabase.rpc("resolve_my_sos_alert", {
-    p_alert_id: alertId,
-  });
+/**
+ * Live SOS changes for the signed-in guardian: new alerts, re-alerts and
+ * acknowledgements. RLS limits the stream to the guardian's own alerts.
+ * Returns an unsubscribe function.
+ */
+export function subscribeToGuardianSos(guardianId: string, onRow: (row: Record<string, unknown>) => void) {
+  const channel = supabase
+    .channel(`guardian-sos-${guardianId}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "sos_alerts", filter: `guardian_id=eq.${guardianId}` },
+      (payload) => {
+        if (payload.new && typeof payload.new === "object") onRow(payload.new as Record<string, unknown>);
+      },
+    )
+    .subscribe();
 
-  if (error) throw error;
+  return () => {
+    void supabase.removeChannel(channel);
+  };
 }

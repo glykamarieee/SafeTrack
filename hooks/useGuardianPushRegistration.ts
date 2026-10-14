@@ -1,6 +1,8 @@
 import { useEffect } from "react";
+import { useRouter, type Href } from "expo-router";
 import {
   configureSafeTrackNotificationHandler,
+  listenForNotificationTaps,
   registerGuardianPushToken,
 } from "../services/pushRegistrationService";
 
@@ -15,6 +17,26 @@ import {
 export function useGuardianPushRegistration(
   enabled = true
 ): void {
+  const router = useRouter();
+
+  // Tapping an SOS or safety notification opens the matching screen.
+  useEffect(() => {
+    if (!enabled) return;
+
+    let stop: (() => void) | null = null;
+    let cancelled = false;
+
+    void listenForNotificationTaps((route) => router.navigate(route as Href)).then((cleanup) => {
+      if (cancelled) cleanup();
+      else stop = cleanup;
+    });
+
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, [enabled, router]);
+
   useEffect(() => {
     if (!enabled) {
       return;

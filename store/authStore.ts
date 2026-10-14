@@ -15,6 +15,8 @@ import {
   resolveProfileForUser,
 } from "../services/profileService";
 
+import { unregisterGuardianPushToken } from "../services/pushRegistrationService";
+
 import type {
   Administrator,
   Child,
@@ -577,6 +579,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isLoading: true,
       error: null,
     });
+
+    // While still signed in: stop pushes to this phone for this guardian.
+    await unregisterGuardianPushToken();
 
     try {
       await signOutRequest();

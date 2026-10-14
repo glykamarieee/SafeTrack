@@ -1,372 +1,177 @@
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  Pressable,
-} from "react-native";
+import { useCallback } from "react";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect, useRouter } from "expo-router";
 
-import {
-  SafeAreaView,
-} from "react-native-safe-area-context";
-
-import {
-  Ionicons,
-} from "@expo/vector-icons";
-
-import {
-  useRouter,
-} from "expo-router";
-
+import { useAuthStore } from "../../store/authStore";
+import { useAnomalyStore } from "../../store/anomalyStore";
+import type { SafetyTimelineItem } from "../../services/safetyEventsService";
 import {
   guardianColors as colors,
   guardianRadius as radius,
-  guardianShadow as shadow,
   guardianSpacing as spacing,
 } from "../../constants/guardianDesign";
 
+/**
+ * The server writes reasons as "Possible unusual movement: a, b, c. Advisory only."
+ * Split them back into a list; fall back to the whole text.
+ */
+function reasonsOf(details: string | null) {
+  if (!details) return [];
+  const match = details.match(/:\s*(.+?)\.\s*(Advisory only\.?)?$/);
+  if (!match) return [];
+  return match[1]!.split(/,\s*/).filter(Boolean);
+}
 
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString("en-PH", {
+    timeZone: "Asia/Manila",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
-export default function AnomalyDetailsScreen(){
-
-  const router = useRouter();
-
+function NoticeCard({ notice }: { notice: SafetyTimelineItem }) {
+  const reasons = reasonsOf(notice.details);
 
   return (
-
-    <SafeAreaView style={styles.safe}>
-
-
-      <ScrollView
-        contentContainerStyle={styles.container}
-        showsVerticalScrollIndicator={false}
-      >
-
-
-        <Pressable
-          style={styles.back}
-          onPress={()=>router.back()}
-        >
-
-          <Ionicons
-            name="chevron-back"
-            size={20}
-            color={colors.ink}
-          />
-
-          <Text style={styles.backText}>
-            Back
-          </Text>
-
-        </Pressable>
-
-
-
-        <Text style={styles.eyebrow}>
-          AI SAFETY MONITORING
-        </Text>
-
-
-        <Text style={styles.title}>
-          Anomaly Details
-        </Text>
-
-
-        <Text style={styles.subtitle}>
-          Review unusual child movement records
-          detected by SafeTrack monitoring.
-        </Text>
-
-
-
-
-        <View style={styles.card}>
-
-
-          <View style={styles.iconBox}>
-
-            <Ionicons
-              name="analytics-outline"
-              size={28}
-              color={colors.primary}
-            />
-
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <View style={styles.cardIcon}>
+          <Ionicons name="analytics-outline" size={18} color={colors.warning} />
+        </View>
+        <View style={styles.cardCopy}>
+          <Text style={styles.cardTitle}>{notice.title}</Text>
+          <Text style={styles.cardTime}>{formatDateTime(notice.occurredAt)}</Text>
+        </View>
+        {notice.anomalyScore != null ? (
+          <View style={styles.scoreChip}>
+            <Text style={styles.scoreText}>Score {notice.anomalyScore.toFixed(2)}</Text>
           </View>
+        ) : null}
+      </View>
 
+      <Text style={styles.sectionLabel}>Why it was flagged</Text>
+      {reasons.length ? (
+        reasons.map((reason) => (
+          <View key={reason} style={styles.reasonRow}>
+            <Ionicons name="ellipse" size={6} color={colors.warning} />
+            <Text style={styles.reasonText}>{reason.charAt(0).toUpperCase() + reason.slice(1)}</Text>
+          </View>
+        ))
+      ) : (
+        <Text style={styles.reasonText}>{notice.details ?? "Unusual compared with this child's usual pattern."}</Text>
+      )}
 
-          <Text style={styles.cardTitle}>
-            No anomaly selected
-          </Text>
-
-
-          <Text style={styles.description}>
-            Select an anomaly record from the
-            safety history page to view the
-            detected movement pattern,
-            location details, and explainable
-            notification reason.
-          </Text>
-
-
-        </View>
-
-
-
-
-        <Text style={styles.sectionTitle}>
-          Detection Information
+      {notice.latitude != null && notice.longitude != null ? (
+        <Text style={styles.position}>
+          Location: {notice.latitude.toFixed(5)}, {notice.longitude.toFixed(5)}
         </Text>
+      ) : null}
+    </View>
+  );
+}
 
+export default function AnomalyDetailsScreen() {
+  const router = useRouter();
+  const child = useAuthStore((state) => state.linkedChildren?.[0] ?? null);
+  const anomalies = useAnomalyStore((state) => state.anomalies);
+  const isLoading = useAnomalyStore((state) => state.isLoading);
+  const error = useAnomalyStore((state) => state.error);
+  const load = useAnomalyStore((state) => state.loadForChild);
 
-        <View style={styles.infoCard}>
-
-
-          <Info
-            icon="location-outline"
-            label="Location Pattern"
-            value="Waiting for anomaly record"
-          />
-
-
-          <Divider />
-
-
-          <Info
-            icon="time-outline"
-            label="Time Pattern"
-            value="No available data"
-          />
-
-
-          <Divider />
-
-
-          <Info
-            icon="shield-checkmark-outline"
-            label="AI Explanation"
-            value="No explanation available"
-          />
-
-
-        </View>
-
-
-
-
-      </ScrollView>
-
-
-    </SafeAreaView>
-
+  useFocusEffect(
+    useCallback(() => {
+      if (child?.id) void load(child.id);
+    }, [child?.id, load]),
   );
 
+  return (
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={isLoading} onRefresh={() => child?.id && void load(child.id)} tintColor={colors.primary} />
+        }
+      >
+        <View style={styles.header}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to home"
+            onPress={() => router.navigate("/(app)/home")}
+            style={styles.back}
+          >
+            <Ionicons name="arrow-back" size={20} color={colors.primaryDeep} />
+          </Pressable>
+          <View style={styles.headerCopy}>
+            <Text style={styles.title}>AI safety notices</Text>
+            <Text style={styles.subtitle}>{child?.fullName ?? "Your child"}'s recent unusual-movement notices</Text>
+          </View>
+        </View>
+
+        <View style={styles.note}>
+          <Ionicons name="information-circle-outline" size={18} color={colors.primaryDark} />
+          <Text style={styles.noteText}>
+            Notices are advisory. SafeTrack compares each new location with this child's own earlier locations and lists what
+            stood out. They are not emergencies; SOS alerts are separate.
+          </Text>
+        </View>
+
+        {isLoading && !anomalies.length ? (
+          <ActivityIndicator style={styles.loading} color={colors.primary} />
+        ) : error ? (
+          <Text style={styles.error}>{error}</Text>
+        ) : anomalies.length ? (
+          anomalies.map((notice) => <NoticeCard key={notice.id} notice={notice} />)
+        ) : (
+          <View style={styles.empty}>
+            <Ionicons name="checkmark-circle-outline" size={28} color={colors.primaryDark} />
+            <Text style={styles.emptyTitle}>No AI notices</Text>
+            <Text style={styles.emptyText}>Nothing unusual has been flagged for this child.</Text>
+          </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
+  );
 }
-
-
-
-
-
-function Info({
-  icon,
-  label,
-  value,
-}:{
-  icon:keyof typeof Ionicons.glyphMap;
-  label:string;
-  value:string;
-}){
-
-
-return (
-
-<View style={styles.info}>
-
-
-<Ionicons
-name={icon}
-size={20}
-color={colors.primary}
-/>
-
-
-<View style={styles.infoText}>
-
-<Text style={styles.label}>
-{label}
-</Text>
-
-
-<Text style={styles.value}>
-{value}
-</Text>
-
-</View>
-
-
-</View>
-
-);
-
-}
-
-
-
-
-
-function Divider(){
-
-return (
-
-<View style={styles.divider}/>
-
-);
-
-}
-
-
-
 
 const styles = StyleSheet.create({
-
-safe:{
-flex:1,
-backgroundColor:colors.background,
-},
-
-
-container:{
-width:"100%",
-maxWidth:900,
-alignSelf:"center",
-padding:spacing.lg,
-paddingBottom:80,
-},
-
-
-back:{
-flexDirection:"row",
-alignItems:"center",
-marginBottom:25,
-},
-
-
-backText:{
-marginLeft:5,
-fontWeight:"800",
-color:colors.ink,
-},
-
-
-eyebrow:{
-fontSize:10,
-fontWeight:"900",
-letterSpacing:1.3,
-color:colors.primary,
-},
-
-
-title:{
-marginTop:5,
-fontSize:30,
-fontWeight:"900",
-color:colors.ink,
-},
-
-
-subtitle:{
-marginTop:8,
-color:colors.muted,
-lineHeight:20,
-},
-
-
-card:{
-marginTop:25,
-padding:22,
-borderRadius:radius.lg,
-backgroundColor:colors.white,
-...shadow.card,
-alignItems:"center",
-},
-
-
-iconBox:{
-width:70,
-height:70,
-borderRadius:35,
-backgroundColor:colors.softMint,
-alignItems:"center",
-justifyContent:"center",
-},
-
-
-cardTitle:{
-marginTop:15,
-fontSize:18,
-fontWeight:"900",
-color:colors.ink,
-},
-
-
-description:{
-marginTop:10,
-textAlign:"center",
-fontSize:12,
-lineHeight:18,
-color:colors.muted,
-},
-
-
-sectionTitle:{
-marginTop:25,
-marginBottom:10,
-fontSize:10,
-fontWeight:"900",
-letterSpacing:1.2,
-color:colors.muted,
-},
-
-
-infoCard:{
-padding:16,
-borderRadius:radius.md,
-backgroundColor:colors.white,
-...shadow.soft,
-},
-
-
-info:{
-flexDirection:"row",
-alignItems:"center",
-},
-
-
-infoText:{
-marginLeft:10,
-flex:1,
-},
-
-
-label:{
-fontSize:10,
-fontWeight:"800",
-color:colors.muted,
-},
-
-
-value:{
-marginTop:3,
-fontSize:13,
-fontWeight:"800",
-color:colors.ink,
-},
-
-
-divider:{
-height:1,
-backgroundColor:colors.border,
-marginVertical:14,
-},
-
-
+  safe: { flex: 1, backgroundColor: colors.background },
+  content: { width: "100%", maxWidth: 820, alignSelf: "center", padding: spacing.lg, paddingBottom: 120 },
+  header: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
+  back: {
+    width: 42,
+    height: 42,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  headerCopy: { flex: 1, marginLeft: 12 },
+  title: { color: colors.ink, fontSize: 20, fontWeight: "900" },
+  subtitle: { marginTop: 2, color: colors.muted, fontSize: 12.5 },
+  note: { flexDirection: "row", gap: 8, padding: 12, borderRadius: radius.md, backgroundColor: colors.softMint, marginBottom: 14 },
+  noteText: { flex: 1, color: colors.primaryDeep, fontSize: 11.5, lineHeight: 16 },
+  loading: { marginTop: 30 },
+  error: { color: colors.danger, fontSize: 12.5 },
+  card: { padding: 14, marginBottom: 10, borderRadius: 18, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.border },
+  cardHeader: { flexDirection: "row", alignItems: "center" },
+  cardIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: colors.warningSoft },
+  cardCopy: { flex: 1, marginLeft: 10 },
+  cardTitle: { color: colors.ink, fontSize: 13.5, fontWeight: "800" },
+  cardTime: { marginTop: 2, color: colors.muted, fontSize: 11 },
+  scoreChip: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: colors.surfaceMuted },
+  scoreText: { color: colors.primaryDark, fontSize: 10.5, fontWeight: "800" },
+  sectionLabel: { marginTop: 12, marginBottom: 6, color: colors.muted, fontSize: 10.5, fontWeight: "800", letterSpacing: 0.6 },
+  reasonRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 3 },
+  reasonText: { flex: 1, color: colors.ink, fontSize: 12.5, lineHeight: 18 },
+  position: { marginTop: 10, color: colors.muted, fontSize: 11 },
+  empty: { alignItems: "center", padding: 28, gap: 6 },
+  emptyTitle: { color: colors.ink, fontSize: 15, fontWeight: "800" },
+  emptyText: { color: colors.muted, fontSize: 12, textAlign: "center" },
 });

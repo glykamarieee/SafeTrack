@@ -1,220 +1,119 @@
+import { useCallback, useState } from "react";
 import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
   View,
   Pressable,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect, useRouter, type Href } from "expo-router";
 
-import {
-  SafeAreaView,
-} from "react-native-safe-area-context";
-
-import {
-  Ionicons,
-} from "@expo/vector-icons";
-
-import {
-  useRouter,
-} from "expo-router";
-
-import {
-  useAuthStore,
-} from "../../store/authStore";
-
-import {
-  useSosStore,
-} from "../../store/sosStore";
-
-
+import { useAuthStore } from "../../store/authStore";
+import { useSosStore } from "../../store/sosStore";
+import { fetchGeofenceEvents } from "../../services/geofenceService";
+import type { GeofenceEvent } from "../../types/safetrack";
 import {
   guardianColors as colors,
   guardianRadius as radius,
   guardianSpacing as spacing,
 } from "../../constants/guardianDesign";
 
-
-
 type NotificationItem = {
-
-  id:string;
-
-  title:string;
-
-  message:string;
-
-  icon:keyof typeof Ionicons.glyphMap;
-
-  time:string;
-
+  id: string;
+  title: string;
+  message: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  time: string;
+  at: number;
+  urgent: boolean;
+  route: Href;
 };
 
+const EVENT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  entry: "enter-outline",
+  exit: "exit-outline",
+  possible_anomaly: "analytics-outline",
+  watch_disconnected: "watch-outline",
+  prolonged_inactivity: "hourglass-outline",
+};
 
+function formatTime(value: string) {
+  return new Date(value).toLocaleString("en-PH", {
+    timeZone: "Asia/Manila",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
-
-
-export default function NotificationsScreen(){
-
-
+/**
+ * The same events the guardian is pushed (SOS, re-alerts and every
+ * geofence_events row), newest first, from the stored records.
+ */
+export default function NotificationsScreen() {
   const router = useRouter();
+  const child = useAuthStore((state) => state.linkedChildren?.[0] ?? null);
+  const sosAlerts = useSosStore((state) => state.alerts);
+  const loadSos = useSosStore((state) => state.loadForChild);
+  const [events, setEvents] = useState<GeofenceEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [problem, setProblem] = useState<string | null>(null);
 
+  const trackingSource = child?.trackingSource ?? "mobile";
 
-  const child =
-    useAuthStore(
-      state=>state.linkedChildren?.[0] ?? null
-    );
+  useFocusEffect(
+    useCallback(() => {
+      if (!child?.id) {
+        setLoading(false);
+        return;
+      }
+      let active = true;
+      setLoading(true);
+      setProblem(null);
+      void loadSos(child.id, child.fullName);
+      fetchGeofenceEvents(child.id, 40)
+        .then((rows) => active && setEvents(rows))
+        .catch((reason: { message?: string }) => active && setProblem(reason?.message ?? "Safety events could not be loaded."))
+        .finally(() => active && setLoading(false));
+      return () => {
+        active = false;
+      };
+    }, [child?.id, child?.fullName, loadSos]),
+  );
 
-
-  const sosAlerts =
-    useSosStore(
-      state=>state.alerts
-    );
-
-
-
-  const trackingSource =
-    child?.trackingSource ?? "mobile";
-
-
-
-
-  const notifications:NotificationItem[] = [];
-
-
-
-
-  /*
-    SMARTWATCH ONLY
-  */
-
-  if(
-    trackingSource==="smartwatch" ||
-    trackingSource==="both"
-  ){
-
-    notifications.push({
-
-      id:"watch",
-
-      title:"Smartwatch Monitoring",
-
+  const notifications: NotificationItem[] = [
+    ...sosAlerts.map((alert) => ({
+      id: `sos-${alert.id}`,
+      title: alert.status === "active" ? `Active SOS from ${alert.childName ?? "your child"}` : "SOS alert",
       message:
-        "Registered smartwatch monitoring is active for this child.",
+        alert.status === "active"
+          ? `Not acknowledged yet${alert.realertCount ? ` · re-alerted ${alert.realertCount}×` : ""}. Tap to respond.`
+          : alert.status === "acknowledged"
+            ? "Acknowledged."
+            : "Cancelled.",
+      icon: "warning-outline" as const,
+      time: formatTime(alert.triggeredAt),
+      at: Date.parse(alert.triggeredAt),
+      urgent: alert.status === "active",
+      route: "/(app)/sos-alerts" as Href,
+    })),
+    ...events.map((event) => ({
+      id: `event-${event.id}`,
+      title: event.title,
+      message: event.details ?? event.eventType.replaceAll("_", " "),
+      icon: EVENT_ICONS[event.eventType] ?? ("shield-checkmark-outline" as const),
+      time: formatTime(event.occurredAt),
+      at: Date.parse(event.occurredAt),
+      urgent: false,
+      route: (event.eventType === "possible_anomaly" ? "/(app)/anomaly-details" : "/(app)/history") as Href,
+    })),
+  ].sort((first, second) => second.at - first.at);
 
-      icon:"watch-outline",
-
-      time:"Available",
-
-    });
-
-
-  }
-
-
-
-
-  /*
-    MOBILE ONLY
-  */
-
-  if(
-    trackingSource==="mobile" ||
-    trackingSource==="both"
-  ){
-
-    notifications.push({
-
-      id:"mobile",
-
-      title:"Mobile Location Monitoring",
-
-      message:
-        "Child mobile device location tracking is enabled.",
-
-      icon:"phone-portrait-outline",
-
-      time:"Available",
-
-    });
-
-  }
-
-
-
-
-
-  /*
-    SOS
-  */
-
-  const activeSOS =
-    sosAlerts.filter(
-      item=>item.status==="active"
-    ).length;
-
-
-
-  notifications.push({
-
-    id:"sos",
-
-    title:
-      activeSOS>0
-      ?
-      "Active SOS Alert"
-      :
-      "SOS Monitoring Ready",
-
-
-    message:
-      activeSOS>0
-      ?
-      `${activeSOS} SOS alert requires guardian attention.`
-      :
-      "Emergency alert monitoring is active.",
-
-
-    icon:
-      activeSOS>0
-      ?
-      "warning-outline"
-      :
-      "shield-checkmark-outline",
-
-
-    time:"Current",
-
-  });
-
-
-
-
-
-
-  /*
-    SAFE ZONE
-  */
-
-  notifications.push({
-
-    id:"safezone",
-
-    title:"Safe Zone Monitoring",
-
-    message:
-      "Guardian-defined safe zone monitoring is enabled.",
-
-    icon:"location-outline",
-
-    time:"Current",
-
-  });
-
-
-
-
-
-
+  const activeSOS = sosAlerts.filter((item) => item.status === "active").length;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -223,7 +122,7 @@ export default function NotificationsScreen(){
           accessibilityRole="button"
           accessibilityLabel="Go back"
           style={({ pressed }) => [styles.back, pressed && styles.pressed]}
-          onPress={() => router.back()}
+          onPress={() => router.navigate("/(app)/home")}
         >
           <Ionicons name="chevron-back" size={19} color={colors.ink} />
           <Text style={styles.backText}>Back</Text>
@@ -233,7 +132,7 @@ export default function NotificationsScreen(){
           <Text style={styles.eyebrow}>SAFETY UPDATES</Text>
           <Text style={styles.title}>Notifications</Text>
           <Text style={styles.subtitle}>
-            Monitoring information derived from the selected child's existing SafeTrack status and tracking source.
+            SOS alerts and safety events for the selected child, newest first. The same events are sent as push notifications.
           </Text>
         </View>
 
@@ -259,22 +158,31 @@ export default function NotificationsScreen(){
 
         <View style={styles.sectionHeader}>
           <View>
-            <Text style={styles.sectionEyebrow}>MONITORING STATUS</Text>
-            <Text style={styles.sectionTitle}>Current updates</Text>
+            <Text style={styles.sectionEyebrow}>RECENT ACTIVITY</Text>
+            <Text style={styles.sectionTitle}>{activeSOS ? `${activeSOS} SOS need attention` : "Latest updates"}</Text>
           </View>
           <Text style={styles.countText}>{notifications.length} shown</Text>
         </View>
 
+        {loading && !notifications.length ? <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} /> : null}
+        {problem ? <Text style={[styles.message, { color: colors.danger, marginTop: 10 }]}>{problem}</Text> : null}
+        {!loading && !notifications.length ? (
+          <Text style={[styles.message, { marginTop: 14 }]}>No SOS alerts or safety events yet.</Text>
+        ) : null}
+
         <View style={styles.noticeList}>
           {notifications.map((item, index) => {
-            const urgent = item.id === "sos" && activeSOS > 0;
+            const urgent = item.urgent;
             return (
-              <View
+              <Pressable
                 key={item.id}
-                style={[
+                accessibilityRole="button"
+                onPress={() => router.navigate(item.route)}
+                style={({ pressed }) => [
                   styles.noticeRow,
                   urgent && styles.noticeRowUrgent,
                   index !== notifications.length - 1 && styles.noticeDivider,
+                  pressed && styles.pressed,
                 ]}
               >
                 <View style={[styles.iconBox, urgent && styles.iconBoxUrgent]}>
@@ -287,7 +195,7 @@ export default function NotificationsScreen(){
                   </View>
                   <Text style={styles.message}>{item.message}</Text>
                 </View>
-              </View>
+              </Pressable>
             );
           })}
         </View>
@@ -295,7 +203,7 @@ export default function NotificationsScreen(){
         <View style={styles.footnote}>
           <Ionicons name="information-circle-outline" size={17} color={colors.primaryDark} />
           <Text style={styles.footnoteText}>
-            This screen preserves the notification/status information already exposed by the current Guardian interface; it does not generate new monitoring records.
+            Showing the latest 40 safety events. The full day-by-day record is in Activity History.
           </Text>
         </View>
       </ScrollView>

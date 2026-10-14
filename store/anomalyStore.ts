@@ -1,281 +1,45 @@
 import { create } from "zustand";
 
-import {
-  fetchAnomaliesForChild,
-  acknowledgeAnomaly,
-} from "../services/anomalyService";
-
+import { fetchAnomaliesForChild } from "../services/anomalyService";
 import type { SafetyTimelineItem } from "../services/safetyEventsService";
 
-
 interface AnomalyState {
-
   anomalies: SafetyTimelineItem[];
-
-  latestAnomaly:
-    SafetyTimelineItem | null;
-
-
-  isLoading:boolean;
-
-  error:string|null;
-
-
-  loadForChild:
-    (
-      childId:string
-    )=>Promise<void>;
-
-
-  acknowledge:
-    (
-      anomalyId:string
-    )=>Promise<void>;
-
-
-  clear:
-    ()=>void;
-
+  latestAnomaly: SafetyTimelineItem | null;
+  isLoading: boolean;
+  error: string | null;
+  loadForChild: (childId: string) => Promise<void>;
+  clear: () => void;
 }
 
+// supabase-js errors are plain objects, not Error instances.
+function messageOf(error: unknown, fallback: string) {
+  const message = (error as { message?: unknown } | null)?.message;
+  return typeof message === "string" && message ? message : fallback;
+}
 
+/** AI anomaly notices (advisory) for the selected child. */
+export const useAnomalyStore = create<AnomalyState>((set) => ({
+  anomalies: [],
+  latestAnomaly: null,
+  isLoading: false,
+  error: null,
 
-export const useAnomalyStore =
-create<AnomalyState>((set,get)=>({
-
-
-
-  anomalies:[],
-
-
-  latestAnomaly:null,
-
-
-  isLoading:false,
-
-
-  error:null,
-
-
-
-
-
-  loadForChild:
-  async(
-    childId
-  )=>{
-
-
-    if(!childId){
-
-      set({
-        anomalies:[],
-        latestAnomaly:null
-      });
-
+  loadForChild: async (childId) => {
+    if (!childId) {
+      set({ anomalies: [], latestAnomaly: null });
       return;
-
     }
 
+    set({ isLoading: true, error: null });
 
-
-    set({
-
-      isLoading:true,
-
-      error:null
-
-    });
-
-
-
-    try{
-
-
-      const data =
-      await fetchAnomaliesForChild(
-        childId
-      );
-
-
-
-      const sorted =
-      [...data].sort(
-        (
-          a,
-          b
-        )=>
-
-        new Date(
-          b.occurredAt
-        ).getTime()
-
-        -
-
-        new Date(
-          a.occurredAt
-        ).getTime()
-
-      );
-
-
-
-
-      set({
-
-        anomalies:
-          sorted,
-
-
-        latestAnomaly:
-          sorted[0] ?? null,
-
-
-        isLoading:false
-
-      });
-
-
-
+    try {
+      const anomalies = await fetchAnomaliesForChild(childId);
+      set({ anomalies, latestAnomaly: anomalies[0] ?? null, isLoading: false });
+    } catch (error) {
+      set({ error: messageOf(error, "Unable to load AI safety data."), isLoading: false });
     }
-
-    catch(error){
-
-
-      set({
-
-        error:
-          error instanceof Error
-          ?
-          error.message
-          :
-          "Unable to load AI safety data.",
-
-
-        isLoading:false
-
-      });
-
-
-    }
-
-
   },
 
-
-
-
-
-
-
-
-  acknowledge:
-  async(
-    anomalyId
-  )=>{
-
-
-    const previous =
-    get().anomalies;
-
-
-
-    set({
-
-      anomalies:
-
-      previous.map(
-        item=>
-
-        item.id===anomalyId
-
-        ?
-
-        {
-
-          ...item,
-
-          status:"acknowledged"
-
-        }
-
-        :
-
-        item
-
-      )
-
-    });
-
-
-
-
-    try{
-
-
-      await acknowledgeAnomaly(
-        anomalyId
-      );
-
-
-
-    }
-
-    catch(error){
-
-
-      set({
-
-        anomalies:
-          previous,
-
-
-        error:
-        error instanceof Error
-        ?
-        error.message
-        :
-        "Unable to acknowledge anomaly."
-
-      });
-
-
-
-      throw error;
-
-
-    }
-
-
-  },
-
-
-
-
-
-
-
-
-  clear:()=>{
-
-
-    set({
-
-      anomalies:[],
-
-
-      latestAnomaly:null,
-
-
-      error:null
-
-    });
-
-
-  }
-
-
-
-
-
+  clear: () => set({ anomalies: [], latestAnomaly: null, error: null }),
 }));

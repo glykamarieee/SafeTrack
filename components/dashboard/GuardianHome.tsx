@@ -73,7 +73,13 @@ export function GuardianHome() {
   const zoneEvents = useGeofenceStore((state) => state.events);
   const loadZones = useGeofenceStore((state) => state.load);
 
-  const latestAnomaly = useAnomalyStore((state) => state.latestAnomaly);
+  const storedAnomaly = useAnomalyStore((state) => state.latestAnomaly);
+  // Only a recent AI notice needs the guardian's attention on Home; older
+  // ones stay in Activity History.
+  const latestAnomaly =
+    storedAnomaly && Date.now() - Date.parse(storedAnomaly.occurredAt) < 24 * 60 * 60 * 1000
+      ? storedAnomaly
+      : null;
   const loadAnomaly = useAnomalyStore((state) => state.loadForChild);
 
   const [watch, setWatch] = useState<SmartwatchStatus | null>(null);
@@ -298,7 +304,7 @@ export function GuardianHome() {
 
         <Pressable
           style={({ pressed }) => [styles.summaryItem, pressed && styles.pressed]}
-          onPress={() => router.push("/(app)/safety-center")}
+          onPress={() => router.push("/(app)/anomaly-details")}
         >
           <View style={[styles.summaryIcon, { backgroundColor: latestAnomaly ? colors.warningSoft : colors.softMint }]}> 
             <Ionicons name="sparkles-outline" size={20} color={latestAnomaly ? colors.warning : colors.primaryDark} />

@@ -168,11 +168,11 @@ SOS
 =====================================================
 */
 
+// Must match the sos_alerts_status check constraint.
 export type SosAlertStatus =
   | "active"
   | "acknowledged"
-  | "resolved"
-  | "canceled";
+  | "cancelled";
 
 
 export type SosActivationMethod =

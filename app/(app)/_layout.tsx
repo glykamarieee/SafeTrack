@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { useAuthStore } from "../../store/authStore";
 import { useGuardianPushRegistration } from "../../hooks/useGuardianPushRegistration";
+import { useGuardianSosRealtime } from "../../hooks/useGuardianSosRealtime";
 import { guardianColors } from "../../constants/guardianDesign";
 import { adminColors, adminLayout } from "../../constants/adminDesign";
 
@@ -37,7 +38,10 @@ export default function AppLayout() {
   const wide = width >= adminLayout.sidebarBreakpoint;
   const colors = isAdmin ? adminColors : guardianColors;
 
+  const guardianId = useAuthStore((state) => state.guardian?.id);
+
   useGuardianPushRegistration(isGuardian);
+  useGuardianSosRealtime(isGuardian ? guardianId : null);
 
   return (
     <Tabs

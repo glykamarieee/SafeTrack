@@ -3,9 +3,14 @@ import {
   acknowledgeSosAlert,
   fetchAllSosAlerts,
   fetchSosAlertsForChild,
-  resolveSosAlert,
-  triggerTestSosAlert,
+  mapSosRow,
 } from "../services/sosService";
+
+// supabase-js errors are plain objects, not Error instances.
+function messageOf(error: unknown, fallback: string) {
+  const message = (error as { message?: unknown } | null)?.message;
+  return typeof message === "string" && message ? message : fallback;
+}
 import { readCache, writeCache } from "../lib/offlineCache";
 import type { SosAlert } from "../types/safetrack";
 
@@ -15,14 +20,12 @@ interface SosState {
   error: string | null;
   isOffline: boolean;
   cachedAt: string | null;
-  isSendingTest: boolean;
-  lastTestAlert: SosAlert | null;
 
   loadForChild: (childId: string, childName?: string) => Promise<void>;
   loadAll: () => Promise<void>;
-  sendTestAlert: (childId: string, childName: string, guardianId?: string) => Promise<void>;
   acknowledge: (alertId: string) => Promise<void>;
-  resolve: (alertId: string) => Promise<void>;
+  /** Apply a live sos_alerts row (insert or update) to the loaded child's list. */
+  applyLiveRow: (row: Record<string, unknown>) => void;
 }
 
 export const useSosStore = create<SosState>((set, get) => ({
@@ -31,8 +34,6 @@ export const useSosStore = create<SosState>((set, get) => ({
   error: null,
   isOffline: false,
   cachedAt: null,
-  isSendingTest: false,
-  lastTestAlert: null,
 
   loadForChild: async (childId, childName = "Child") => {
     set({ isLoading: true, error: null });
@@ -50,7 +51,7 @@ export const useSosStore = create<SosState>((set, get) => ({
       } else {
         set({
           error:
-            error instanceof Error ? error.message : "Could not load SOS alerts.",
+            messageOf(error, "Could not load SOS alerts."),
         });
       }
     } finally {
@@ -66,27 +67,27 @@ export const useSosStore = create<SosState>((set, get) => ({
     } catch (error) {
       set({
         error:
-          error instanceof Error ? error.message : "Could not load SOS alerts.",
+          messageOf(error, "Could not load SOS alerts."),
       });
     } finally {
       set({ isLoading: false });
     }
   },
 
-  sendTestAlert: async (childId, childName) => {
-    set({ isSendingTest: true, error: null });
-    try {
-      const alert = await triggerTestSosAlert(childId, childName);
-      set({ lastTestAlert: alert, alerts: [alert, ...get().alerts] });
-    } catch (error) {
-      set({
-        error:
-          error instanceof Error ? error.message : "Could not send test SOS alert.",
-      });
-      throw error;
-    } finally {
-      set({ isSendingTest: false });
-    }
+  applyLiveRow: (row) => {
+    const alerts = get().alerts;
+    const id = String(row.id ?? "");
+    const existing = alerts.find((alert) => alert.id === id);
+    // The list holds one child's alerts; ignore other children's rows.
+    const childId = alerts[0]?.childId;
+    if (!existing && childId && row.child_id !== childId) return;
+
+    const alert = mapSosRow(row, existing?.childName ?? alerts[0]?.childName ?? "Child");
+    set({
+      alerts: existing
+        ? alerts.map((item) => (item.id === id ? alert : item))
+        : [alert, ...alerts],
+    });
   },
 
   acknowledge: async (alertId) => {
@@ -108,33 +109,10 @@ export const useSosStore = create<SosState>((set, get) => ({
       set({
         alerts: previous,
         error:
-          error instanceof Error
-            ? error.message
-            : "Could not acknowledge the SOS alert.",
+          messageOf(error, "Could not acknowledge the SOS alert."),
       });
       throw error;
     }
   },
 
-  resolve: async (alertId) => {
-    const previous = get().alerts;
-
-    set({
-      alerts: previous.map((alert) =>
-        alert.id === alertId ? { ...alert, status: "resolved" } : alert
-      ),
-      error: null,
-    });
-
-    try {
-      await resolveSosAlert(alertId);
-    } catch (error) {
-      set({
-        alerts: previous,
-        error:
-          error instanceof Error ? error.message : "Could not resolve the SOS alert.",
-      });
-      throw error;
-    }
-  },
 }));

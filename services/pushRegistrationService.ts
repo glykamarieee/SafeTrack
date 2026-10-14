@@ -1,7 +1,10 @@
 import { Platform } from "react-native";
 import * as Device from "expo-device";
-import Constants from "expo-constants";
+import Constants, { ExecutionEnvironment } from "expo-constants";
 import { supabase } from "../lib/supabase";
+
+// The token this device registered, so it can be switched off on logout.
+let registeredToken: string | null = null;
 
 /**
  * Expo Go no longer supports Android remote push notifications
@@ -12,7 +15,8 @@ import { supabase } from "../lib/supabase";
  * or installed SafeTrack APK.
  */
 function isRunningInExpoGo(): boolean {
-  return Constants.appOwnership === "expo";
+  // `appOwnership` is deprecated; executionEnvironment is the supported check.
+  return Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 }
 
 /**
@@ -178,5 +182,61 @@ export async function registerGuardianPushToken(): Promise<string | null> {
     );
   }
 
+  registeredToken = pushToken;
+
   return pushToken;
+}
+
+/**
+ * Stop pushes to this device for the guardian who is logging out. Must run
+ * before signing out (the row is updated as that guardian). Never throws:
+ * logout must work offline.
+ */
+export async function unregisterGuardianPushToken(): Promise<void> {
+  if (!registeredToken) return;
+
+  const token = registeredToken;
+  registeredToken = null;
+
+  const { error } = await supabase
+    .from("guardian_push_tokens")
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq("push_token", token);
+
+  if (error) {
+    console.warn("[SafeTrack] Could not switch off this device's push token:", error.message);
+  }
+}
+
+/** Where a tapped notification should open, from the push's `data.type`. */
+export function routeForNotification(data: Record<string, unknown> | undefined): string | null {
+  const type = typeof data?.type === "string" ? data.type : "";
+
+  if (type === "sos" || type === "sos_realert") return "/(app)/sos-alerts";
+  if (["entry", "exit", "possible_anomaly", "watch_disconnected", "prolonged_inactivity"].includes(type)) {
+    return "/(app)/history";
+  }
+
+  return null;
+}
+
+/**
+ * Opens the right screen when the guardian taps a notification, including the
+ * one that launched the app. Returns a cleanup function.
+ */
+export async function listenForNotificationTaps(open: (route: string) => void): Promise<() => void> {
+  const Notifications = await loadNotifications();
+
+  if (!Notifications) return () => undefined;
+
+  const handle = (response: { notification: { request: { content: { data?: Record<string, unknown> } } } } | null) => {
+    const route = routeForNotification(response?.notification.request.content.data);
+    if (route) open(route);
+  };
+
+  handle(await Notifications.getLastNotificationResponseAsync());
+
+  const subscription = Notifications.addNotificationResponseReceivedListener(handle);
+
+  return () => subscription.remove();
 }
