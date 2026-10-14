@@ -276,6 +276,14 @@ export async function sendPasswordReset(
   );
 
   if (error) {
+    // A 500 here means Supabase could not send the email (SMTP settings);
+    // the raw error is a JSON blob, not something to show a user.
+    if ((error as { status?: number }).status === 500 || /sending|smtp|{"status"/i.test(error.message)) {
+      throw new Error("The reset email could not be sent right now. Please try again later.");
+    }
+    if ((error as { status?: number }).status === 429 || /rate limit/i.test(error.message)) {
+      throw new Error("Too many reset requests. Please wait a few minutes and try again.");
+    }
     throw new Error(getSafeErrorMessage(error.message));
   }
 }
