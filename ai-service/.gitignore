@@ -1,0 +1,7 @@
+# Secrets: SUPABASE_SERVICE_KEY and AI_SERVICE_KEY live here.
+.env
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+*.pyc
