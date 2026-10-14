@@ -48,3 +48,7 @@ supabase-backup-before-integration/
 # Firebase service-account keys are secret (upload them to Expo, never commit)
 *firebase-adminsdk*.json
 *service-account*.json
+
+# .NET build output (report-service is no longer used; never commit build files)
+report-service/bin/
+report-service/obj/
