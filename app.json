@@ -49,7 +49,11 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow SafeTrack to share this phone's location with the child's Guardian."
+          "locationWhenInUsePermission": "Allow SafeTrack to share this phone's location with the child's Guardian.",
+          "locationAlwaysAndWhenInUsePermission": "Allow SafeTrack to share this phone's location with the child's Guardian even when the app is closed, if automatic sharing is turned on.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true,
+          "isIosBackgroundLocationEnabled": true
         }
       ],
       "expo-video",

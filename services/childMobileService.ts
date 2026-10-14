@@ -223,13 +223,32 @@ export async function sendCurrentChildPhoneLocation(): Promise<{
     accuracy: Location.Accuracy.High,
   });
 
+  return recordChildPhoneLocation(
+    position.coords.latitude,
+    position.coords.longitude,
+    position.coords.accuracy
+  );
+}
+
+/**
+ * Stores one location for the linked child (`record_child_phone_location`).
+ * Used by the "Send latest location" button and the background task.
+ */
+export async function recordChildPhoneLocation(
+  latitude: number,
+  longitude: number,
+  accuracyMeters: number | null
+): Promise<{
+  location: LocationLog;
+  safeZoneStatus: ChildSafeZoneStatus;
+}> {
   const data = await callAsChildPhone<{
     location: LocationRow;
     safeZoneStatus: ChildSafeZoneStatus;
   }>("record_child_phone_location", {
-    p_latitude: position.coords.latitude,
-    p_longitude: position.coords.longitude,
-    p_accuracy_meters: position.coords.accuracy,
+    p_latitude: latitude,
+    p_longitude: longitude,
+    p_accuracy_meters: accuracyMeters,
   });
 
   return {

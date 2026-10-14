@@ -11,6 +11,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useChildMobileStore } from "../../store/childMobileStore";
+import { AutoShareToggle } from "../../components/location/AutoShareToggle";
 import {
   childColors as colors,
   childRadius as radius,
@@ -192,6 +193,8 @@ export default function ChildHomeScreen() {
             </Text>
           </Pressable>
         </View>
+
+        <AutoShareToggle />
 
         <Text style={styles.sectionLabel}>SAFETY RIGHT NOW</Text>
         <Pressable

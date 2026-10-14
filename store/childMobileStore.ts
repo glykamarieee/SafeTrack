@@ -17,6 +17,7 @@ import {
   triggerChildPhoneSos,
   unlinkChildPhone,
 } from "../services/childMobileService";
+import { stopBackgroundSharing } from "../services/childBackgroundLocation";
 
 
 interface ChildMobileState {
@@ -72,6 +73,8 @@ export const useChildMobileStore = create<ChildMobileState>((set, get) => {
       return await request();
     } catch (error) {
       if (error instanceof ChildPhoneUnlinkedError) {
+        // Unlinked by the guardian: also stop automatic sharing.
+        void stopBackgroundSharing();
         set(signedOutState);
       }
 
@@ -160,6 +163,7 @@ export const useChildMobileStore = create<ChildMobileState>((set, get) => {
 
     disconnect: async () => {
       await run(unlinkChildPhone, "Unable to disconnect this phone.", { busy: true });
+      await stopBackgroundSharing();
       set(signedOutState);
     },
 
