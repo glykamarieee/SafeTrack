@@ -689,7 +689,7 @@ const useStyles = makeStyles((c, scheme) =>
       backgroundColor: c.surface,
       borderRadius: radius.md,
       overflow: "hidden",
-      ...(scheme === "dark" ? { borderWidth: 1, borderColor: c.rule } : shadow(scheme)),
+      borderWidth: 1, borderColor: scheme === "dark" ? c.rule : "transparent", ...(scheme === "dark" ? {} : shadow(scheme)),
     },
     cardPadded: { padding: space.lg, gap: space.lg },
     appearanceHead: { flexDirection: "row", alignItems: "center", gap: space.md },

@@ -91,7 +91,7 @@ export function AuthShell({ title, subtitle, eyebrow, back, backHref = "/(auth)/
             </Animated.View>
           </SafeAreaView>
 
-          <Animated.View style={[styles.sheet, sheet, { borderColor: colors.rule, paddingBottom: 48 + insets.bottom }]}>
+          <Animated.View style={[styles.sheet, sheet, { borderColor: scheme === "dark" ? colors.rule : "transparent", paddingBottom: 48 + insets.bottom }]}>
             <View style={styles.titleBlock}>
               {eyebrow ? (
                 <Text variant="legend" tone="primary">
@@ -149,7 +149,7 @@ const useStyles = makeStyles((c, scheme) =>
       backgroundColor: c.surface,
       borderTopLeftRadius: radius.lg + 2,
       borderTopRightRadius: radius.lg + 2,
-      borderTopWidth: scheme === "dark" ? 1 : 0,
+      borderTopWidth: 1,
       paddingHorizontal: space.xl,
       paddingTop: space.xxl,
       paddingBottom: space.xxxl,

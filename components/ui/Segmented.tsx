@@ -75,7 +75,7 @@ const useStyles = makeStyles((c, scheme) =>
       padding: 4,
       borderRadius: radius.pill,
       backgroundColor: c.surface,
-      ...(scheme === "dark" ? { borderWidth: 1, borderColor: c.rule } : shadow(scheme)),
+      borderWidth: 1, borderColor: scheme === "dark" ? c.rule : "transparent", ...(scheme === "dark" ? {} : shadow(scheme)),
     },
     indicator: {
       position: "absolute",

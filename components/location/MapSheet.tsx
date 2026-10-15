@@ -114,7 +114,7 @@ const useStyles = makeStyles((c, scheme) =>
       borderTopRightRadius: 30,
       backgroundColor: c.surface,
       paddingHorizontal: 20,
-      ...(scheme === "dark" ? { borderWidth: 1, borderColor: c.rule } : {}),
+      borderWidth: 1, borderColor: scheme === "dark" ? c.rule : "transparent",
       ...shadow(scheme, "float"),
     },
     handle: { alignSelf: "center", width: 40, height: 5, borderRadius: 3, marginTop: 10, backgroundColor: c.ruleStrong },

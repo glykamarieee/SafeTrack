@@ -46,7 +46,7 @@ const useStyles = makeStyles((c, scheme) =>
     card: {
       backgroundColor: c.surface,
       // Dark mode separates cards with a rule; light mode with a soft shadow.
-      ...(scheme === "dark" ? { borderWidth: hairline, borderColor: c.rule } : shadow(scheme)),
+      borderWidth: hairline, borderColor: scheme === "dark" ? c.rule : "transparent", ...(scheme === "dark" ? {} : shadow(scheme)),
     },
     flat: { backgroundColor: c.surface, borderWidth: hairline, borderColor: c.rule },
     sunken: { backgroundColor: c.sunken },

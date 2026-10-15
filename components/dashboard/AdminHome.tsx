@@ -505,7 +505,7 @@ const useStyles = makeStyles((c, scheme) => {
   const card = {
     backgroundColor: c.surface,
     borderRadius: radius.md,
-    ...(scheme === "dark" ? { borderWidth: 1, borderColor: c.rule } : shadow(scheme)),
+    borderWidth: 1, borderColor: scheme === "dark" ? c.rule : "transparent", ...(scheme === "dark" ? {} : shadow(scheme)),
   };
 
   return StyleSheet.create({
