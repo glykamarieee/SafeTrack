@@ -1,51 +1,23 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  View,
-  useWindowDimensions,
-} from "react-native";
-import { Text } from "../ui/NativeText";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
+import { ActivityIndicator, Animated, Easing, Pressable, RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
 import {
+  fetchAdminSmartwatchDevices,
   fetchAdminSummaryMetrics,
   subscribeAdminUpdates,
+  type AdminSmartwatchDevice,
 } from "../../services/adminService";
-
-import {
-  adminColors as colors,
-  adminLayout,
-  adminRadius as radius,
-  adminShadow as shadow,
-  adminSpacing as spacing,
-} from "../../constants/adminDesign";
-
+import { WatchIllustration } from "../admin/WatchIllustration";
+import { Button } from "../ui/Button";
+import { Entrance } from "../ui/Entrance";
+import { Notice } from "../ui/Notice";
+import { Text } from "../ui/Text";
+import { nativeDriver } from "../../theme/motion";
 import { makeStyles, useTheme } from "../../theme/ThemeProvider";
-import { adminPalette } from "../../theme/legacy";
-
-function formatNumber(value: number) {
-  return value.toLocaleString();
-}
-
-function formatLastUpdated(value: string | null) {
-  if (!value) return "Awaiting sync";
-
-  try {
-    return new Intl.DateTimeFormat("en-PH", {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(new Date(value));
-  } catch {
-    return value;
-  }
-}
+import { radius, shadow, space } from "../../theme/tokens";
 
 type AdminSummaryMetrics = {
   guardianAccounts: number;
@@ -57,44 +29,6 @@ type AdminSummaryMetrics = {
   generatedReports: number;
 };
 
-type AdminAction = {
-  index: string;
-  title: string;
-  description: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  route:
-    | "/(app)/admin-guardians"
-    | "/(app)/admin-devices"
-    | "/(app)/admin-reports";
-};
-
-const ACTIONS: AdminAction[] = [
-  {
-    index: "01",
-    title: "Guardian accounts",
-    description:
-      "Review registered guardians and the existing account-status workflow.",
-    icon: "people-outline",
-    route: "/(app)/admin-guardians",
-  },
-  {
-    index: "02",
-    title: "Smartwatch devices",
-    description:
-      "Review linked watches, child ownership context, and device status.",
-    icon: "watch-outline",
-    route: "/(app)/admin-devices",
-  },
-  {
-    index: "03",
-    title: "System reports",
-    description:
-      "Retrieve authorized records and export the existing PDF or Excel report.",
-    icon: "document-text-outline",
-    route: "/(app)/admin-reports",
-  },
-];
-
 const EMPTY_METRICS: AdminSummaryMetrics = {
   guardianAccounts: 0,
   registeredChildren: 0,
@@ -105,40 +39,67 @@ const EMPTY_METRICS: AdminSummaryMetrics = {
   generatedReports: 0,
 };
 
+const TIPS_KEY = "safetrack.adminTips";
+
+type IconName = ComponentProps<typeof Ionicons>["name"];
+
+function formatNumber(value: number) {
+  return value.toLocaleString("en-PH");
+}
+
+function ago(value?: string | null) {
+  if (!value) return "No location yet";
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return "—";
+  const minutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hr${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+function initials(value: string) {
+  const words = value.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "?";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return `${words[0][0]}${words[1][0]}`.toUpperCase();
+}
+
+function today() {
+  return new Intl.DateTimeFormat("en-PH", { weekday: "long", day: "numeric", month: "long" }).format(new Date()).toUpperCase();
+}
+
 export function AdminHome() {
   const styles = useStyles();
-  const colors = adminPalette(useTheme().colors);
-
+  const { colors } = useTheme();
   const router = useRouter();
   const { width } = useWindowDimensions();
+  const wide = width >= 1180;
+  const tablet = width >= 760;
 
-  const desktop = width >= 1160;
-  const tablet = width >= 820;
-
-  const [metrics, setMetrics] =
-    useState<AdminSummaryMetrics | null>(null);
-
+  const [metrics, setMetrics] = useState<AdminSummaryMetrics | null>(null);
+  const [devices, setDevices] = useState<AdminSmartwatchDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [lastUpdated, setLastUpdated] =
-    useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [showTips, setShowTips] = useState(false);
 
   const loadMetrics = useCallback(async () => {
     try {
       setError(null);
-
-      const result = await fetchAdminSummaryMetrics();
-
+      const [result, deviceList] = await Promise.all([
+        fetchAdminSummaryMetrics(),
+        // The device list is extra context; the dashboard still works without it.
+        fetchAdminSmartwatchDevices("").catch(() => [] as AdminSmartwatchDevice[]),
+      ]);
       setMetrics(result);
+      setDevices(deviceList);
       setLastUpdated(new Date().toISOString());
     } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Unable to load dashboard data.",
-      );
+      setError(reason instanceof Error ? reason.message : "Unable to load dashboard data.");
     } finally {
       setLoading(false);
     }
@@ -146,1765 +107,466 @@ export function AdminHome() {
 
   useEffect(() => {
     void loadMetrics();
-
     const unsubscribe = subscribeAdminUpdates(() => {
       void loadMetrics();
     });
-
     return unsubscribe;
   }, [loadMetrics]);
 
+  useEffect(() => {
+    AsyncStorage.getItem(TIPS_KEY)
+      .then((value) => setShowTips(value !== "dismissed"))
+      .catch(() => setShowTips(true));
+  }, []);
+
+  const dismissTips = () => {
+    setShowTips(false);
+    AsyncStorage.setItem(TIPS_KEY, "dismissed").catch(() => undefined);
+  };
+
   const handleRefresh = async () => {
     setRefreshing(true);
-
     await loadMetrics();
-
     setRefreshing(false);
   };
 
   const data = metrics ?? EMPTY_METRICS;
 
-  const maxMetric = useMemo(
+  const recentDevices = useMemo(
     () =>
-      Math.max(
-        data.guardianAccounts,
-        data.registeredChildren,
-        data.activeDevices,
-        data.activeSafeZones,
-        data.activeSosAlerts,
-        1,
-      ),
-    [data],
+      [...devices]
+        .sort((first, second) => (Date.parse(second.latestLocationAt ?? "") || 0) - (Date.parse(first.latestLocationAt ?? "") || 0))
+        .slice(0, 5),
+    [devices],
   );
+  const featured = recentDevices.find((device) => device.isActive) ?? recentDevices[0] ?? null;
+
+  const bars = [
+    { label: "Guardians", value: data.guardianAccounts },
+    { label: "Children", value: data.registeredChildren },
+    { label: "Active devices", value: data.activeDevices },
+    { label: "Safe zones", value: data.activeSafeZones },
+    { label: "Reports", value: data.generatedReports },
+    { label: "Active SOS", value: data.activeSosAlerts, danger: true },
+  ];
 
   if (loading) {
     return (
-      <View style={styles.centerState}>
-        <View style={[styles.stateCard, shadow.soft]}>
-          <View style={styles.stateGlyph}>
-            <ActivityIndicator
-              size="small"
-              color={colors.primary}
-            />
-          </View>
-
-          <Text style={styles.stateEyebrow}>
-            SAFETRACK ADMIN
-          </Text>
-
-          <Text style={styles.stateTitle}>
-            Preparing the operations view
-          </Text>
-
-          <Text style={styles.stateText}>
-            Retrieving authorized account, device,
-            safety, and report records.
-          </Text>
-        </View>
+      <View style={styles.center}>
+        <ActivityIndicator color={colors.primary} />
+        <Text variant="label" tone="muted">
+          Preparing the operations view
+        </Text>
       </View>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.centerState}>
-        <View style={[styles.stateCard, shadow.soft]}>
-          <View
-            style={[
-              styles.stateGlyph,
-              styles.stateGlyphDanger,
-            ]}
-          >
-            <Ionicons
-              name="alert-circle-outline"
-              size={24}
-              color={colors.danger}
-            />
-          </View>
-
-          <Text style={styles.stateEyebrow}>
-            SAFETRACK ADMIN
-          </Text>
-
-          <Text style={styles.stateTitle}>
-            Dashboard could not be loaded
-          </Text>
-
-          <Text style={styles.stateText}>
+      <View style={styles.center}>
+        <View style={styles.errorCard}>
+          <Notice tone="error" title="Dashboard could not be loaded">
             {error}
-          </Text>
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => void loadMetrics()}
-            style={({ pressed }) => [
-              styles.retryButton,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Ionicons
-              name="refresh-outline"
-              size={17}
-              color={colors.white}
-            />
-
-            <Text style={styles.retryButtonText}>
-              Try again
-            </Text>
-          </Pressable>
+          </Notice>
+          <Button label="Try again" icon="refresh" onPress={() => void loadMetrics()} />
         </View>
       </View>
     );
   }
 
-  const needsAttention =
-    data.activeSosAlerts > 0;
+  const openDevice = (deviceId: string) => router.push({ pathname: "/(app)/admin-device-details", params: { deviceId } });
 
   return (
     <ScrollView
-      style={styles.screen}
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={() => void handleRefresh()}
-          tintColor={colors.primary}
-        />
-      }
-      contentContainerStyle={styles.scrollContent}
+      style={styles.root}
+      contentContainerStyle={styles.content}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} tintColor={colors.primary} />}
     >
-      <View
-        pointerEvents="none"
-        style={styles.pageWashOne}
-      />
-
-      <View
-        pointerEvents="none"
-        style={styles.pageWashTwo}
-      />
-
-      <View style={styles.page}>
-        <View style={styles.headerRow}>
-          <View style={styles.headerCopy}>
-            <View style={styles.headerKickerRow}>
-              <View style={styles.headerKickerMark} />
-
-              <Text style={styles.headerKicker}>
-                ADMINISTRATOR WORKSPACE
-              </Text>
-
-              <View style={styles.headerKickerRule} />
-            </View>
-
-            <Text style={styles.title}>
-              SafeTrack operations
-            </Text>
-
-            <Text style={styles.subtitle}>
-              A clear operational view of the existing
-              Guardian, child, smartwatch, location,
-              safe-zone, SOS, and report records
-              available to administrators.
-            </Text>
-          </View>
-
-          <Pressable
-            accessibilityLabel="Refresh administrator dashboard"
-            onPress={() => void handleRefresh()}
-            style={({ pressed }) => [
-              styles.refreshButton,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Ionicons
-              name="refresh-outline"
-              size={17}
-              color={colors.primaryDark}
-            />
-
-            <Text style={styles.refreshText}>
-              Refresh
-            </Text>
-          </Pressable>
-        </View>
-
-        <View
-          style={[
-            styles.situationBoard,
-            shadow.lifted,
-          ]}
-        >
-          <View style={styles.boardTopLine} />
-
-          <View style={styles.boardCornerMark} />
-
-          <View style={styles.boardWash} />
-
-          <View
-            style={[
-              styles.boardGrid,
-              desktop && styles.boardGridDesktop,
-            ]}
-          >
-            <View style={styles.boardMain}>
-              <View style={styles.statusRow}>
-                <View
-                  style={[
-                    styles.statusSeal,
-                    needsAttention &&
-                      styles.statusSealDanger,
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.statusDot,
-                      needsAttention &&
-                        styles.statusDotDanger,
-                    ]}
-                  />
-
-                  <Text
-                    style={[
-                      styles.statusText,
-                      needsAttention &&
-                        styles.statusTextDanger,
-                    ]}
-                  >
-                    {needsAttention
-                      ? "ATTENTION NEEDED"
-                      : "SYSTEM OPERATIONAL"}
-                  </Text>
-                </View>
-
-                <Text style={styles.syncText}>
-                  Last sync ·{" "}
-                  {formatLastUpdated(lastUpdated)}
-                </Text>
-              </View>
-
-              <Text style={styles.boardTitle}>
-                The system in one field of view.
-              </Text>
-
-              <Text style={styles.boardDescription}>
-                The visual field below is built only
-                from the current SafeTrack totals. It
-                does not add placeholder activity or
-                simulated records.
-              </Text>
-
-              <View
-                style={[
-                  styles.fieldRow,
-                  !tablet && styles.fieldRowStack,
-                ]}
-              >
-                <View style={styles.orbitField}>
-                  <View
-                    style={[
-                      styles.orbitRing,
-                      styles.orbitRingOuter,
-                    ]}
-                  />
-
-                  <View
-                    style={[
-                      styles.orbitRing,
-                      styles.orbitRingMiddle,
-                    ]}
-                  />
-
-                  <View
-                    style={[
-                      styles.orbitRing,
-                      styles.orbitRingInner,
-                    ]}
-                  />
-
-                  <View
-                    style={styles.orbitAxisHorizontal}
-                  />
-
-                  <View
-                    style={styles.orbitAxisVertical}
-                  />
-
-                  <OrbitNode
-                    style={styles.nodeTop}
-                    label="Guardians"
-                    value={data.guardianAccounts}
-                    maxValue={maxMetric}
-                    color={colors.primary}
-                  />
-
-                  <OrbitNode
-                    style={styles.nodeRight}
-                    label="Devices"
-                    value={data.activeDevices}
-                    maxValue={maxMetric}
-                    color={colors.cyan}
-                  />
-
-                  <OrbitNode
-                    style={styles.nodeBottom}
-                    label="Safe zones"
-                    value={data.activeSafeZones}
-                    maxValue={maxMetric}
-                    color={colors.amber}
-                  />
-
-                  <OrbitNode
-                    style={styles.nodeLeft}
-                    label="SOS"
-                    value={data.activeSosAlerts}
-                    maxValue={maxMetric}
-                    color={colors.danger}
-                  />
-
-                  <View style={styles.orbitCore}>
-                    <Text
-                      style={styles.orbitCoreValue}
-                    >
-                      {formatNumber(
-                        data.registeredChildren,
-                      )}
-                    </Text>
-
-                    <Text
-                      style={styles.orbitCoreLabel}
-                    >
-                      CHILDREN
-                    </Text>
-                  </View>
-                </View>
-
-                <View
-                  style={styles.trackingFeature}
-                >
-                  <Text
-                    style={styles.featureEyebrow}
-                  >
-                    TRACKING RECORDS
-                  </Text>
-
-                  <Text style={styles.featureValue}>
-                    {formatNumber(
-                      data.locationRecords,
-                    )}
-                  </Text>
-
-                  <Text style={styles.featureLabel}>
-                    stored location records
-                  </Text>
-
-                  <View style={styles.routeSketch}>
-                    <View
-                      style={[
-                        styles.routeSegment,
-                        { flex: 1 },
-                      ]}
-                    />
-
-                    <View style={styles.routePoint} />
-
-                    <View
-                      style={[
-                        styles.routeSegment,
-                        { flex: 0.7 },
-                      ]}
-                    />
-
-                    <View
-                      style={[
-                        styles.routePoint,
-                        styles.routePointSecondary,
-                      ]}
-                    />
-
-                    <View
-                      style={[
-                        styles.routeSegment,
-                        { flex: 1.35 },
-                      ]}
-                    />
-                  </View>
-
-                  <View
-                    style={styles.trackingMetaRow}
-                  >
-                    <View
-                      style={
-                        styles.trackingMetaItem
-                      }
-                    >
-                      <Text
-                        style={
-                          styles.trackingMetaValue
-                        }
-                      >
-                        {formatNumber(
-                          data.activeSafeZones,
-                        )}
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.trackingMetaLabel
-                        }
-                      >
-                        SAFE ZONES
-                      </Text>
-                    </View>
-
-                    <View
-                      style={styles.trackingMetaRule}
-                    />
-
-                    <View
-                      style={
-                        styles.trackingMetaItem
-                      }
-                    >
-                      <Text
-                        style={
-                          styles.trackingMetaValue
-                        }
-                      >
-                        {formatNumber(
-                          data.generatedReports,
-                        )}
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.trackingMetaLabel
-                        }
-                      >
-                        REPORTS
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.boardAside}>
-              <View
-                style={[
-                  styles.sosModule,
-                  needsAttention &&
-                    styles.sosModuleActive,
-                ]}
-              >
-                <View
-                  style={styles.sosHeaderRow}
-                >
-                  <Text style={styles.sosEyebrow}>
-                    SOS / PRIORITY
-                  </Text>
-
-                  <View
-                    style={styles.sosSignalIcon}
-                  >
-                    <View
-                      style={styles.sosSignalCore}
-                    />
-                  </View>
-                </View>
-
-                <Text style={styles.sosValue}>
-                  {formatNumber(
-                    data.activeSosAlerts,
-                  )}
-                </Text>
-
-                <Text style={styles.sosLabel}>
-                  Active SOS records
-                </Text>
-
-                <Text
-                  style={styles.sosDescription}
-                >
-                  {needsAttention
-                    ? "Existing active SOS records should be reviewed through the supported SafeTrack workflow."
-                    : "No active SOS record currently requires administrator attention."}
-                </Text>
-              </View>
-
-              <View style={styles.asideLedger}>
-                <LedgerLine
-                  icon="people-outline"
-                  label="Guardian accounts"
-                  value={data.guardianAccounts}
-                />
-
-                <LedgerLine
-                  icon="watch-outline"
-                  label="Active devices"
-                  value={data.activeDevices}
-                />
-
-                <LedgerLine
-                  icon="people-circle-outline"
-                  label="Children"
-                  value={data.registeredChildren}
-                  last
-                />
-              </View>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.sectionHeadingRow}>
-          <View>
-            <Text style={styles.sectionKicker}>
-              RECORD LEDGER
-            </Text>
-
-            <Text style={styles.sectionTitle}>
-              What is currently stored
-            </Text>
-          </View>
-
-          <Text style={styles.sectionMeta}>
-            Existing SafeTrack totals only
+      <Entrance index={0} style={styles.header}>
+        <View style={styles.headerCopy}>
+          <Text variant="legend" tone="primary">
+            {today()}
           </Text>
+          <Text variant="display" accessibilityRole="header">
+            Dashboard
+          </Text>
+          <Text variant="caption">Updated {ago(lastUpdated)} · totals refresh when records change</Text>
         </View>
-
-        <View
-          style={[
-            styles.ledgerBand,
-            tablet && styles.ledgerBandWide,
-          ]}
-        >
-          <LedgerMetric
-            index="A"
-            icon="people-circle-outline"
-            value={data.registeredChildren}
-            label="Children"
-            detail="Registered monitoring profiles"
-            accent={colors.primary}
-          />
-
-          <LedgerMetric
-            index="B"
-            icon="scan-circle-outline"
-            value={data.activeSafeZones}
-            label="Safe zones"
-            detail="Active guardian-defined boundaries"
-            accent={colors.cyan}
-          />
-
-          <LedgerMetric
-            index="C"
-            icon="location-outline"
-            value={data.locationRecords}
-            label="Location records"
-            detail="Stored tracking data points"
-            accent={colors.amber}
-          />
-
-          <LedgerMetric
-            index="D"
-            icon="document-text-outline"
-            value={data.generatedReports}
-            label="Reports"
-            detail={
-              data.generatedReports > 0
-                ? "Generated report records"
-                : "No generated reports stored"
-            }
-            accent={colors.violet}
-            last
-          />
+        <View style={styles.headerActions}>
+          <Button label="Refresh" variant="secondary" size="sm" icon="refresh" loading={refreshing} onPress={() => void handleRefresh()} />
+          <Button label="Export report" variant="forest" size="sm" icon="download-outline" onPress={() => router.push("/(app)/admin-reports")} />
         </View>
+      </Entrance>
 
-        <View
-          style={[
-            styles.lowerGrid,
-            desktop && styles.lowerGridDesktop,
-          ]}
-        >
-          <View
-            style={[
-              styles.actionsPanel,
-              shadow.soft,
-            ]}
-          >
-            <View style={styles.actionsIntroRow}>
-              <View>
-                <Text
-                  style={styles.sectionKicker}
-                >
-                  ADMINISTRATIVE FUNCTIONS
-                </Text>
+      {showTips ? (
+        <Entrance index={1} style={styles.tips}>
+          <View style={styles.tipsIcon}>
+            <Ionicons name="bulb-outline" size={18} color={colors.onPrimary} />
+          </View>
+          <Text variant="label" weight="500" tone="ink" style={styles.flex}>
+            <Text variant="label" weight="800" tone="ink">
+              Tip:{" "}
+            </Text>
+            open a guardian to see their children, devices and SOS history. Records lists SOS, locations and safety events by day; Reports
+            exports PDF or Excel.
+          </Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Dismiss tip" onPress={dismissTips} hitSlop={8} style={styles.tipsClose}>
+            <Ionicons name="close" size={18} color={colors.primary} />
+          </Pressable>
+        </Entrance>
+      ) : null}
 
-                <Text
-                  style={styles.sectionTitle}
-                >
-                  Move directly to the next task
-                </Text>
+      <View style={[styles.stats, !tablet && styles.statsStacked]}>
+        <StatCard index={2} strong icon="watch-outline" label="Active devices" value={formatNumber(data.activeDevices)} detail="Watches linked and active" onPress={() => router.push("/(app)/admin-devices")} />
+        <StatCard index={3} icon="people-outline" label="Guardians" value={formatNumber(data.guardianAccounts)} detail="Guardian accounts" onPress={() => router.push("/(app)/admin-guardians")} />
+        <StatCard index={4} icon="happy-outline" label="Children" value={formatNumber(data.registeredChildren)} detail="Registered children" onPress={() => router.push("/(app)/admin-guardians")} />
+        <StatCard
+          index={5}
+          icon="alert-circle-outline"
+          label="Active SOS"
+          value={formatNumber(data.activeSosAlerts)}
+          detail={data.activeSosAlerts > 0 ? "Needs acknowledgement" : "None right now"}
+          danger={data.activeSosAlerts > 0}
+          onPress={() => router.push("/(app)/admin-records")}
+        />
+      </View>
+
+      <View style={[styles.grid, wide && styles.gridWide]}>
+        <View style={styles.mainColumn}>
+          <Entrance index={6} style={styles.card}>
+            <View style={styles.cardHeader}>
+              <View style={styles.flex}>
+                <Text variant="heading">Records at a glance</Text>
+                <Text variant="caption">Current totals stored in SafeTrack</Text>
               </View>
-
-              <Ionicons
-                name="arrow-forward-circle-outline"
-                size={26}
-                color={colors.primary}
-              />
             </View>
+            <BarChart bars={bars} />
+          </Entrance>
 
-            <View style={styles.actionList}>
-              {ACTIONS.map((action, index) => (
-                <Pressable
-                  key={action.index}
-                  accessibilityRole="button"
-                  onPress={() =>
-                    router.push(action.route)
-                  }
-                  style={({ pressed }) => [
-                    styles.actionRow,
-                    index !==
-                      ACTIONS.length - 1 &&
-                      styles.actionDivider,
-                    pressed &&
-                      styles.actionPressed,
-                  ]}
-                >
-                  <Text
-                    style={styles.actionIndex}
+          <Entrance index={7} style={styles.card}>
+            <View style={styles.cardHeader}>
+              <View style={styles.flex}>
+                <Text variant="heading">Devices</Text>
+                <Text variant="caption">Most recently seen first</Text>
+              </View>
+              <Button label="View all" variant="soft" size="sm" iconRight="arrow-forward" onPress={() => router.push("/(app)/admin-devices")} />
+            </View>
+            {recentDevices.length === 0 ? (
+              <Text variant="label" tone="muted" style={styles.empty}>
+                No smartwatch devices are registered yet.
+              </Text>
+            ) : (
+              <View>
+                {tablet ? (
+                  <View style={styles.tableHead}>
+                    <Text variant="legend" style={styles.colChild}>Child</Text>
+                    <Text variant="legend" style={styles.colWatch}>Watch ID</Text>
+                    <Text variant="legend" style={styles.colGuardian}>Guardian</Text>
+                    <Text variant="legend" style={styles.colSeen}>Last location</Text>
+                    <Text variant="legend" style={styles.colStatus}>Status</Text>
+                  </View>
+                ) : null}
+                {recentDevices.map((device) => (
+                  <Pressable
+                    key={device.deviceId}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${device.childName}, ${device.watchId}, ${device.isActive ? "active" : "inactive"}. Open device`}
+                    onPress={() => openDevice(device.deviceId)}
+                    style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [styles.row, (pressed || hovered) && styles.rowHover]}
                   >
-                    {action.index}
+                    <View style={[styles.colChild, styles.childCell]}>
+                      <View style={[styles.avatar, !device.isActive && styles.avatarOff]}>
+                        <Text variant="caption" weight="800" tone={device.isActive ? "primary" : "ink2"}>
+                          {initials(device.childName)}
+                        </Text>
+                      </View>
+                      <Text variant="label" weight="700" numberOfLines={1} style={styles.flex}>
+                        {device.childName}
+                      </Text>
+                    </View>
+                    {tablet ? (
+                      <>
+                        <Text variant="label" tone="ink2" numberOfLines={1} style={styles.colWatch}>
+                          {device.watchId}
+                        </Text>
+                        <Text variant="label" tone="ink2" numberOfLines={1} style={styles.colGuardian}>
+                          {device.guardianName}
+                        </Text>
+                        <Text variant="label" tone="ink2" numberOfLines={1} style={styles.colSeen} tabular>
+                          {ago(device.latestLocationAt)}
+                        </Text>
+                      </>
+                    ) : null}
+                    <View style={styles.colStatus}>
+                      <View style={[styles.tag, device.isActive ? styles.tagOn : styles.tagOff]}>
+                        <Text variant="caption" weight="800" tone={device.isActive ? "primary" : "ink2"}>
+                          {device.isActive ? "Active" : "Inactive"}
+                        </Text>
+                      </View>
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </Entrance>
+        </View>
+
+        <View style={[styles.sideColumn, wide && styles.sideColumnWide]}>
+          <Entrance index={6} style={styles.featured}>
+            <Text variant="legend" tone="primary">
+              Featured device
+            </Text>
+            {featured ? (
+              <>
+                <View>
+                  <Text variant="heading" weight="800">
+                    {featured.watchId}
                   </Text>
-
-                  <View style={styles.actionIcon}>
-                    <Ionicons
-                      name={action.icon}
-                      size={20}
-                      color={colors.primaryDark}
-                    />
+                  <Text variant="caption">
+                    {featured.childName} · Guardian {featured.guardianName}
+                  </Text>
+                </View>
+                <View style={styles.watchWrap}>
+                  <WatchIllustration size={150} />
+                </View>
+                <View style={styles.chips}>
+                  <View style={styles.chip}>
+                    <Ionicons name="location-outline" size={16} color={colors.primary} />
+                    <View>
+                      <Text variant="label" weight="800" tabular>
+                        {ago(featured.latestLocationAt)}
+                      </Text>
+                      <Text variant="caption">Last location</Text>
+                    </View>
                   </View>
-
-                  <View style={styles.actionCopy}>
-                    <Text
-                      style={styles.actionTitle}
-                    >
-                      {action.title}
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.actionDescription
-                      }
-                    >
-                      {action.description}
-                    </Text>
+                  <View style={styles.chip}>
+                    <Ionicons name={featured.isActive ? "checkmark-circle-outline" : "pause-circle-outline"} size={16} color={colors.primary} />
+                    <View>
+                      <Text variant="label" weight="800">
+                        {featured.isActive ? "Active" : "Inactive"}
+                      </Text>
+                      <Text variant="caption">Status</Text>
+                    </View>
                   </View>
+                </View>
+                <Button label="Open device" variant="primary" size="sm" iconRight="arrow-forward" onPress={() => openDevice(featured.deviceId)} />
+              </>
+            ) : (
+              <>
+                <View style={styles.watchWrap}>
+                  <WatchIllustration size={150} />
+                </View>
+                <Text variant="label" tone="muted">
+                  No smartwatch devices yet. Paired watches appear here.
+                </Text>
+              </>
+            )}
+          </Entrance>
 
-                  <Ionicons
-                    name="arrow-forward"
-                    size={18}
-                    color={colors.primaryDark}
-                  />
-                </Pressable>
-              ))}
+          <Entrance index={7} style={styles.locationCard}>
+            <Text variant="legend" style={styles.locationLegend}>
+              Location records
+            </Text>
+            <Text variant="display" weight="800" style={styles.white} tabular>
+              {formatNumber(data.locationRecords)}
+            </Text>
+            <Text variant="caption" style={styles.locationSoft}>
+              Points stored from watches and phones. Each one is the latest position a device sent, not a live feed.
+            </Text>
+            <View style={styles.quickLinks}>
+              <QuickLink icon="list-outline" label="Records" onPress={() => router.push("/(app)/admin-records")} />
+              <QuickLink icon="people-outline" label="Guardians" onPress={() => router.push("/(app)/admin-guardians")} />
+              <QuickLink icon="document-text-outline" label="Reports" onPress={() => router.push("/(app)/admin-reports")} />
             </View>
-          </View>
-
-          <View
-            style={[
-              styles.boundaryPanel,
-              shadow.soft,
-            ]}
-          >
-            <Text style={styles.boundaryIndex}>
-              ADMIN / 04
-            </Text>
-
-            <Ionicons
-              name="shield-checkmark-outline"
-              size={27}
-              color={colors.primary}
-            />
-
-            <Text style={styles.boundaryTitle}>
-              Administrative boundary
-            </Text>
-
-            <Text style={styles.boundaryText}>
-              Administrator actions remain limited
-              to the functions already provided by
-              SafeTrack. Historical location,
-              geofence, SOS, and activity records
-              are presented for authorized use and
-              are not edited from this workspace.
-            </Text>
-
-            <View style={styles.boundaryRule} />
-
-            <Text style={styles.boundaryFoot}>
-              AUTHORIZED ADMINISTRATOR SESSION
-            </Text>
-          </View>
+          </Entrance>
         </View>
       </View>
     </ScrollView>
   );
 }
 
-function OrbitNode({
-  label,
-  value,
-  maxValue,
-  color,
-  style,
-}: {
-  label: string;
-  value: number;
-  maxValue: number;
-  color: string;
-  style: object;
-}) {
-  const styles = useStyles();
-
-  const ratio =
-    maxValue > 0 ? value / maxValue : 0;
-
-  const size =
-    24 + Math.min(18, ratio * 18);
-
-  return (
-    <View
-      style={[
-        styles.orbitNodeWrap,
-        style,
-      ]}
-    >
-      <View
-        style={[
-          styles.orbitNode,
-          {
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-            backgroundColor: color,
-          },
-        ]}
-      />
-
-      <View
-        style={styles.orbitNodeLabelWrap}
-      >
-        <Text style={styles.orbitNodeValue}>
-          {formatNumber(value)}
-        </Text>
-
-        <Text style={styles.orbitNodeLabel}>
-          {label}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-function LedgerLine({
-  icon,
-  label,
-  value,
-  last = false,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  value: number;
-  last?: boolean;
-}) {
-  const styles = useStyles();
-  const colors = adminPalette(useTheme().colors);
-
-  return (
-    <View
-      style={[
-        styles.ledgerLine,
-        !last &&
-          styles.ledgerLineDivider,
-      ]}
-    >
-      <Ionicons
-        name={icon}
-        size={17}
-        color={colors.primaryDark}
-      />
-
-      <Text style={styles.ledgerLineLabel}>
-        {label}
-      </Text>
-
-      <Text style={styles.ledgerLineValue}>
-        {formatNumber(value)}
-      </Text>
-    </View>
-  );
-}
-
-function LedgerMetric({
+function StatCard({
   index,
   icon,
-  value,
   label,
+  value,
   detail,
-  accent,
-  last = false,
+  strong,
+  danger,
+  onPress,
 }: {
-  index: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  value: number;
+  index: number;
+  icon: IconName;
   label: string;
+  value: string;
   detail: string;
-  accent: string;
-  last?: boolean;
+  strong?: boolean;
+  danger?: boolean;
+  onPress: () => void;
 }) {
   const styles = useStyles();
+  const { colors } = useTheme();
 
   return (
-    <View
-      style={[
-        styles.ledgerMetric,
-        !last &&
-          styles.ledgerMetricDivider,
-      ]}
-    >
-      <View style={styles.ledgerMetricTop}>
-        <Text
-          style={styles.ledgerMetricIndex}
-        >
-          {index}
-        </Text>
-
-        <Ionicons
-          name={icon}
-          size={19}
-          color={accent}
-        />
-      </View>
-
-      <Text style={styles.ledgerMetricValue}>
-        {formatNumber(value)}
-      </Text>
-
-      <Text style={styles.ledgerMetricLabel}>
-        {label}
-      </Text>
-
-      <Text
-        style={styles.ledgerMetricDetail}
-      >
-        {detail}
-      </Text>
-
-      <View
-        style={[
-          styles.ledgerMetricAccent,
-          {
-            backgroundColor: accent,
-          },
+    <Entrance index={index} style={styles.statCell}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${label}: ${value}. ${detail}`}
+        onPress={onPress}
+        style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+          styles.stat,
+          strong && styles.statStrong,
+          danger && styles.statDanger,
+          (pressed || hovered) && styles.statHover,
         ]}
-      />
+      >
+        <View style={styles.statTop}>
+          <Text variant="legend" style={strong ? styles.forestSoft : danger ? { color: colors.danger } : undefined}>
+            {label}
+          </Text>
+          <View style={[styles.statIcon, strong && styles.statIconStrong, danger && { backgroundColor: colors.dangerTint }]}>
+            <Ionicons name={icon} size={18} color={strong ? "#3DDC84" : danger ? colors.danger : colors.primary} />
+          </View>
+        </View>
+        <Text variant="display" weight="800" tabular style={strong ? styles.white : danger ? { color: colors.danger } : undefined}>
+          {value}
+        </Text>
+        <Text variant="caption" style={strong ? styles.forestSoft : undefined}>
+          {detail}
+        </Text>
+      </Pressable>
+    </Entrance>
+  );
+}
+
+/** Horizontal-axis bars of the current totals; the largest is highlighted. Bars grow in once. */
+function BarChart({ bars }: { bars: { label: string; value: number; danger?: boolean }[] }) {
+  const styles = useStyles();
+  const { colors, reduceMotion, scheme } = useTheme();
+  const grow = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
+  const max = Math.max(1, ...bars.map((bar) => bar.value));
+  const top = bars.reduce((best, bar) => (bar.value > best.value ? bar : best), bars[0]);
+
+  useEffect(() => {
+    if (reduceMotion) return;
+    Animated.timing(grow, { toValue: 1, duration: 800, delay: 250, easing: Easing.out(Easing.cubic), useNativeDriver: nativeDriver }).start();
+  }, [grow, reduceMotion]);
+
+  return (
+    <View style={styles.chart} accessibilityRole="summary" accessibilityLabel={bars.map((bar) => `${bar.label} ${bar.value}`).join(", ")}>
+      {bars.map((bar) => {
+        const share = bar.value / max;
+        const highlight = bar === top && bar.value > 0;
+        return (
+          <View key={bar.label} style={styles.barColumn}>
+            <Text variant="label" weight="800" tabular tone={bar.danger && bar.value > 0 ? "danger" : "ink"}>
+              {formatNumber(bar.value)}
+            </Text>
+            <View style={styles.barTrack}>
+              <Animated.View
+                style={[
+                  styles.bar,
+                  {
+                    height: `${Math.max(4, share * 100)}%`,
+                    backgroundColor: bar.danger && bar.value > 0 ? colors.danger : highlight ? (scheme === "dark" ? colors.ink : colors.forest) : colors.brand,
+                    transform: [{ scaleY: grow }],
+                  },
+                ]}
+              />
+            </View>
+            <Text variant="caption" numberOfLines={1} align="center">
+              {bar.label}
+            </Text>
+          </View>
+        );
+      })}
     </View>
   );
 }
 
-const useStyles = makeStyles((__c) => {
-  const colors = adminPalette(__c);
+function QuickLink({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
+  const styles = useStyles();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [styles.quickLink, (pressed || hovered) && styles.quickLinkHover]}
+    >
+      <Ionicons name={icon} size={17} color="#3DDC84" />
+      <Text variant="label" weight="700" style={styles.white}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+const useStyles = makeStyles((c, scheme) => {
+  const card = {
+    backgroundColor: c.surface,
+    borderRadius: radius.md,
+    ...(scheme === "dark" ? { borderWidth: 1, borderColor: c.rule } : shadow(scheme)),
+  };
+
   return StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-
-  scrollContent: {
-    paddingBottom: 112,
-  },
-
-  pageWashOne: {
-    position: "absolute",
-    top: -90,
-    right: -90,
-    width: 320,
-    height: 320,
-    borderRadius: 160,
-    backgroundColor: colors.overlayOne,
-  },
-
-  pageWashTwo: {
-    position: "absolute",
-    top: 410,
-    left: -120,
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    backgroundColor: colors.overlayTwo,
-  },
-
-  page: {
-    width: "100%",
-    maxWidth: adminLayout.pageMax,
-    alignSelf: "center",
-    paddingHorizontal: spacing.xl,
-    paddingTop: 30,
-  },
-
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 20,
-    flexWrap: "wrap",
-  },
-
-  headerCopy: {
-    flex: 1,
-    minWidth: 280,
-    maxWidth: 860,
-  },
-
-  headerKickerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-    maxWidth: 420,
-  },
-
-  headerKickerMark: {
-    width: 8,
-    height: 8,
-    borderRadius: 2,
-    backgroundColor: colors.primary,
-  },
-
-  headerKickerRule: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.borderStrong,
-  },
-
-  headerKicker: {
-    color: colors.primaryDark,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.45,
-  },
-
-  title: {
-    marginTop: 10,
-    color: colors.ink,
-    fontSize: 36,
-    lineHeight: 42,
-    fontWeight: "800",
-    letterSpacing: -1.15,
-  },
-
-  subtitle: {
-    marginTop: 9,
-    color: colors.text,
-    fontSize: 13.5,
-    lineHeight: 21,
-    maxWidth: 780,
-  },
-
-  refreshButton: {
-    minHeight: 44,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-    paddingHorizontal: 15,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-    ...shadow.soft,
-  },
-
-  refreshText: {
-    color: colors.primaryDark,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-
-  situationBoard: {
-    position: "relative",
-    marginTop: 28,
-    overflow: "hidden",
-    borderRadius: radius.xxl,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-
-  boardTopLine: {
-    height: 5,
-    backgroundColor: colors.primary,
-  },
-
-  boardCornerMark: {
-    position: "absolute",
-    top: 24,
-    right: 24,
-    width: 22,
-    height: 22,
-    borderTopWidth: 2,
-    borderRightWidth: 2,
-    borderColor: colors.borderStrong,
-  },
-
-  boardWash: {
-    position: "absolute",
-    top: -70,
-    right: 150,
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    backgroundColor: colors.overlayOne,
-  },
-
-  boardGrid: {
-    padding: 24,
-    gap: 20,
-  },
-
-  boardGridDesktop: {
-    flexDirection: "row",
-    alignItems: "stretch",
-  },
-
-  boardMain: {
-    flex: 1.6,
-    minWidth: 0,
-  },
-
-  boardAside: {
-    flex: 0.72,
-    minWidth: 280,
-    gap: 14,
-  },
-
-  statusRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-    flexWrap: "wrap",
-  },
-
-  statusSeal: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 11,
-    minHeight: 32,
-    borderRadius: radius.pill,
-    backgroundColor: colors.primarySoft,
-    borderWidth: 1,
-    borderColor: "#C6E2D5",
-  },
-
-  statusSealDanger: {
-    backgroundColor: colors.dangerSoft,
-    borderColor: "#F1C8CB",
-  },
-
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.primary,
-  },
-
-  statusDotDanger: {
-    backgroundColor: colors.danger,
-  },
-
-  statusText: {
-    color: colors.primaryDark,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.15,
-  },
-
-  statusTextDanger: {
-    color: colors.danger,
-  },
-
-  syncText: {
-    color: colors.muted,
-    fontSize: 10.5,
-    fontWeight: "700",
-  },
-
-  boardTitle: {
-    marginTop: 18,
-    maxWidth: 700,
-    color: colors.ink,
-    fontSize: 31,
-    lineHeight: 37,
-    fontWeight: "800",
-    letterSpacing: -0.9,
-  },
-
-  boardDescription: {
-    marginTop: 8,
-    maxWidth: 710,
-    color: colors.text,
-    fontSize: 12.5,
-    lineHeight: 19,
-  },
-
-  fieldRow: {
-    marginTop: 20,
-    flexDirection: "row",
-    alignItems: "stretch",
-    gap: 18,
-  },
-
-  fieldRowStack: {
-    flexDirection: "column",
-  },
-
-  orbitField: {
-    flex: 1,
-    minHeight: 290,
-    borderRadius: radius.xl,
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-
-  orbitRing: {
-    position: "absolute",
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-  },
-
-  orbitRingOuter: {
-    width: 240,
-    height: 240,
-  },
-
-  orbitRingMiddle: {
-    width: 168,
-    height: 168,
-  },
-
-  orbitRingInner: {
-    width: 98,
-    height: 98,
-  },
-
-  orbitAxisHorizontal: {
-    position: "absolute",
-    left: 28,
-    right: 28,
-    height: 1,
-    backgroundColor: colors.border,
-  },
-
-  orbitAxisVertical: {
-    position: "absolute",
-    top: 28,
-    bottom: 28,
-    width: 1,
-    backgroundColor: colors.border,
-  },
-
-  orbitCore: {
-    width: 82,
-    height: 82,
-    borderRadius: 41,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: __c.forest,
-    ...shadow.soft,
-  },
-
-  orbitCoreValue: {
-    color: "#FFFFFF",
-    fontSize: 22,
-    fontWeight: "800",
-    letterSpacing: -0.55,
-  },
-
-  orbitCoreLabel: {
-    marginTop: 2,
-    color: "#DCE8E5",
-    fontSize: 8.5,
-    fontWeight: "900",
-    letterSpacing: 1.1,
-  },
-
-  orbitNodeWrap: {
-    position: "absolute",
-    alignItems: "center",
-    gap: 6,
-  },
-
-  nodeTop: {
-    top: 22,
-  },
-
-  nodeRight: {
-    right: 18,
-  },
-
-  nodeBottom: {
-    bottom: 20,
-  },
-
-  nodeLeft: {
-    left: 18,
-  },
-
-  orbitNode: {
-    borderWidth: 4,
-    borderColor: colors.surfaceRaised,
-    ...shadow.soft,
-  },
-
-  orbitNodeLabelWrap: {
-    alignItems: "center",
-  },
-
-  orbitNodeValue: {
-    color: colors.ink,
-    fontSize: 12,
-    fontWeight: "900",
-  },
-
-  orbitNodeLabel: {
-    color: colors.muted,
-    fontSize: 9.5,
-    fontWeight: "700",
-  },
-
-  trackingFeature: {
-    flex: 0.86,
-    minWidth: 230,
-    minHeight: 290,
-    borderRadius: radius.xl,
-    backgroundColor: colors.cream,
-    borderWidth: 1,
-    borderColor: "#E9E1D0",
-    padding: 18,
-  },
-
-  featureEyebrow: {
-    color: colors.amber,
-    fontSize: 9.5,
-    fontWeight: "900",
-    letterSpacing: 1.25,
-  },
-
-  featureValue: {
-    marginTop: 14,
-    color: colors.ink,
-    fontSize: 43,
-    lineHeight: 46,
-    fontWeight: "800",
-    letterSpacing: -1.4,
-  },
-
-  featureLabel: {
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: "700",
-    marginTop: 4,
-  },
-
-  routeSketch: {
-    marginTop: 26,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-
-  routeSegment: {
-    height: 2,
-    borderRadius: 2,
-    backgroundColor: colors.amber,
-    opacity: 0.65,
-  },
-
-  routePoint: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: colors.primary,
-    borderWidth: 3,
-    borderColor: colors.cream,
-  },
-
-  routePointSecondary: {
-    backgroundColor: colors.cyan,
-  },
-
-  trackingMetaRow: {
-    marginTop: 28,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  trackingMetaItem: {
-    flex: 1,
-  },
-
-  trackingMetaRule: {
-    width: 1,
-    height: 42,
-    backgroundColor: "#E6DCC7",
-    marginHorizontal: 12,
-  },
-
-  trackingMetaValue: {
-    color: colors.ink,
-    fontSize: 18,
-    fontWeight: "800",
-  },
-
-  trackingMetaLabel: {
-    marginTop: 3,
-    color: colors.muted,
-    fontSize: 8.5,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
-
-  sosModule: {
-    borderRadius: radius.xl,
-    padding: 18,
-    backgroundColor: "#FFF7F7",
-    borderWidth: 1,
-    borderColor: "#F0D7D8",
-  },
-
-  sosModuleActive: {
-    backgroundColor: colors.dangerSoft,
-    borderColor: "#EDBEC1",
-  },
-
-  sosHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  sosEyebrow: {
-    color: colors.danger,
-    fontSize: 9.5,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-  },
-
-  sosSignalIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(214,95,102,0.10)",
-  },
-
-  sosSignalCore: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.danger,
-  },
-
-  sosValue: {
-    marginTop: 12,
-    color: colors.danger,
-    fontSize: 44,
-    lineHeight: 47,
-    fontWeight: "800",
-    letterSpacing: -1.3,
-  },
-
-  sosLabel: {
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: "800",
-    marginTop: 2,
-  },
-
-  sosDescription: {
-    color: colors.text,
-    fontSize: 11.5,
-    lineHeight: 18,
-    marginTop: 8,
-  },
-
-  asideLedger: {
-    borderRadius: radius.xl,
-    overflow: "hidden",
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-
-  ledgerLine: {
-    minHeight: 58,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 14,
-  },
-
-  ledgerLineDivider: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-
-  ledgerLineLabel: {
-    flex: 1,
-    color: colors.text,
-    fontSize: 11.5,
-    fontWeight: "700",
-  },
-
-  ledgerLineValue: {
-    color: colors.ink,
-    fontSize: 16,
-    fontWeight: "900",
-  },
-
-  sectionHeadingRow: {
-    marginTop: 30,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    gap: 14,
-    flexWrap: "wrap",
-  },
-
-  sectionKicker: {
-    color: colors.primaryDark,
-    fontSize: 9.5,
-    fontWeight: "900",
-    letterSpacing: 1.35,
-  },
-
-  sectionTitle: {
-    marginTop: 5,
-    color: colors.ink,
-    fontSize: 22,
-    lineHeight: 27,
-    fontWeight: "800",
-    letterSpacing: -0.45,
-  },
-
-  sectionMeta: {
-    color: colors.muted,
-    fontSize: 10.5,
-    fontWeight: "700",
-  },
-
-  ledgerBand: {
-    marginTop: 14,
-    borderRadius: radius.xl,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: "hidden",
-    ...shadow.soft,
-  },
-
-  ledgerBandWide: {
-    flexDirection: "row",
-  },
-
-  ledgerMetric: {
-    flex: 1,
-    minWidth: 0,
-    padding: 18,
-    position: "relative",
-  },
-
-  ledgerMetricDivider: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-
-  ledgerMetricTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  ledgerMetricIndex: {
-    color: colors.subtle,
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 1.1,
-  },
-
-  ledgerMetricValue: {
-    marginTop: 18,
-    color: colors.ink,
-    fontSize: 30,
-    lineHeight: 34,
-    fontWeight: "800",
-    letterSpacing: -0.85,
-  },
-
-  ledgerMetricLabel: {
-    color: colors.ink,
-    fontSize: 12.5,
-    fontWeight: "800",
-    marginTop: 4,
-  },
-
-  ledgerMetricDetail: {
-    color: colors.muted,
-    fontSize: 10.5,
-    lineHeight: 16,
-    marginTop: 4,
-    minHeight: 32,
-  },
-
-  ledgerMetricAccent: {
-    position: "absolute",
-    left: 18,
-    right: 18,
-    bottom: 0,
-    height: 3,
-    borderRadius: 2,
-  },
-
-  lowerGrid: {
-    marginTop: 18,
-    gap: 18,
-  },
-
-  lowerGridDesktop: {
-    flexDirection: "row",
-    alignItems: "stretch",
-  },
-
-  actionsPanel: {
-    flex: 1.45,
-    minWidth: 0,
-    borderRadius: radius.xl,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 20,
-  },
-
-  actionsIntroRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 14,
-  },
-
-  actionList: {
-    marginTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-
-  actionRow: {
-    minHeight: 82,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 13,
-  },
-
-  actionDivider: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-
-  actionPressed: {
-    opacity: 0.72,
-    transform: [
-      {
-        translateX: 3,
-      },
-    ],
-  },
-
-  actionIndex: {
-    width: 26,
-    color: colors.subtle,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 0.8,
-  },
-
-  actionIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.primarySoft,
-  },
-
-  actionCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-
-  actionTitle: {
-    color: colors.ink,
-    fontSize: 13.5,
-    fontWeight: "800",
-  },
-
-  actionDescription: {
-    color: colors.muted,
-    fontSize: 11.5,
-    lineHeight: 17,
-    marginTop: 4,
-  },
-
-  boundaryPanel: {
-    flex: 0.78,
-    minWidth: 0,
-    borderRadius: radius.xl,
-    backgroundColor: colors.mint,
-    borderWidth: 1,
-    borderColor: "#CFE4DA",
-    padding: 20,
-  },
-
-  boundaryIndex: {
-    alignSelf: "flex-start",
-    color: colors.primaryDark,
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-    paddingBottom: 8,
-    borderBottomWidth: 2,
-    borderBottomColor: colors.primary,
-  },
-
-  boundaryTitle: {
-    marginTop: 18,
-    color: colors.ink,
-    fontSize: 19,
-    lineHeight: 24,
-    fontWeight: "800",
-    letterSpacing: -0.3,
-  },
-
-  boundaryText: {
-    marginTop: 9,
-    color: colors.text,
-    fontSize: 11.5,
-    lineHeight: 18,
-  },
-
-  boundaryRule: {
-    height: 1,
-    backgroundColor: "#C2DCCF",
-    marginTop: 20,
-  },
-
-  boundaryFoot: {
-    marginTop: 10,
-    color: colors.primaryDark,
-    fontSize: 8.5,
-    fontWeight: "900",
-    letterSpacing: 1.1,
-  },
-
-  centerState: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-    backgroundColor: colors.background,
-  },
-
-  stateCard: {
-    width: "100%",
-    maxWidth: 540,
-    alignItems: "center",
-    borderRadius: radius.xl,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 28,
-  },
-
-  stateGlyph: {
-    width: 56,
-    height: 56,
-    borderRadius: 19,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.primarySoft,
-  },
-
-  stateGlyphDanger: {
-    backgroundColor: colors.dangerSoft,
-  },
-
-  stateEyebrow: {
-    marginTop: 16,
-    color: colors.primaryDark,
-    fontSize: 9.5,
-    fontWeight: "900",
-    letterSpacing: 1.25,
-  },
-
-  stateTitle: {
-    marginTop: 7,
-    color: colors.ink,
-    fontSize: 20,
-    lineHeight: 25,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-
-  stateText: {
-    marginTop: 7,
-    color: colors.muted,
-    fontSize: 12,
-    lineHeight: 18,
-    textAlign: "center",
-    maxWidth: 420,
-  },
-
-  retryButton: {
-    marginTop: 16,
-    minHeight: 44,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    backgroundColor: colors.primary,
-    borderRadius: radius.pill,
-    paddingHorizontal: 17,
-  },
-
-  retryButtonText: {
-    color: colors.white,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-
-  pressed: {
-    opacity: 0.76,
-    transform: [
-      {
-        scale: 0.99,
-      },
-    ],
-  },
-});
+    root: { flex: 1, backgroundColor: c.paper },
+    content: { width: "100%", maxWidth: 1320, alignSelf: "center", padding: space.lg, paddingTop: space.xl, paddingBottom: 120, gap: space.lg },
+    flex: { flex: 1, minWidth: 0 },
+    white: { color: "#FFFFFF" },
+    forestSoft: { color: "#9FC3AE" },
+    center: { flex: 1, alignItems: "center", justifyContent: "center", gap: space.md, padding: space.xl, backgroundColor: c.paper },
+    errorCard: { width: "100%", maxWidth: 460, gap: space.md },
+    header: { flexDirection: "row", alignItems: "flex-end", flexWrap: "wrap", gap: space.lg },
+    headerCopy: { flex: 1, minWidth: 260 },
+    headerActions: { flexDirection: "row", gap: space.sm, flexWrap: "wrap" },
+    tips: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.sm, backgroundColor: c.primaryTint },
+    tipsIcon: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: c.primary },
+    tipsClose: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+    stats: { flexDirection: "row", gap: space.md },
+    statsStacked: { flexWrap: "wrap" },
+    statCell: { flex: 1, minWidth: 150 },
+    stat: { ...card, padding: space.lg, gap: space.xs, minHeight: 132 },
+    statStrong: { backgroundColor: scheme === "dark" ? c.forest : "#0D2A1E", borderWidth: 0 },
+    statDanger: { borderWidth: 1.5, borderColor: c.danger },
+    statHover: { opacity: 0.92 },
+    statTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: space.xs },
+    statIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: c.primaryTint },
+    statIconStrong: { backgroundColor: "#163D2B" },
+    grid: { gap: space.lg },
+    gridWide: { flexDirection: "row", alignItems: "flex-start" },
+    mainColumn: { flex: 1, minWidth: 0, gap: space.lg },
+    sideColumn: { gap: space.lg },
+    sideColumnWide: { width: 340 },
+    card: { ...card, padding: space.lg, gap: space.md },
+    cardHeader: { flexDirection: "row", alignItems: "center", gap: space.md },
+    empty: { paddingVertical: space.lg },
+    chart: { flexDirection: "row", alignItems: "flex-end", gap: space.md, height: 230, paddingTop: space.sm },
+    barColumn: { flex: 1, minWidth: 0, alignItems: "center", gap: 6, height: "100%" },
+    barTrack: { flex: 1, width: "100%", maxWidth: 64, justifyContent: "flex-end", borderRadius: 10, backgroundColor: c.sunken, overflow: "hidden" },
+    bar: { width: "100%", borderRadius: 10, transformOrigin: "bottom" },
+    tableHead: { flexDirection: "row", alignItems: "center", paddingHorizontal: space.sm, paddingVertical: space.sm, borderBottomWidth: 1, borderBottomColor: c.rule },
+    row: { flexDirection: "row", alignItems: "center", minHeight: 56, paddingHorizontal: space.sm, borderBottomWidth: 1, borderBottomColor: c.rule, borderRadius: 10 },
+    rowHover: { backgroundColor: c.sunken },
+    colChild: { flex: 1.6, minWidth: 0 },
+    colWatch: { flex: 1.3, minWidth: 0 },
+    colGuardian: { flex: 1.4, minWidth: 0 },
+    colSeen: { flex: 1.1, minWidth: 0 },
+    colStatus: { width: 96, alignItems: "flex-start" },
+    childCell: { flexDirection: "row", alignItems: "center", gap: space.sm },
+    avatar: { width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: c.brand, backgroundColor: c.primaryTint, alignItems: "center", justifyContent: "center" },
+    avatarOff: { borderColor: c.offline, backgroundColor: c.offlineTint },
+    tag: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill },
+    tagOn: { backgroundColor: c.primaryTint },
+    tagOff: { backgroundColor: c.offlineTint },
+    featured: { borderRadius: radius.md, padding: space.lg, gap: space.md, backgroundColor: scheme === "dark" ? c.primaryTint : "#E1F2E7" },
+    watchWrap: { alignItems: "center", paddingVertical: space.sm },
+    chips: { flexDirection: "row", gap: space.sm },
+    chip: { flex: 1, flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, borderRadius: radius.sm, backgroundColor: c.surface },
+    locationCard: { borderRadius: radius.md, padding: space.lg, gap: space.sm, backgroundColor: scheme === "dark" ? c.forest : "#0D2A1E" },
+    locationLegend: { color: "#9FC3AE" },
+    locationSoft: { color: "#BFD8C9" },
+    quickLinks: { gap: 6, marginTop: space.sm },
+    quickLink: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 42, paddingHorizontal: space.md, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.06)" },
+    quickLinkHover: { backgroundColor: "rgba(255,255,255,0.12)" },
+  });
 });

@@ -7,6 +7,7 @@ import { useAuthStore } from "../../store/authStore";
 import { useGuardianPushRegistration } from "../../hooks/useGuardianPushRegistration";
 import { useGuardianSosRealtime } from "../../hooks/useGuardianSosRealtime";
 import { adminLayout } from "../../constants/adminDesign";
+import { SideNav } from "../../components/navigation/SideNav";
 import { fontStyle, useFontsReady } from "../../theme/fonts";
 import { useTheme } from "../../theme/ThemeProvider";
 import type { Palette } from "../../theme/tokens";
@@ -45,12 +46,25 @@ export default function AppLayout() {
   const icon = (outline: IconName, filled: IconName) => renderNavIcon(outline, filled, mode, colors, forestSidebar);
 
   const guardianId = useAuthStore((state) => state.guardian?.id);
+  const guardianName = useAuthStore((state) => state.guardian?.fullName);
+  const guardianEmail = useAuthStore((state) => state.guardian?.email);
+  const administrator = useAuthStore((state) => state.administrator);
+  const person = isAdmin
+    ? { name: administrator?.fullName || "Administrator", detail: administrator?.email || "SafeTrack admin" }
+    : guardianName
+      ? { name: guardianName, detail: guardianEmail ?? "Guardian" }
+      : null;
 
   useGuardianPushRegistration(isGuardian);
   useGuardianSosRealtime(isGuardian ? guardianId : null);
 
   return (
     <Tabs
+      tabBar={
+        wide
+          ? (props) => <SideNav {...props} forest={forestSidebar} person={person} roleLabel={isAdmin ? "Administrator" : "Guardian"} />
+          : undefined
+      }
       screenOptions={{
         headerShown: false,
         sceneStyle: { backgroundColor: colors.paper },
