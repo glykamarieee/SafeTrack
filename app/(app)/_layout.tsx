@@ -1,6 +1,7 @@
 import type { ColorValue } from "react-native";
 import { Platform, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Tabs } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAuthStore } from "../../store/authStore";
@@ -36,6 +37,7 @@ export default function AppLayout() {
   const role = useAuthStore((state) => state.role);
   const { width } = useWindowDimensions();
   const { colors, scheme } = useTheme();
+  const insets = useSafeAreaInsets();
   const fontsReady = useFontsReady();
   const isAdmin = role === "admin";
   const isGuardian = role === "guardian";
@@ -85,7 +87,11 @@ export default function AppLayout() {
                 borderRightColor: forestSidebar ? "transparent" : colors.rule,
               },
             ]
-          : [styles.bottomBar, { backgroundColor: colors.surface, borderTopColor: colors.rule }],
+          : [
+              styles.bottomBar,
+              // Clear Android's gesture/navigation bar on edge-to-edge screens.
+              { height: 66 + insets.bottom, paddingBottom: Math.max(insets.bottom, 10), backgroundColor: colors.surface, borderTopColor: colors.rule },
+            ],
       }}
     >
       <Tabs.Screen

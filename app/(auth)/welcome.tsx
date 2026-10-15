@@ -1,5 +1,6 @@
 import { Animated, Image, StyleSheet, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -26,9 +27,13 @@ export default function WelcomeScreen() {
 
       <VideoView player={player} style={StyleSheet.absoluteFill} nativeControls={false} contentFit="cover" />
 
-      {/* A forest tint, deeper at the bottom where the text sits. */}
-      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.tint]} />
-      <View pointerEvents="none" style={styles.bottomShade} />
+      {/* A forest tint that deepens smoothly toward the bottom, where the text sits. */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={["rgba(13,42,30,0.35)", "rgba(13,42,30,0.25)", "rgba(13,42,30,0.75)", "rgba(13,42,30,0.95)"]}
+        locations={[0, 0.35, 0.7, 1]}
+        style={StyleSheet.absoluteFill}
+      />
 
       <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
         <Animated.View style={[styles.logoArea, logo]}>
@@ -57,15 +62,6 @@ export default function WelcomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0D2A1E" },
-  tint: { backgroundColor: "rgba(13, 42, 30, 0.42)" },
-  bottomShade: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: "55%",
-    backgroundColor: "rgba(13, 42, 30, 0.55)",
-  },
   safeArea: { flex: 1, justifyContent: "space-between", paddingHorizontal: space.xl, paddingBottom: space.xl },
   logoArea: { alignItems: "center", marginTop: space.lg },
   logo: { width: 220, height: 132 },

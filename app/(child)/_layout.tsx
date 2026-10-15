@@ -1,3 +1,4 @@
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useEffect } from "react";
 import {
   ActivityIndicator,
@@ -51,6 +52,7 @@ function createTabIcon(
 
 export default function ChildLayout() {
   const styles = useStyles();
+  const insets = useSafeAreaInsets();
   const colors = childPalette(useTheme().colors);
 
   const bootstrap = useChildMobileStore((state) => state.bootstrap);
@@ -84,9 +86,10 @@ export default function ChildLayout() {
         tabBarInactiveTintColor: colors.muted,
         tabBarHideOnKeyboard: true,
         tabBarStyle: {
-          height: 78,
+          // Clear Android's gesture/navigation bar on edge-to-edge screens.
+          height: 68 + insets.bottom,
           paddingTop: 8,
-          paddingBottom: 10,
+          paddingBottom: Math.max(insets.bottom, 10),
           borderTopWidth: 1,
           borderTopColor: colors.line,
           backgroundColor: colors.surface,

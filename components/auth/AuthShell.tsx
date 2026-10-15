@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter, type Href } from "expo-router";
 import type { ReactNode } from "react";
 import { Animated, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { MapPattern } from "../ui/MapPattern";
 import { Text } from "../ui/Text";
@@ -34,6 +34,7 @@ type Props = {
  */
 export function AuthShell({ title, subtitle, eyebrow, back, backHref = "/(auth)/login", step, compact, children, footer }: Props) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { colors, scheme } = useTheme();
   const styles = useStyles();
   const drift = useDrift();
@@ -90,7 +91,7 @@ export function AuthShell({ title, subtitle, eyebrow, back, backHref = "/(auth)/
             </Animated.View>
           </SafeAreaView>
 
-          <Animated.View style={[styles.sheet, sheet, { borderColor: colors.rule }]}>
+          <Animated.View style={[styles.sheet, sheet, { borderColor: colors.rule, paddingBottom: 48 + insets.bottom }]}>
             <View style={styles.titleBlock}>
               {eyebrow ? (
                 <Text variant="legend" tone="primary">

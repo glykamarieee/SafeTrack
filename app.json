@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "backgroundColor": "#F4F7F3",
+    "backgroundColor": "#F4F7F5",
     "ios": {
       "supportsTablet": true,
       "config": {
@@ -16,7 +16,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -33,9 +33,13 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#EAF2E7",
+          "backgroundColor": "#15803D",
           "image": "./assets/splash-icon.png",
-          "imageWidth": 160
+          "imageWidth": 240,
+          "dark": {
+            "backgroundColor": "#0D2A1E",
+            "image": "./assets/splash-icon.png"
+          }
         }
       ],
       [

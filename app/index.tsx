@@ -10,6 +10,7 @@ import { Redirect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 
 import { useAuthStore } from "../store/authStore";
+import { StartSplash } from "../components/StartSplash";
 
 
 
@@ -173,54 +174,7 @@ export default function SplashScreen() {
     !minimumSplashFinished
   ){
 
-    return (
-
-      <View style={styles.container}>
-
-        <StatusBar style="light" />
-
-
-        <Animated.View
-
-          style={[
-            styles.logoWrap,
-
-            {
-              opacity:logoOpacity,
-
-              transform:[
-                {
-                  scale:logoScale
-                }
-              ],
-
-            },
-
-          ]}
-
-        >
-
-          <Image
-
-            source={
-              require("../assets/images/logo.png")
-            }
-
-            resizeMode="contain"
-
-            style={styles.logo}
-
-            accessibilityLabel="SafeTrack logo"
-
-          />
-
-
-        </Animated.View>
-
-
-      </View>
-
-    );
+    return <StartSplash />;
 
   }
 
