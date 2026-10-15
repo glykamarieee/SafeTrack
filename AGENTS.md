@@ -129,6 +129,15 @@ Only these **edge functions** remain, each for a reason SQL cannot cover:
   the rest is counted and named in the report. The .NET GemBox `report-service/`
   is no longer called (it needed public hosting and a paid licence);
   `REPORT_SERVICE_URL`/`REPORT_SERVICE_KEY` are unused.
+- `scheduled-safety-scan` notices: "watch disconnected" (no contact for
+  `WATCH_DISCONNECT_SECONDS`, default 300) and "prolonged inactivity" (online
+  but no location for `PROLONGED_INACTIVITY_SECONDS`, default 1800).
+  - Each is created **once per episode**, counted from the watch's last
+    contact or location.
+  - While the episode continues, a reminder at most every
+    `RULE_ALERT_REMINDER_SECONDS` (default 12 h).
+  - Before 2026-10-15 an hourly cooldown repeated "watch disconnected" every
+    hour while a watch was off, which would have pushed the guardian all night.
 - `sos-realert`, `scheduled-safety-scan`, `anomaly-detection`: server-only jobs
   authenticated with `x-cron-secret` (`verify_jwt = false`). The scan runs the
   advisory AI review of each watch's newest location (tracked by
@@ -554,6 +563,18 @@ and safety events for a date range, 50 per page, through
   with `gradlew.bat assembleDebug testDebugUnitTest` (3 unit tests, passing on
   2026-10-15). Its RPC contract is under "Devices and pairing"; don't rename `p_*`
   parameters.
+  - **Verified 2026-10-15 against the live database:** every parameter the watch
+    sends to `pair_watch`, `record_watch_heartbeat`, `record_watch_location` and
+    `trigger_watch_sos` is accepted (probed with an unknown Watch ID, which
+    returns `watch_not_registered` / `device_unlinked`; a wrong parameter name
+    returns `PGRST202`).
+  - **Real-use evidence:** a Galaxy Watch (SM-L325F) has reported 600+
+    locations plus battery and network, and SOS by both `shake` and
+    `tap_and_hold`.
+  - **Restart warning:** without "Allow all the time" location, monitoring
+    can't restart after a reboot. The dashboard shows a warning card that
+    reopens the permission screen, which falls back to app settings once
+    Android stops asking.
 - **Migrations waiting to be applied** (run in order in the SQL Editor, then
   confirm with the user):
   `20261014_child_activity_days.sql`, `20261015_accounts_notifications_fixes.sql`.

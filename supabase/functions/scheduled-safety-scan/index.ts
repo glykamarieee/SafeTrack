@@ -8,13 +8,18 @@ function seconds(value: string | undefined, fallback: number) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-async function hasRecentEvent(
+/**
+ * Whether this kind of notice was already created since `sinceMs`. Used so a
+ * watch that stays offline is reported once per episode (since it was last
+ * heard from), plus a reminder every REMINDER interval, not every hour.
+ */
+async function hasEventSince(
   supabase: any,
   childId: string,
   eventType: string,
-  cooldownSeconds: number,
+  sinceMs: number,
 ) {
-  const threshold = new Date(Date.now() - cooldownSeconds * 1000).toISOString();
+  const threshold = new Date(sinceMs).toISOString();
   const { data } = await supabase
     .from("geofence_events")
     .select("id")
@@ -33,7 +38,9 @@ async function createSafetyEvent(args: {
   eventType: string;
   title: string;
   details: string;
-  cooldownSeconds: number;
+  /** Episode start (e.g. when the watch was last heard from), in ms. */
+  episodeStartMs: number;
+  reminderSeconds: number;
 }) {
   const {
     supabase,
@@ -41,10 +48,14 @@ async function createSafetyEvent(args: {
     eventType,
     title,
     details,
-    cooldownSeconds,
+    episodeStartMs,
+    reminderSeconds,
   } = args;
 
-  if (await hasRecentEvent(supabase, childId, eventType, cooldownSeconds)) {
+  // One notice per episode; while it continues, a reminder at most every
+  // reminderSeconds (the newer of the two thresholds wins).
+  const since = Math.max(episodeStartMs, Date.now() - reminderSeconds * 1000);
+  if (await hasEventSince(supabase, childId, eventType, since)) {
     return false;
   }
 
@@ -87,9 +98,11 @@ Deno.serve(async (request: Request) => {
       Deno.env.get("PROLONGED_INACTIVITY_SECONDS"),
       1800,
     );
-    const cooldownSeconds = seconds(
-      Deno.env.get("RULE_ALERT_COOLDOWN_SECONDS"),
-      3600,
+    // While a watch stays offline (or without location), remind the guardian
+    // at most this often after the first notice. Default 12 hours.
+    const reminderSeconds = seconds(
+      Deno.env.get("RULE_ALERT_REMINDER_SECONDS"),
+      12 * 3600,
     );
 
     const { data: devices, error } = await supabase
@@ -172,7 +185,8 @@ Deno.serve(async (request: Request) => {
             `${child.full_name}'s registered smartwatch has not contacted SafeTrack ` +
             `within the configured ${Math.round(disconnectSeconds / 60)}-minute period. ` +
             "Check the watch power, network connection, and app status.",
-          cooldownSeconds,
+          episodeStartMs: lastSeenMs,
+          reminderSeconds,
         });
         if (created) disconnected += 1;
         continue;
@@ -193,7 +207,8 @@ Deno.serve(async (request: Request) => {
             `${child.full_name}'s smartwatch is online but SafeTrack has not received a ` +
             `recent usable location for the configured ${Math.round(inactivitySeconds / 60)}-minute period. ` +
             "This may reflect limited movement, GPS availability, or another device condition.",
-          cooldownSeconds,
+          episodeStartMs: lastLocationMs,
+          reminderSeconds,
         });
         if (created) inactivity += 1;
       }
