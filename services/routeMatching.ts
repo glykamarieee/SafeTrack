@@ -1,7 +1,8 @@
 /**
- * Snaps a day's recorded route to real roads with the Mapbox Map Matching
- * API, so the History line follows the streets instead of straight lines
- * between records. The records themselves are never changed: this only
+ * Draws a day's recorded route along real roads, so the History line
+ * follows the streets instead of straight lines between records: Mapbox
+ * Map Matching where records are close together, and Mapbox Directions
+ * (the road route through each record in order) where they are far apart. The records themselves are never changed: this only
  * changes how the line between them is drawn.
  *
  * - Uses the public map token (EXPO_PUBLIC_MAPBOX_TOKEN). Without it, or for
@@ -19,7 +20,11 @@ export type LatLng = { latitude: number; longitude: number };
 
 const TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? "";
 const MAX_COORDS = 100;
-const GAP_MS = 20 * 60 * 1000;
+const MAX_WAYPOINTS = 25;
+// Records further apart than this cannot be map-matched (the watch saves
+// about every 3 minutes); those stretches are routed along roads instead.
+const MATCH_MAX_STEP_M = 400;
+const GAP_MS = 6 * 60 * 60 * 1000;
 const MIN_MOVE_M = 20;
 const DRIVING_SPEED_MPS = 25 / 3.6;
 
@@ -101,6 +106,64 @@ async function matchChunk(chunk: Point[]): Promise<LatLng[] | null> {
   }
 }
 
+/** Road route through the records in order (Mapbox Directions, driving). */
+async function routeChunk(chunk: Point[]): Promise<LatLng[] | null> {
+  if (chunk.length < 2) return null;
+  const coordinates = chunk.map((point) => `${point.longitude.toFixed(6)},${point.latitude.toFixed(6)}`).join(";");
+  // Allow each record to snap to the nearest road within its GPS accuracy.
+  const radiuses = chunk.map((point) => Math.round(Math.min(80, Math.max(25, (point.accuracy ?? 30) * 2)))).join(";");
+  const url =
+    `https://api.mapbox.com/directions/v5/mapbox/driving/${coordinates}` +
+    `?geometries=geojson&overview=full&continue_straight=true&radiuses=${radiuses}&access_token=${TOKEN}`;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const body = (await response.json()) as { code?: string; routes?: { geometry?: { coordinates?: [number, number][] } }[] };
+    const coords = body.code === "Ok" ? body.routes?.[0]?.geometry?.coordinates : undefined;
+    if (!coords || coords.length < 2) return null;
+    return coords.map(([longitude, latitude]) => ({ latitude, longitude }));
+  } catch {
+    return null;
+  }
+}
+
+/** Map matching for dense stretches, road routing for sparse ones. */
+async function snapChunk(chunk: Point[]): Promise<LatLng[] | null> {
+  let dense = true;
+  for (let index = 1; index < chunk.length; index += 1) {
+    if (meters(chunk[index - 1], chunk[index]) > MATCH_MAX_STEP_M) {
+      dense = false;
+      break;
+    }
+  }
+  if (dense) {
+    const matched = await matchChunk(chunk);
+    if (matched) return matched;
+  }
+  // Directions accepts 25 waypoints per request; chunks overlap by one.
+  const line: LatLng[] = [];
+  for (let start = 0; start < chunk.length - 1; start += MAX_WAYPOINTS - 1) {
+    const part = chunk.slice(start, start + MAX_WAYPOINTS);
+    const routed = await routeChunk(part);
+    if (routed) {
+      line.push(...routed);
+      continue;
+    }
+    // One record Mapbox can't place on a road (e.g. a GPS fix over water)
+    // fails the whole request: route record by record instead, so only the
+    // hop touching that record stays straight.
+    for (let index = 1; index < part.length; index += 1) {
+      const pair = await routeChunk([part[index - 1], part[index]]);
+      if (pair) line.push(...pair);
+      else line.push(
+        { latitude: part[index - 1].latitude, longitude: part[index - 1].longitude },
+        { latitude: part[index].latitude, longitude: part[index].longitude },
+      );
+    }
+  }
+  return line.length >= 2 ? line : null;
+}
+
 async function matchAll(points: Point[]): Promise<LatLng[] | null> {
   const line: LatLng[] = [];
   let snappedAny = false;
@@ -112,7 +175,7 @@ async function matchAll(points: Point[]): Promise<LatLng[] | null> {
         if (chunk[0]) line.push({ latitude: chunk[0].latitude, longitude: chunk[0].longitude });
         continue;
       }
-      const snapped = await matchChunk(chunk);
+      const snapped = await snapChunk(chunk);
       if (snapped) {
         snappedAny = true;
         line.push(...snapped);
