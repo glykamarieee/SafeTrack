@@ -1,3 +1,4 @@
+import hashlib
 import hmac
 import math
 import os
@@ -35,6 +36,17 @@ def require_service_key(
         expected.encode()
     ):
         raise HTTPException(status_code=401, detail="Unauthorized.")
+
+
+def key_fingerprint(value: str) -> str:
+    """Length plus the first 8 hex digits of SHA-256: enough to compare two
+    copies of the key, useless for recovering it."""
+    value = value.strip()
+    return f"length {len(value)}, fingerprint {hashlib.sha256(value.encode()).hexdigest()[:8]}" if value else "not set"
+
+
+# Printed once at startup, so the host's logs show which key is in use.
+print(f"[safetrack-ai] AI_SERVICE_KEY: {key_fingerprint(os.getenv('AI_SERVICE_KEY', ''))}", flush=True)
 
 
 app = FastAPI(
