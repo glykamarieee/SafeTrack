@@ -276,13 +276,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         ...clearProfileState(),
       });
     } catch (error) {
-      console.error("[authStore.bootstrap]", error);
+      // The saved session can't be used (deleted or banned account, expired
+      // session, server unreachable). Start signed out on the welcome screen;
+      // never show this as an error before the user has done anything.
+      console.warn("[authStore.bootstrap] starting signed out:", getErrorMessage(error, "unknown error"));
+
+      // A network problem keeps the saved session so the next launch with a
+      // connection restores it; an account or session problem clears it.
+      const message = getErrorMessage(error, "").toLowerCase();
+      const networkProblem = /fetch failed|network|connection|timeout|socket/.test(message);
+      if (!networkProblem) {
+        try {
+          await signOutRequest();
+        } catch {
+          // signOut already clears the local session when the server call fails.
+        }
+      }
 
       set({
-        error: getErrorMessage(
-          error,
-          "Could not restore your SafeTrack session."
-        ),
+        session: null,
+        ...clearProfileState(),
+        error: null,
       });
     } finally {
       set({

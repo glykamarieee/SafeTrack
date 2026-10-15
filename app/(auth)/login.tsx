@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -42,6 +42,12 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+
+  // Errors from earlier attempts or from restoring an old session at start-up
+  // must not greet the user before they have tried to sign in.
+  useEffect(() => {
+    clearError();
+  }, [clearError]);
 
   const signIn = async () => {
     clearError();
