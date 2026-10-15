@@ -10,6 +10,7 @@ import { Notice } from "../../components/ui/Notice";
 import { Text } from "../../components/ui/Text";
 import { useAuthStore } from "../../store/authStore";
 import { resendVerificationEmail } from "../../services/supabaseAuthService";
+import { hasSeenOnboarding } from "../../services/onboardingService";
 import { makeStyles, useTheme } from "../../theme/ThemeProvider";
 import { space } from "../../theme/tokens";
 
@@ -71,12 +72,15 @@ export default function LoginScreen() {
       }
 
       if (role === "guardian") {
-        router.replace(
-          linkedChildren.length
-            ? "/(app)/home"
-            : "/(auth)/child-registration"
-        );
+        const target = linkedChildren.length ? "/(app)/home" : "/(auth)/child-registration";
 
+        // The first sign-in on this device opens the tour first.
+        if (!(await hasSeenOnboarding("guardian"))) {
+          router.replace({ pathname: "/onboarding", params: { audience: "guardian", next: target } });
+          return;
+        }
+
+        router.replace(target);
         return;
       }
 

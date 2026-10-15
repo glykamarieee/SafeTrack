@@ -10,6 +10,7 @@ import { Notice } from "../../components/ui/Notice";
 import { Steps } from "../../components/ui/Steps";
 import { Text } from "../../components/ui/Text";
 import { useChildMobileStore } from "../../store/childMobileStore";
+import { hasSeenOnboarding } from "../../services/onboardingService";
 import { useTheme } from "../../theme/ThemeProvider";
 
 export default function ChildDeviceLinkScreen() {
@@ -35,6 +36,13 @@ export default function ChildDeviceLinkScreen() {
 
     try {
       await linkDevice(normalizedCode);
+
+      // A newly linked phone opens the child tour first.
+      if (!(await hasSeenOnboarding("child"))) {
+        router.replace({ pathname: "/onboarding", params: { audience: "child", next: "/(child)/child-home" } });
+        return;
+      }
+
       router.replace("/(child)/child-home" as Href);
     } catch (error) {
       Alert.alert(
