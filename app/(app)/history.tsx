@@ -74,6 +74,90 @@ const SPEEDS = [1, 4, 16] as const;
 // 1x replays one recorded minute per second.
 const TICK_MS = 100;
 
+type LatLngPoint = { latitude: number; longitude: number };
+
+function flatMeters(a: LatLngPoint, b: LatLngPoint) {
+  const x = (b.longitude - a.longitude) * Math.cos(((a.latitude + b.latitude) / 2) * (Math.PI / 180)) * 111320;
+  const y = (b.latitude - a.latitude) * 110540;
+  return Math.hypot(x, y);
+}
+
+/**
+ * Ties each record to its place on the road line: for every record, the
+ * index of the nearest road vertex, searched forward from the previous
+ * record's so the order is kept. Also the cumulative distance along the line.
+ */
+function anchorRoute(points: ActivityLocationPoint[], road: LatLngPoint[]) {
+  const along = [0];
+  for (let index = 1; index < road.length; index += 1) along.push(along[index - 1]! + flatMeters(road[index - 1]!, road[index]!));
+  const anchors: number[] = [];
+  let from = 0;
+  for (const point of points) {
+    let best = from;
+    let bestDistance = Infinity;
+    // Look ahead a bounded window so a later pass on the same street isn't picked.
+    const limit = Math.min(road.length, from + 4000);
+    for (let index = from; index < limit; index += 1) {
+      const distance = flatMeters(point, road[index]!);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = index;
+      }
+    }
+    anchors.push(best);
+    from = best;
+  }
+  return { along, anchors };
+}
+
+/** The point `meters` along the road line. */
+function pointAlong(road: LatLngPoint[], along: number[], meters: number): LatLngPoint {
+  let low = 0;
+  let high = along.length - 1;
+  if (meters <= 0) return road[0]!;
+  if (meters >= along[high]!) return road[high]!;
+  while (high - low > 1) {
+    const middle = (low + high) >> 1;
+    if (along[middle]! <= meters) low = middle;
+    else high = middle;
+  }
+  const span = along[high]! - along[low]! || 1;
+  const ratio = (meters - along[low]!) / span;
+  return {
+    latitude: road[low]!.latitude + (road[high]!.latitude - road[low]!.latitude) * ratio,
+    longitude: road[low]!.longitude + (road[high]!.longitude - road[low]!.longitude) * ratio,
+  };
+}
+
+/**
+ * Replay position that travels along the road line: between two records the
+ * child moves along the road stretch joining them, at a steady pace over the
+ * time between the records. Without a road line, straight interpolation.
+ */
+function roadPositionAt(
+  points: ActivityLocationPoint[],
+  road: LatLngPoint[] | null,
+  route: { along: number[]; anchors: number[] } | null,
+  time: number,
+) {
+  if (!road || !route || road.length < 2) return positionAt(points, time);
+  const times = points.map((point) => Date.parse(point.recordedAt));
+  const last = points.length - 1;
+  if (time <= times[0]!) return road[route.anchors[0]!]!;
+  if (time >= times[last]!) return road[route.anchors[last]!]!;
+  let low = 0;
+  let high = last;
+  while (high - low > 1) {
+    const middle = (low + high) >> 1;
+    if (times[middle]! <= time) low = middle;
+    else high = middle;
+  }
+  const ratio = (time - times[low]!) / (times[high]! - times[low]! || 1);
+  const start = route.along[route.anchors[low]!]!;
+  const end = route.along[route.anchors[high]!]!;
+  return pointAlong(road, route.along, start + (end - start) * ratio);
+}
+
 /** Where the child was at `time`, interpolated between the two nearest records. */
 function positionAt(points: ActivityLocationPoint[], time: number) {
   if (!points.length) return null;
@@ -310,7 +394,8 @@ export default function HistoryScreen() {
     return list;
   }, [firstPoint, latestPoint, points.length, stops, events]);
 
-  const replayPosition = replayTime === null ? null : positionAt(points, replayTime);
+  const roadRoute = useMemo(() => (roadPath && roadPath.length > 1 && points.length > 1 ? anchorRoute(points, roadPath) : null), [roadPath, points]);
+  const replayPosition = replayTime === null ? null : roadPositionAt(points, roadPath, roadRoute, replayTime);
 
   const replayMarker = useMemo<SafeTrackMapMarker | null>(
     () =>
