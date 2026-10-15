@@ -70,7 +70,6 @@ export function GuardianHome() {
   const child = useAuthStore((state) => state.linkedChildren?.[0] ?? null);
 
   const latestLocation = useLocationStore((state) => state.latest);
-  const locationHistory = useLocationStore((state) => state.history);
   const locationLoading = useLocationStore((state) => state.isLoading);
   const loadLocation = useLocationStore((state) => state.loadForChild);
 
@@ -111,6 +110,8 @@ export function GuardianHome() {
   }, [child?.id, hasWatch]);
 
   const zoneCircles = useMemo(() => toZoneCircles(zones, zoneEvents), [zones, zoneEvents]);
+  // Switched-off zones are not monitored, so they are not counted.
+  const activeZoneCount = zones.filter((zone) => zone.isEnabled).length;
 
   const activeSOS = useMemo(() => sosAlerts.find((item) => item.status === "active"), [sosAlerts]);
 
@@ -223,7 +224,7 @@ export function GuardianHome() {
               </Pressable>
 
               <View style={styles.stats}>
-                <Stat label="Safe zones" value={String(zones.length)} onPress={() => router.push("/(app)/safe-zones")} />
+                <Stat label="Safe zones" value={String(activeZoneCount)} onPress={() => router.push("/(app)/safe-zones")} />
                 <View style={styles.statRule} />
                 <Stat
                   label="SOS"
@@ -292,14 +293,20 @@ export function GuardianHome() {
             </Entrance>
 
             <Entrance index={3} style={styles.tiles}>
-              <Tile icon="radio-button-on-outline" label="Safe zones" onPress={() => router.push("/(app)/safe-zones")} />
-              <Tile icon="time-outline" label="Activity" detail={`${locationHistory.length} records`} onPress={() => router.push("/(app)/history")} />
+              <Tile
+                icon="radio-button-on-outline"
+                label="Safe zones"
+                detail={`${activeZoneCount} active`}
+                onPress={() => router.push("/(app)/safe-zones")}
+              />
+              <Tile icon="time-outline" label="Activity" detail="Route history" onPress={() => router.push("/(app)/history")} />
               <Tile
                 icon="key-outline"
                 label="Connect"
+                detail="Link a device"
                 onPress={() => router.push({ pathname: "/(app)/device-connection-code", params: { childId: child.id, section: "details" } })}
               />
-              <Tile icon="notifications-outline" label="Notices" strong onPress={() => router.push("/(app)/notifications")} />
+              <Tile icon="notifications-outline" label="Notices" detail="Alerts" onPress={() => router.push("/(app)/notifications")} />
             </Entrance>
 
             {deviceLine ? (
@@ -391,13 +398,11 @@ function Tile({
   icon,
   label,
   detail,
-  strong,
   onPress,
 }: {
   icon: ComponentProps<typeof Ionicons>["name"];
   label: string;
-  detail?: string;
-  strong?: boolean;
+  detail: string;
   onPress: () => void;
 }) {
   const { colors } = useTheme();
@@ -407,24 +412,24 @@ function Tile({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={detail ? `${label}, ${detail}` : label}
+      accessibilityLabel={`${label}, ${detail}`}
       onPress={onPress}
       onPressIn={press.onPressIn}
       onPressOut={press.onPressOut}
       style={styles.tileCell}
     >
       <Animated.View style={[styles.tile, press.style]}>
-        <View style={[styles.tileIcon, strong && { backgroundColor: colors.forest }]}>
-          <Ionicons name={icon} size={20} color={strong ? "#3DDC84" : colors.primary} />
+        <View style={styles.tileIcon}>
+          <Ionicons name={icon} size={20} color={colors.primary} />
         </View>
-        <Text variant="caption" tone="ink" weight="700" numberOfLines={1}>
-          {label}
-        </Text>
-        {detail ? (
-          <Text variant="caption" numberOfLines={1} style={styles.tileDetail}>
+        <View style={styles.tileCopy}>
+          <Text variant="label" tone="ink" weight="800" numberOfLines={1}>
+            {label}
+          </Text>
+          <Text variant="caption" numberOfLines={1}>
             {detail}
           </Text>
-        ) : null}
+        </View>
       </Animated.View>
     </Pressable>
   );
@@ -432,7 +437,8 @@ function Tile({
 
 const useStyles = makeStyles((c, scheme) =>
   StyleSheet.create({
-    scroll: { flexGrow: 1, paddingBottom: 120, backgroundColor: c.paper },
+    // The tab bar sits below the screen, so only a normal bottom margin is needed.
+    scroll: { flexGrow: 1, paddingBottom: space.xxl, backgroundColor: c.paper },
     flex: { flex: 1 },
     white: { color: "#FFFFFF" },
     pressed: { opacity: 0.8 },
@@ -491,19 +497,23 @@ const useStyles = makeStyles((c, scheme) =>
     emptyIcon: { width: 60, height: 60, borderRadius: 20, backgroundColor: c.primaryTint, alignItems: "center", justifyContent: "center" },
     sectionHeader: { flexDirection: "row", alignItems: "flex-end", gap: space.md, marginTop: space.sm },
     linkRow: { flexDirection: "row", alignItems: "center", gap: 4, minHeight: 36 },
-    tiles: { flexDirection: "row", gap: space.sm + 2 },
-    tileCell: { flex: 1 },
+    // Two columns of identical cards (four columns on wide screens).
+    tiles: { flexDirection: "row", flexWrap: "wrap", gap: space.sm + 2 },
+    tileCell: { flexGrow: 1, flexBasis: "46%" },
     tile: {
+      flexDirection: "row",
       alignItems: "center",
-      gap: space.sm,
-      paddingVertical: space.md + 2,
-      paddingHorizontal: space.xs,
+      gap: space.sm + 2,
+      minHeight: 68,
+      paddingVertical: space.md,
+      paddingLeft: space.md,
+      paddingRight: space.sm,
       borderRadius: radius.md - 2,
       backgroundColor: c.surface,
       ...(scheme === "dark" ? { borderWidth: 1, borderColor: c.rule } : shadow(scheme)),
     },
-    tileIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: c.primaryTint },
-    tileDetail: { marginTop: -6 },
+    tileIcon: { width: 40, height: 40, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: c.primaryTint },
+    tileCopy: { flex: 1, minWidth: 0, gap: 1 },
     deviceLine: { flexDirection: "row", alignItems: "center", gap: 6, justifyContent: "center" },
     sosBand: { backgroundColor: "#B42318" },
     sosRow: {

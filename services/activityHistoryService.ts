@@ -497,11 +497,24 @@ export function estimateStops(points: ActivityLocationPoint[]): ActivityStop[] {
  * started before the day count from midnight; open stays run to the end of the
  * day (or now, for today). Overlapping zones are counted once.
  */
-export function minutesInZones(transitions: ZoneTransition[], dateKey: string, enabledZoneIds?: Set<string>) {
+/**
+ * Minutes inside enabled Safe Zones on one day, from the server's entry/exit
+ * events. Only the observed part of the day is counted: from the first to the
+ * latest location record ([observed]). Time before the first or after the
+ * latest record has no data, so it is never assumed to be inside or outside;
+ * the result can therefore never be longer than the day's span.
+ */
+export function minutesInZones(
+  transitions: ZoneTransition[],
+  dateKey: string,
+  enabledZoneIds?: Set<string>,
+  observed?: { from: string; to: string } | null,
+) {
   const { start, end } = philippineDayRange(dateKey);
-  const dayStart = Date.parse(start);
-  const dayEnd = Math.min(Date.parse(end), Date.now());
-  if (dayEnd <= dayStart) return 0;
+  if (!observed) return 0;
+  const dayStart = Math.max(Date.parse(start), Date.parse(observed.from));
+  const dayEnd = Math.min(Date.parse(end), Date.now(), Date.parse(observed.to));
+  if (!(dayEnd > dayStart)) return 0;
 
   const open = new Map<string, number>();
   const intervals: [number, number][] = [];

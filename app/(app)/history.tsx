@@ -228,8 +228,14 @@ export default function HistoryScreen() {
     firstPoint && latestPoint ? Math.max(0, (Date.parse(latestPoint.recordedAt) - Date.parse(firstPoint.recordedAt)) / 60000) : 0;
   const enabledZoneIds = useMemo(() => new Set(zones.filter((zone) => zone.isEnabled).map((zone) => zone.id)), [zones]);
   const zoneMinutes = useMemo(
-    () => minutesInZones(transitions, selectedDate, enabledZoneIds),
-    [transitions, selectedDate, enabledZoneIds],
+    () =>
+      minutesInZones(
+        transitions,
+        selectedDate,
+        enabledZoneIds,
+        firstPoint && latestPoint ? { from: firstPoint.recordedAt, to: latestPoint.recordedAt } : null,
+      ),
+    [transitions, selectedDate, enabledZoneIds, firstPoint, latestPoint],
   );
   const sosEvents = events.filter((event) => event.type === "sos");
   const activeSos = sosEvents.filter((event) => event.sosStatus === "active").length;
@@ -584,7 +590,7 @@ export default function HistoryScreen() {
             <Stat id="records" value={String(points.length)} label="Records" onPress={setStatOpen} />
             <Stat id="distance" value={distanceLabel(distance.meters)} label="Distance" onPress={setStatOpen} />
             <Stat id="span" value={durationLabel(spanMinutes, true)} label="Span" onPress={setStatOpen} />
-            <Stat id="zones" value={durationLabel(zoneMinutes, true)} label="In Safe Zones" onPress={setStatOpen} />
+            <Stat id="zones" value={durationLabel(zoneMinutes, true)} label="In zones" onPress={setStatOpen} />
             <Stat id="sos" value={String(sosEvents.length)} label="SOS" danger={activeSos > 0} onPress={setStatOpen} />
           </View>
         )}
@@ -740,10 +746,12 @@ export default function HistoryScreen() {
                   ? `From the first record at ${timeLabel(firstPoint.recordedAt)} to the latest at ${timeLabel(latestPoint.recordedAt)}. Gaps without records are included.`
                   : "There are no records on this day."
                 : statOpen === "zones"
-                  ? `From the server's Safe Zone entry and exit events: each entry starts a stay that the zone's next exit ends. A stay that began before midnight counts from midnight; one still open counts until ${selectedDate === today ? "now" : "the end of the day"}. Overlapping zones are counted once, and turned-off zones are left out.`
+                  ? firstPoint && latestPoint
+                    ? `Time inside a Safe Zone between the first record (${timeLabel(firstPoint.recordedAt)}) and the latest (${timeLabel(latestPoint.recordedAt)}), from the server's Safe Zone entry and exit events. Time without records is not counted, so this is never longer than the span. Overlapping zones are counted once, and turned-off zones are left out.`
+                    : "There are no records on this day, so no time in Safe Zones can be counted."
                   : `SOS alerts triggered on this day, whatever their status. ${activeSos ? `${activeSos} still active.` : "None is still active."}`}
         </Text>
-        <Text style={sheetStyles.note}>Day range: {philippineDayRange(selectedDate).start.slice(0, 10)} (Philippine time).</Text>
+        <Text style={sheetStyles.note}>Day: {selectedDate}, 00:00 to 24:00 Philippine time.</Text>
       </MapSheet>
     </SafeAreaView>
   );
