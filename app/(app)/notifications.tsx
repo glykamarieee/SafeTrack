@@ -241,7 +241,7 @@ const useStyles = makeStyles((__c) => {
   countText: { color: colors.muted, fontSize: 10, fontWeight: "800" },
   noticeList: { borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border },
   noticeRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 17 },
-  noticeRowUrgent: { backgroundColor: "rgba(253,235,237,0.42)" },
+  noticeRowUrgent: { backgroundColor: colors.dangerSoft, borderRadius: 16, paddingHorizontal: 10 },
   noticeDivider: { borderBottomWidth: 1, borderBottomColor: colors.border },
   iconBox: { width: 42, height: 42, borderRadius: 15, backgroundColor: colors.softMint, justifyContent: "center", alignItems: "center" },
   iconBoxUrgent: { backgroundColor: colors.dangerSoft },

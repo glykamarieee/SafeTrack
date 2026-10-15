@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { Text } from "../../components/ui/NativeText";
+import { Button } from "../../components/ui/Button";
 
 import {
   SafeAreaView,
@@ -32,9 +33,6 @@ import {
 } from "../../components/common/SafeTrackBackButton";
 
 
-import {
-  SafeTrackButton,
-} from "../../components/common/SafeTrackButton";
 
 
 import {
@@ -497,7 +495,7 @@ export default function SosAlertsScreen(){
             <Ionicons
               name={activeCount > 0 ? "warning-outline" : "shield-checkmark-outline"}
               size={21}
-              color={activeCount > 0 ? colors.danger : colors.primaryDark}
+              color={activeCount > 0 ? "#B42318" : colors.primaryDark}
             />
           </View>
           <View style={styles.statusCopy}>
@@ -506,7 +504,7 @@ export default function SosAlertsScreen(){
                 ? `${activeCount} active SOS alert${activeCount > 1 ? "s" : ""}`
                 : "No active SOS requires acknowledgment"}
             </Text>
-            <Text style={styles.statusText}>
+            <Text style={[styles.statusText, activeCount > 0 && styles.statusTextActive]}>
               {trackingSource === "mobile"
                 ? "SOS records are associated with the child's mobile tracking source."
                 : trackingSource === "both"
@@ -602,8 +600,10 @@ export default function SosAlertsScreen(){
 
                     {active ? (
                       <View style={styles.acknowledgeWrap}>
-                        <SafeTrackButton
+                        <Button
                           label="Acknowledge SOS"
+                          variant="danger"
+                          size="lg"
                           icon="checkmark-circle-outline"
                           loading={acknowledging === alert.id}
                           onPress={() => void acknowledge(alert)}
@@ -661,13 +661,15 @@ const useStyles = makeStyles((__c) => {
     borderBottomWidth: 1,
     borderColor: colors.border,
   },
-  statusBandActive: { borderColor: "#F0C7CB", backgroundColor: colors.dangerSoft, paddingHorizontal: 14, borderRadius: radius.md },
-  statusSymbol: { width: 42, height: 42, borderRadius: 15, backgroundColor: colors.softMint, alignItems: "center", justifyContent: "center" },
-  statusSymbolActive: { backgroundColor: colors.white },
+  // An active SOS turns the band solid red, like the board's SOS screen.
+  statusBandActive: { borderColor: "transparent", backgroundColor: "#B42318", paddingHorizontal: 16, paddingVertical: 18, borderRadius: radius.lg },
+  statusSymbol: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.softMint, alignItems: "center", justifyContent: "center" },
+  statusSymbolActive: { backgroundColor: "#FFFFFF", borderWidth: 4, borderColor: "rgba(255,255,255,0.28)" },
   statusCopy: { flex: 1 },
-  statusTitle: { color: colors.ink, fontSize: 13, fontWeight: "900" },
-  statusTitleActive: { color: colors.dangerDark },
+  statusTitle: { color: colors.ink, fontSize: 14, fontWeight: "900" },
+  statusTitleActive: { color: "#FFFFFF", fontSize: 16 },
   statusText: { color: colors.muted, fontSize: 11.5, lineHeight: 17, marginTop: 3 },
+  statusTextActive: { color: "#FFE1DD" },
   listHeader: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 12, marginTop: 28, marginBottom: 10 },
   sectionEyebrow: { color: colors.primaryDark, fontSize: 9, fontWeight: "900", letterSpacing: 1.05 },
   sectionTitle: { color: colors.ink, fontSize: 18, fontWeight: "900", marginTop: 3 },
@@ -682,7 +684,7 @@ const useStyles = makeStyles((__c) => {
   emptyText: { marginTop: 3, color: colors.muted, fontSize: 11.5, lineHeight: 17 },
   timeline: { borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border },
   alertRow: { flexDirection: "row", paddingVertical: 18 },
-  alertRowActive: { backgroundColor: "rgba(253,235,237,0.42)" },
+  alertRowActive: { backgroundColor: colors.dangerSoft, paddingHorizontal: 10, borderRadius: radius.md },
   alertDivider: { borderBottomWidth: 1, borderBottomColor: colors.border },
   timelineRail: { width: 34, alignItems: "center" },
   timelineDot: { width: 24, height: 24, borderRadius: 12, backgroundColor: colors.softMint, alignItems: "center", justifyContent: "center" },
@@ -700,7 +702,7 @@ const useStyles = makeStyles((__c) => {
   alertStatusTextActive: { color: colors.dangerDark },
   alertMetaRow: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 10 },
   alertMeta: { flex: 1, color: colors.muted, fontSize: 11.5 },
-  acknowledgeWrap: { maxWidth: 320, marginTop: 14 },
+  acknowledgeWrap: { maxWidth: 360, marginTop: 16 },
   resolvedLine: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 13 },
   resolvedText: { color: colors.primaryDark, fontSize: 10.5, fontWeight: "800" },
   returnButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, marginTop: 23, minHeight: 42 },
