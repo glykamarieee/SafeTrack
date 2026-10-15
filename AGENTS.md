@@ -169,8 +169,22 @@ the Expo app.
   | Run | `.venv\Scripts\python -m uvicorn app:app --port 8000` |
   | Retrain | `.venv\Scripts\python train_model.py` (reads all `location_logs` with the service key) |
 
-- **Deployment:** any HTTPS host (`ai-service/Dockerfile`). Then set the edge
-  function secrets `AI_SERVICE_URL`, `AI_SERVICE_KEY` and `AI_ENABLED=true`.
+- **Deployment:** hosted on **Render** (free plan) as `safetrack-ai`:
+  - **URL:** `https://safetrack-ai-qigk.onrender.com`; region Singapore.
+  - **Source:** branch `consolidation`, root `ai-service/`, Docker. It
+    auto-deploys on push.
+  - **Environment:** `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `AI_SERVICE_KEY`.
+  - **Free-plan behaviour:** it sleeps after about 15 minutes idle, and the first
+    request then takes up to about a minute.
+  - **Checking the key:** at startup it logs `AI_SERVICE_KEY: length N,
+    fingerprint XXXXXXXX` (non-reversible). Compare it with
+    `python -c "import app"` run locally in `ai-service/`.
+  - **Trap:** paste only the value into a host's settings, never
+    `NAME=value`. A pasted `AI_SERVICE_KEY=` prefix made every request 401.
+  - **Verified on 2026-10-15:** no key → 401, normal point → not flagged, 40 km
+    jump → flagged with reasons, bad input → 422.
+  - **Then:** set the edge function secrets `AI_SERVICE_URL`, `AI_SERVICE_KEY`
+    and `AI_ENABLED=true`.
 - **Live cron jobs:** `safetrack-sos-realert` and `safetrack-safety-scan` both run
   every minute (seen in `cron.job`, 2026-10-15).
 - **Legacy, unused:** `watch-pair`, `watch-ingest`. The watch app switched to the
