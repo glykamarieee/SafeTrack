@@ -532,6 +532,31 @@ and safety events for a date range, 50 per page, through
 `services/adminRecordsService.ts`. These are plain selects allowed by the
 `is_safetrack_admin()` SELECT policies, with child names read from `persons`.
 
+## Design system (redesign, branch `redesign`)
+
+- **Approved look:** green, white and a little "forest night" (`#0D2A1E`, never neutral black), Plus Jakarta Sans,
+  Light by default with a full Dark theme (Profile → Appearance: Light / Dark / Match phone, saved on the device).
+  Red only for SOS. Board: https://claude.ai/artifact/4h3Bh1nUEePYVT4YEnLQCE. Plan: `docs/redesign-plan.md`.
+- **Tokens:** `theme/tokens.ts` (light/dark palettes, type, radii, motion, `stateColor`). Read colours with
+  `useTheme()`, style with `makeStyles((c, scheme) => StyleSheet.create(...))`. Don't hard-code hex in new code.
+- **Text:** import `Text`/`TextInput` from `components/ui/NativeText` (or the variant `Text` from `components/ui`).
+  Android picks a custom font file by family, not `fontWeight`; NativeText maps the weight. React Native's own
+  `Text` renders the system font on Android.
+- **Old token files** (`constants/guardianDesign`, `safeTrackDesign`, `childDesign`, `adminDesign`, `theme`) still
+  supply radius/spacing/shadow; their colours are mapped into the theme by `theme/legacy.ts`. A helper outside a
+  component that reads them gets light-only colours: pass the themed colours in instead (see child-home
+  `statusDetails`).
+- **Primitives** (`components/ui`): Button (primary/forest/secondary/soft/ghost/danger/glass), Surface, Field,
+  Notice, Chip, ChoiceCard, CodeInput, Steps, Segmented, StateRing, HoldRing, MapPattern, Entrance.
+  `components/auth/AuthShell` is the sign-in layout; `components/navigation/SideNav` the wide-screen sidebar.
+- **Motion** (`theme/motion.ts`): press feedback, entrance, pulse, drift. Everything respects Reduce Motion.
+- **Location wording:** never "live" or "real-time". It is the latest reported location; always show its age
+  ("Updated 2 min ago"). Watch ≈ every 3 min, phone auto-share every 5 min or 100 m.
+- **Onboarding:** `app/onboarding.tsx` (guardian after first sign-in, child phone after linking; replay from
+  Profile, Help & Support, child profile). Watch tour: `ui/tour/WatchTour.kt` after first pairing, replay from
+  Status. Seen-flags: `safetrack.onboarding.<audience>` (AsyncStorage), `safetrack_watch_tour` (SharedPreferences).
+- **Maps** follow the app's dark mode when the map theme is Auto (the default).
+
 ## Working in this repo
 
 - **Environment:** `.env` holds `EXPO_PUBLIC_SUPABASE_URL` and

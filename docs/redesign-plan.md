@@ -191,3 +191,25 @@ Never claim device behaviour that was not run on a device.
     then they are deleted.
   - The Appearance setting appears in Profile in stage 4, once guardian
     screens follow the theme.
+
+## Final direction and status (2026-10-15)
+The user replaced "calm cartography" with their own references: green, white and
+a little forest-night, Plus Jakarta Sans (approved), `react-native-svg`
+(approved), navigation-map style for maps, and an admin blend of the glass watch
+hero and a green dashboard. Board: https://claude.ai/artifact/4h3Bh1nUEePYVT4YEnLQCE.
+
+All stages are done and committed on `redesign` (not pushed):
+- 1 / 1b: tokens, theme provider, fonts, primitives (`b240d82`, `ed772ee`)
+- 2: sign-in screens (`f7c3585`)
+- 3: onboarding tour (`eae4386`)
+- 4: Home, tab bar, every screen on the theme; Profile with Appearance (`3d8bd19`, `e236c69`)
+- 5: maps, Location, History (`d580933`)
+- 6: SOS and notifications (`243327b`)
+- 7: child phone (`ea568a8`)
+- 8: admin dashboard and sidebar (`e4f85cc`)
+- 9: Wear OS (`safe-track-wear-os` `d3f86d3`)
+
+Verified in a browser harness with mock data (light/dark, phone/desktop):
+type-check, web/Android/iOS bundles, watch build + unit tests, sign-in → tour
+→ Home flow, the SOS hold ring (half full at 2.6 s of 5 s, resets on release).
+Not yet verified on a real phone or watch.
