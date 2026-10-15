@@ -7,6 +7,8 @@ import {
 } from "react-native";
 import { Text } from "../../components/ui/NativeText";
 import { useRouter } from "expo-router";
+
+import { Button } from "../../components/ui/Button";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -120,6 +122,14 @@ export default function ChildProfileScreen() {
           </View>
         </View>
 
+        <Button
+          label="Replay the tour"
+          variant="secondary"
+          icon="play-circle-outline"
+          onPress={() => router.push({ pathname: "/onboarding", params: { audience: "child", next: "/(child)/child-profile", replay: "1" } } as never)}
+          style={styles.replay}
+        />
+
         <Pressable
           accessibilityRole="button"
           onPress={removeLink}
@@ -166,6 +176,7 @@ function Info({
 const useStyles = makeStyles((__c) => {
   const colors = childPalette(__c);
   return StyleSheet.create({
+  replay: { marginTop: 18 },
   safe: { flex: 1, backgroundColor: colors.canvas },
   content: {
     width: "100%",

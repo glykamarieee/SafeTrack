@@ -38,7 +38,7 @@ function timeLabel(value: string | null | undefined) {
   });
 }
 
-function statusDetails(status: string | undefined) {
+function statusDetails(status: string | undefined, colors: ReturnType<typeof childPalette>) {
   if (status === "inside") {
     return {
       title: "Inside safe zone",
@@ -90,7 +90,7 @@ export default function ChildHomeScreen() {
 
   if (!context) return null;
 
-  const safety = statusDetails(safeZoneStatus?.status);
+  const safety = statusDetails(safeZoneStatus?.status, colors);
   const sharedAt = timeLabel(latestLocation?.recordedAt);
 
   const sendUpdate = async () => {

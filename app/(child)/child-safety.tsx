@@ -19,7 +19,7 @@ import {
 import { makeStyles, useTheme } from "../../theme/ThemeProvider";
 import { childPalette } from "../../theme/legacy";
 
-function displayForStatus(status: string | undefined) {
+function displayForStatus(status: string | undefined, colors: ReturnType<typeof childPalette>) {
   if (status === "inside") {
     return {
       icon: "shield-checkmark" as const,
@@ -78,7 +78,7 @@ export default function ChildSafetyScreen() {
   const refresh = useChildMobileStore((state) => state.refresh);
   const isLoading = useChildMobileStore((state) => state.isLoading);
 
-  const display = displayForStatus(safeZoneStatus?.status);
+  const display = displayForStatus(safeZoneStatus?.status, colors);
 
   const updateLocation = async () => {
     try {

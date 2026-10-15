@@ -8,6 +8,7 @@ import {
   View,
 } from "react-native";
 import { Text } from "../../components/ui/NativeText";
+import { HoldRing } from "../../components/ui/HoldRing";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -38,7 +39,8 @@ function formatTime(value?: string | null) {
 
 export default function ChildSosScreen() {
   const styles = useStyles();
-  const colors = childPalette(useTheme().colors);
+  const { colors: theme } = useTheme();
+  const colors = childPalette(theme);
 
   const activeSos = useChildMobileStore((state) => state.activeSos);
   const isLoading = useChildMobileStore((state) => state.isLoading);
@@ -157,42 +159,45 @@ export default function ChildSosScreen() {
             </View>
           </View>
         ) : (
-          <View style={[styles.sosStage, isCounting && styles.sosStageCounting]}>
+          <View style={styles.sosStage}>
             <Text style={styles.stageKicker}>{isCounting ? "KEEP HOLDING" : "READY WHEN NEEDED"}</Text>
 
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Hold to send SOS alert"
-              onPressIn={beginCountdown}
-              onPressOut={() => {
-                if (countdownRef.current !== null) cancelCountdown(false);
-              }}
-              style={({ pressed }) => [
-                styles.holdButton,
-                isCounting && styles.holdButtonCounting,
-                pressed && styles.holdButtonPressed,
-              ]}
+            <HoldRing
+              running={isCounting}
+              durationMs={COUNTDOWN_SECONDS * 1000}
+              color={theme.danger}
+              trackColor={theme.dangerTint}
             >
-              {sending ? (
-                <ActivityIndicator color={colors.white} size="large" />
-              ) : isCounting ? (
-                <Text style={styles.countdownText}>{countdown}</Text>
-              ) : (
-                <Ionicons name="hand-left-outline" size={42} color={colors.white} />
-              )}
-            </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Hold to send SOS alert"
+                accessibilityHint="Keep holding for 5 seconds. Lift your finger to stop."
+                onPressIn={beginCountdown}
+                onPressOut={() => {
+                  if (countdownRef.current !== null) cancelCountdown(false);
+                }}
+                style={({ pressed }) => [styles.holdButton, isCounting && styles.holdButtonCounting, pressed && styles.holdButtonPressed]}
+              >
+                {sending ? (
+                  <ActivityIndicator color={theme.onDanger} size="large" />
+                ) : isCounting ? (
+                  <Text style={styles.countdownText}>{countdown}</Text>
+                ) : (
+                  <>
+                    <Text style={styles.sosLabel}>SOS</Text>
+                    <Text style={styles.sosHint}>HOLD</Text>
+                  </>
+                )}
+              </Pressable>
+            </HoldRing>
 
             <Text style={styles.holdTitle}>
-              {sending
-                ? "Sending SOS..."
-                : isCounting
-                  ? `Sending in ${countdown}`
-                  : "Press and hold"}
+              {sending ? "Sending SOS..." : isCounting ? `Sending in ${countdown}` : "Press and hold"}
             </Text>
             <Text style={styles.holdHelper}>
               {isCounting
-                ? "Keep your finger down. Lift it to cancel."
-                : "Holding starts a 5-second confirmation countdown to help prevent accidental alerts."}
+                ? "Keep holding. Lift your finger to stop."
+                : "Holding starts a 5-second countdown to help prevent accidental alerts."}
             </Text>
 
             {isCounting ? (
@@ -201,7 +206,7 @@ export default function ChildSosScreen() {
                 onPress={() => cancelCountdown(true)}
                 style={({ pressed }) => [styles.cancelButton, pressed && styles.pressed]}
               >
-                <Ionicons name="close" size={19} color={colors.dangerDeep} />
+                <Ionicons name="close" size={19} color={theme.danger} />
                 <Text style={styles.cancelText}>Cancel SOS</Text>
               </Pressable>
             ) : null}
@@ -251,30 +256,29 @@ const useStyles = makeStyles((__c) => {
   subtitle: { color: colors.muted, fontSize: 13.5, lineHeight: 20, marginTop: 7 },
   sosStage: {
     alignItems: "center",
-    marginTop: 28,
-    paddingVertical: 27,
-    paddingHorizontal: 20,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.line,
+    marginTop: 24,
+    paddingVertical: 8,
+    gap: 4,
   },
-  sosStageCounting: { backgroundColor: colors.dangerSoft, borderColor: "#F5CACA" },
-  stageKicker: { color: colors.dangerDeep, fontSize: 9.5, fontWeight: "900", letterSpacing: 1.2 },
+  stageKicker: { color: colors.dangerDeep, fontSize: 10, fontWeight: "900", letterSpacing: 1.4, marginBottom: 14 },
   holdButton: {
-    width: 142,
-    height: 142,
-    borderRadius: 71,
+    width: 184,
+    height: 184,
+    borderRadius: 92,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.danger,
-    marginTop: 20,
-    borderWidth: 10,
-    borderColor: "#F9D8D8",
+    shadowColor: __c.danger,
+    shadowOpacity: 0.35,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 8,
   },
-  holdButtonCounting: { backgroundColor: colors.dangerDeep, borderColor: "#F2BFC0" },
-  holdButtonPressed: { transform: [{ scale: 0.98 }] },
-  countdownText: { color: colors.white, fontSize: 50, fontWeight: "900", letterSpacing: -1.5 },
+  holdButtonCounting: { transform: [{ scale: 0.95 }] },
+  holdButtonPressed: { transform: [{ scale: 0.95 }] },
+  sosLabel: { color: __c.onDanger, fontSize: 46, fontWeight: "800", letterSpacing: 1 },
+  sosHint: { color: __c.onDanger, opacity: 0.85, fontSize: 13, fontWeight: "700", letterSpacing: 2 },
+  countdownText: { color: __c.onDanger, fontSize: 72, fontWeight: "800", letterSpacing: -2 },
   holdTitle: { color: colors.ink, fontSize: 22, fontWeight: "900", marginTop: 20 },
   holdHelper: { color: colors.muted, fontSize: 11.5, lineHeight: 17, textAlign: "center", marginTop: 7, maxWidth: 320 },
   cancelButton: {
@@ -282,8 +286,10 @@ const useStyles = makeStyles((__c) => {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 18,
+    paddingHorizontal: 22,
     borderRadius: radius.pill,
+    borderWidth: 1.5,
+    borderColor: __c.danger,
     backgroundColor: colors.surface,
     marginTop: 18,
   },
