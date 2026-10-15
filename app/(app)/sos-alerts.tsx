@@ -55,6 +55,9 @@ import {
 
 
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { guardianPalette } from "../../theme/legacy";
+
 type AlertStatus =
   | "active"
   | "acknowledged"
@@ -138,6 +141,9 @@ function formatMethod(
 
 
 export default function SosAlertsScreen(){
+  const styles = useStyles();
+  const colors = guardianPalette(useTheme().colors);
+
 
 
   const router =
@@ -628,7 +634,9 @@ export default function SosAlertsScreen(){
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = guardianPalette(__c);
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   content: {
@@ -698,4 +706,5 @@ const styles = StyleSheet.create({
   returnButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, marginTop: 23, minHeight: 42 },
   returnText: { color: colors.primaryDark, fontSize: 11.5, fontWeight: "900" },
   pressed: { opacity: 0.72 },
+});
 });

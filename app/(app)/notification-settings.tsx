@@ -23,6 +23,9 @@ import {
 } from "../../services/accountService";
 import { guardianColors as colors } from "../../constants/guardianDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { guardianPalette } from "../../theme/legacy";
+
 const OPTIONS: { key: keyof NotificationPreferences; icon: keyof typeof Ionicons.glyphMap; title: string; text: string }[] = [
   { key: "safeZone", icon: "shield-checkmark-outline", title: "Safe Zone entry and exit", text: "When your child enters or leaves a Safe Zone." },
   { key: "anomaly", icon: "analytics-outline", title: "AI unusual-movement notices", text: "Advisory notices about unusual movement." },
@@ -31,6 +34,9 @@ const OPTIONS: { key: keyof NotificationPreferences; icon: keyof typeof Ionicons
 
 /** Which non-emergency push notifications this guardian receives. SOS is always on. */
 export default function NotificationSettingsScreen() {
+  const styles = useStyles();
+  const colors = guardianPalette(useTheme().colors);
+
   const guardianId = useAuthStore((state) => state.guardian?.id);
   const [prefs, setPrefs] = useState<NotificationPreferences>(DEFAULT_NOTIFICATION_PREFERENCES);
   const [loading, setLoading] = useState(true);
@@ -111,7 +117,9 @@ export default function NotificationSettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = guardianPalette(__c);
+  return StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -126,4 +134,5 @@ const styles = StyleSheet.create({
   text: { marginTop: 2, color: colors.muted, fontSize: 11.5, lineHeight: 16 },
   loading: { marginVertical: 20 },
   footer: { marginTop: 14, marginBottom: 0 },
+});
 });

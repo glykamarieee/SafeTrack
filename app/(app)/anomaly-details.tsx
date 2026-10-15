@@ -21,6 +21,9 @@ import {
   guardianSpacing as spacing,
 } from "../../constants/guardianDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { guardianPalette } from "../../theme/legacy";
+
 /**
  * The server writes reasons as "Possible unusual movement: a, b, c. Advisory only."
  * Split them back into a list; fall back to the whole text.
@@ -43,6 +46,9 @@ function formatDateTime(value: string) {
 }
 
 function NoticeCard({ notice }: { notice: SafetyTimelineItem }) {
+  const styles = useStyles();
+  const colors = guardianPalette(useTheme().colors);
+
   const reasons = reasonsOf(notice.details);
 
   return (
@@ -84,6 +90,9 @@ function NoticeCard({ notice }: { notice: SafetyTimelineItem }) {
 }
 
 export default function AnomalyDetailsScreen() {
+  const styles = useStyles();
+  const colors = guardianPalette(useTheme().colors);
+
   const router = useRouter();
   const child = useAuthStore((state) => state.linkedChildren?.[0] ?? null);
   const anomalies = useAnomalyStore((state) => state.anomalies);
@@ -146,7 +155,9 @@ export default function AnomalyDetailsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = guardianPalette(__c);
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   content: { width: "100%", maxWidth: 820, alignSelf: "center", padding: spacing.lg, paddingBottom: 120 },
   header: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
@@ -182,4 +193,5 @@ const styles = StyleSheet.create({
   empty: { alignItems: "center", padding: 28, gap: 6 },
   emptyTitle: { color: colors.ink, fontSize: 15, fontWeight: "800" },
   emptyText: { color: colors.muted, fontSize: 12, textAlign: "center" },
+});
 });

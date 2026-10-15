@@ -20,7 +20,13 @@ import {
   adminSpacing as spacing,
 } from "../../constants/adminDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { adminPalette } from "../../theme/legacy";
+
 export default function AdminProfileScreen() {
+  const styles = useStyles();
+  const colors = adminPalette(useTheme().colors);
+
   const router = useRouter();
   const { width } = useWindowDimensions();
   const wide = width >= 900;
@@ -318,6 +324,9 @@ function PermissionLine({
   detail: string;
   last?: boolean;
 }) {
+  const styles = useStyles();
+  const colors = adminPalette(useTheme().colors);
+
   return (
     <View
       style={[
@@ -356,7 +365,9 @@ function PermissionLine({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = adminPalette(__c);
+  return StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.background,
@@ -804,4 +815,5 @@ const styles = StyleSheet.create({
     opacity: 0.78,
     transform: [{ scale: 0.99 }],
   },
+});
 });

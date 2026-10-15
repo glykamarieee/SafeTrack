@@ -26,6 +26,9 @@ import {
 } from "../../constants/guardianDesign";
 
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { guardianPalette } from "../../theme/legacy";
+
 type Profile = {
   id:string;
   full_name:string;
@@ -93,6 +96,9 @@ function Row({
   detail:string;
   onPress:()=>void;
 }){
+  const styles = useStyles();
+  const colors = guardianPalette(useTheme().colors);
+
 
   return(
 
@@ -140,6 +146,9 @@ function Row({
 
 
 export default function ProfileScreen(){
+  const styles = useStyles();
+  const colors = guardianPalette(useTheme().colors);
+
 
   const router = useRouter();
 
@@ -882,7 +891,9 @@ export default function ProfileScreen(){
 
 
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = guardianPalette(__c);
+  return StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.background,
@@ -1034,4 +1045,5 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: colors.primaryDark,
   },
+});
 });

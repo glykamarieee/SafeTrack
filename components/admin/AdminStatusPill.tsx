@@ -6,6 +6,9 @@ import { Text } from "../ui/NativeText";
 import { Ionicons } from "@expo/vector-icons";
 import { adminColors as colors, adminRadius as radius } from "../../constants/adminDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { adminPalette } from "../../theme/legacy";
+
 type Tone = "active" | "inactive" | "warning" | "neutral";
 
 const config: Record<Tone, { color: string; bg: string; border: string; icon: keyof typeof Ionicons.glyphMap }> = {
@@ -36,6 +39,8 @@ const config: Record<Tone, { color: string; bg: string; border: string; icon: ke
 };
 
 export function AdminStatusPill({ label, tone = "neutral" }: { label: string; tone?: Tone }) {
+  const styles = useStyles();
+
   const item = config[tone];
 
   return (
@@ -46,7 +51,9 @@ export function AdminStatusPill({ label, tone = "neutral" }: { label: string; to
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = adminPalette(__c);
+  return StyleSheet.create({
   root: {
     alignSelf: "flex-start",
     minHeight: 28,
@@ -62,4 +69,5 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.12,
   },
+});
 });

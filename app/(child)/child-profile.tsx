@@ -17,6 +17,9 @@ import {
   childSpacing as spacing,
 } from "../../constants/childDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { childPalette } from "../../theme/legacy";
+
 function sourceLabel(source: string) {
   const normalized = source.trim().toLowerCase();
   if (normalized === "both") return "Smartwatch and child phone";
@@ -25,6 +28,9 @@ function sourceLabel(source: string) {
 }
 
 export default function ChildProfileScreen() {
+  const styles = useStyles();
+  const colors = childPalette(useTheme().colors);
+
   const router = useRouter();
   const context = useChildMobileStore((state) => state.context);
   const disconnect = useChildMobileStore((state) => state.disconnect);
@@ -141,6 +147,9 @@ function Info({
   label: string;
   value: string;
 }) {
+  const styles = useStyles();
+  const colors = childPalette(useTheme().colors);
+
   return (
     <View style={styles.info}>
       <View style={styles.infoIcon}>
@@ -154,7 +163,9 @@ function Info({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = childPalette(__c);
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.canvas },
   content: {
     width: "100%",
@@ -230,4 +241,5 @@ const styles = StyleSheet.create({
   disconnectText: { color: colors.dangerDeep, fontSize: 13, fontWeight: "900", marginLeft: 8 },
   pressed: { opacity: 0.72 },
   disabled: { opacity: 0.56 },
+});
 });

@@ -52,6 +52,9 @@ import {
 
 
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { guardianPalette } from "../../theme/legacy";
+
 type ChildInfo = {
   id:string;
   full_name:string;
@@ -65,6 +68,9 @@ type ChildInfo = {
 
 
 export default function DeviceConnectionCodeScreen(){
+  const styles = useStyles();
+  const colors = guardianPalette(useTheme().colors);
+
 
 
   const router = useRouter();
@@ -675,7 +681,9 @@ export default function DeviceConnectionCodeScreen(){
 
 
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = guardianPalette(__c);
+  return StyleSheet.create({
 
 safe:{
   flex:1,
@@ -880,4 +888,5 @@ note:{
 },
 
 
+});
 });

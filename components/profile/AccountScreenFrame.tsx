@@ -15,6 +15,9 @@ import { useRouter, type Href } from "expo-router";
 
 import { guardianColors as colors, guardianRadius as radius, guardianSpacing as spacing } from "../../constants/guardianDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { guardianPalette } from "../../theme/legacy";
+
 /** Shared layout for the account settings screens (back, title, card). */
 export function AccountScreenFrame({
   title,
@@ -28,6 +31,9 @@ export function AccountScreenFrame({
   backTo: Href;
   children: ReactNode;
 }) {
+  const styles = useStyles();
+  const colors = guardianPalette(useTheme().colors);
+
   const router = useRouter();
 
   return (
@@ -56,6 +62,9 @@ export function AccountScreenFrame({
 }
 
 export function AccountField({ label, ...props }: TextInputProps & { label: string }) {
+  const styles = useStyles();
+  const colors = guardianPalette(useTheme().colors);
+
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
@@ -77,6 +86,8 @@ export function AccountButton({
   danger?: boolean;
   disabled?: boolean;
 }) {
+  const styles = useStyles();
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -95,6 +106,9 @@ export function AccountButton({
 }
 
 export function AccountMessage({ text, tone }: { text: string | null; tone: "error" | "success" }) {
+  const styles = useStyles();
+  const colors = guardianPalette(useTheme().colors);
+
   if (!text) return null;
 
   return (
@@ -115,7 +129,9 @@ export const accountStyles = StyleSheet.create({
   note: { color: colors.muted, fontSize: 12, lineHeight: 18, marginBottom: 12 },
 });
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = guardianPalette(__c);
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   content: { width: "100%", maxWidth: 560, alignSelf: "center", padding: spacing.lg, paddingBottom: 120 },
@@ -157,4 +173,5 @@ const styles = StyleSheet.create({
   messageTextError: { color: colors.dangerDark },
   messageTextSuccess: { color: colors.primaryDeep },
   pressed: { opacity: 0.82 },
+});
 });

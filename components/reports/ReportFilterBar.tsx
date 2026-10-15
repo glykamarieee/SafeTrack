@@ -6,6 +6,9 @@ import {
 import { Text } from "../ui/NativeText";
 import { colors, radii, spacing } from "../../constants/theme";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { themePalette } from "../../theme/legacy";
+
 export type ReportDateFilter = "all" | "last7" | "last30";
 
 interface ReportFilterBarProps {
@@ -20,6 +23,8 @@ const OPTIONS: { key: ReportDateFilter; label: string }[] = [
 ];
 
 export function ReportFilterBar({ selected, onSelect }: ReportFilterBarProps) {
+  const styles = useStyles();
+
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.row} contentContainerStyle={styles.content}>
       {OPTIONS.map((option) => {
@@ -38,7 +43,9 @@ export function ReportFilterBar({ selected, onSelect }: ReportFilterBarProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = themePalette(__c);
+  return StyleSheet.create({
   row: {
     marginBottom: spacing.md,
   },
@@ -65,4 +72,5 @@ const styles = StyleSheet.create({
   chipTextActive: {
     color: colors.white,
   },
+});
 });

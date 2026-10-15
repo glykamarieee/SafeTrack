@@ -12,6 +12,9 @@ import {
   safeTrackShadow as shadow,
 } from "../../constants/safeTrackDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { safeTrackPalette } from "../../theme/legacy";
+
 type SafeTrackBackButtonProps = {
   label?: string;
   fallbackHref?: Href;
@@ -21,6 +24,9 @@ export function SafeTrackBackButton({
   label,
   fallbackHref = "/(auth)/login",
 }: SafeTrackBackButtonProps) {
+  const styles = useStyles();
+  const colors = safeTrackPalette(useTheme().colors);
+
   const router = useRouter();
 
   const handleBack = () => {
@@ -62,7 +68,9 @@ export function SafeTrackBackButton({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = safeTrackPalette(__c);
+  return StyleSheet.create({
   button: {
     minWidth: 54,
     minHeight: 54,
@@ -87,4 +95,5 @@ const styles = StyleSheet.create({
     opacity: 0.76,
     transform: [{ scale: 0.97 }],
   },
+});
 });

@@ -7,6 +7,9 @@ import { Text } from "../ui/NativeText";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../constants/theme";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { themePalette } from "../../theme/legacy";
+
 interface AvatarProps {
   name: string;
   uri?: string;
@@ -14,6 +17,9 @@ interface AvatarProps {
 }
 
 export function Avatar({ name, uri, size = 56 }: AvatarProps) {
+  const styles = useStyles();
+  const colors = themePalette(useTheme().colors);
+
   const initials = name
     .trim()
     .split(/\s+/)
@@ -36,7 +42,9 @@ export function Avatar({ name, uri, size = 56 }: AvatarProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = themePalette(__c);
+  return StyleSheet.create({
   wrap: {
     backgroundColor: colors.emerald,
     alignItems: "center",
@@ -47,4 +55,5 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontWeight: "800",
   },
+});
 });

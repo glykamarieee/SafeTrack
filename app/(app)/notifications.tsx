@@ -21,6 +21,9 @@ import {
   guardianSpacing as spacing,
 } from "../../constants/guardianDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { guardianPalette } from "../../theme/legacy";
+
 type NotificationItem = {
   id: string;
   title: string;
@@ -55,6 +58,9 @@ function formatTime(value: string) {
  * geofence_events row), newest first, from the stored records.
  */
 export default function NotificationsScreen() {
+  const styles = useStyles();
+  const colors = guardianPalette(useTheme().colors);
+
   const router = useRouter();
   const child = useAuthStore((state) => state.linkedChildren?.[0] ?? null);
   const sosAlerts = useSosStore((state) => state.alerts);
@@ -211,7 +217,9 @@ export default function NotificationsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = guardianPalette(__c);
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   container: { width: "100%", maxWidth: 960, alignSelf: "center", padding: spacing.lg, paddingBottom: 100 },
   back: { alignSelf: "flex-start", minHeight: 38, flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 18, borderRadius: radius.sm, paddingHorizontal: 3 },
@@ -246,4 +254,5 @@ const styles = StyleSheet.create({
   footnote: { flexDirection: "row", alignItems: "flex-start", gap: 7, marginTop: 19 },
   footnoteText: { flex: 1, color: colors.muted, fontSize: 10.5, lineHeight: 16 },
   pressed: { opacity: 0.7 },
+});
 });

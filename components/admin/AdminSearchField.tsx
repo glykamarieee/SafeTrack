@@ -6,6 +6,9 @@ import { TextInput } from "../ui/NativeText";
 import { Ionicons } from "@expo/vector-icons";
 import { adminColors as colors, adminRadius as radius } from "../../constants/adminDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { adminPalette } from "../../theme/legacy";
+
 export function AdminSearchField({
   value,
   onChangeText,
@@ -15,6 +18,9 @@ export function AdminSearchField({
   onChangeText: (value: string) => void;
   placeholder: string;
 }) {
+  const styles = useStyles();
+  const colors = adminPalette(useTheme().colors);
+
   return (
     <View style={styles.root}>
       <Ionicons name="search-outline" size={18} color={colors.primaryDark} />
@@ -33,7 +39,9 @@ export function AdminSearchField({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = adminPalette(__c);
+  return StyleSheet.create({
   root: {
     minHeight: 48,
     flexDirection: "row",
@@ -58,4 +66,5 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: colors.primary,
   },
+});
 });

@@ -22,6 +22,9 @@ import {
   guardianSpacing as spacing,
 } from "../../constants/guardianDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { guardianPalette } from "../../theme/legacy";
+
 function trackingCopy(source?: string) {
   if (source === "both") return "Smartwatch primary • mobile additional";
   if (source === "mobile") return "Mobile location source";
@@ -29,6 +32,9 @@ function trackingCopy(source?: string) {
 }
 
 export default function SafetyCenterScreen() {
+  const styles = useStyles();
+  const colors = guardianPalette(useTheme().colors);
+
   const router = useRouter();
 
   const guardian = useAuthStore((state) => state.guardian);
@@ -245,7 +251,9 @@ export default function SafetyCenterScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = guardianPalette(__c);
+  return StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.background,
@@ -543,4 +551,5 @@ const styles = StyleSheet.create({
     opacity: 0.84,
     transform: [{ scale: 0.985 }],
   },
+});
 });

@@ -25,6 +25,9 @@ import {
   guardianShadow as shadow,
 } from "../../constants/guardianDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { guardianPalette } from "../../theme/legacy";
+
 function getSourceLabel(source?: string) {
   if (source === "mobile") return "Mobile device";
   if (source === "both") return "Smartwatch + mobile";
@@ -50,6 +53,9 @@ function formatTimestamp(value?: string | null) {
 }
 
 export default function LocationScreen() {
+  const styles = useStyles();
+  const colors = guardianPalette(useTheme().colors);
+
   const { width } = useWindowDimensions();
   const wide = width >= 1040;
   const role = useAuthStore((state) => state.role);
@@ -243,7 +249,9 @@ export default function LocationScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = guardianPalette(__c);
+  return StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.background,
@@ -446,4 +454,5 @@ const styles = StyleSheet.create({
     opacity: 0.82,
     transform: [{ scale: 0.985 }],
   },
+});
 });

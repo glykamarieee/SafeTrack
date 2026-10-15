@@ -8,6 +8,9 @@ import { RoleBadge } from "../common/RoleBadge";
 import { colors, radii, spacing, typography } from "../../constants/theme";
 import type { UserRole } from "../../types/safetrack";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { themePalette, themeTypography } from "../../theme/legacy";
+
 interface ProfileHeaderProps {
   fullName: string;
   email: string;
@@ -15,6 +18,9 @@ interface ProfileHeaderProps {
 }
 
 export function ProfileHeader({ fullName, email, role }: ProfileHeaderProps) {
+  const styles = useStyles();
+  const colors = themePalette(useTheme().colors);
+
   const initials = fullName
     .split(" ")
     .map((part) => part[0])
@@ -34,7 +40,10 @@ export function ProfileHeader({ fullName, email, role }: ProfileHeaderProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = themePalette(__c);
+  const typography = themeTypography(colors);
+  return StyleSheet.create({
   container: {
     alignItems: "center",
     marginBottom: spacing.lg,
@@ -61,4 +70,5 @@ const styles = StyleSheet.create({
     ...typography.body,
     marginBottom: spacing.sm,
   },
+});
 });

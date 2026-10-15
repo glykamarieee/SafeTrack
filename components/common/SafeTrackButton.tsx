@@ -10,6 +10,9 @@ import { Text } from "../ui/NativeText";
 import { Ionicons } from "@expo/vector-icons";
 import { safeTrackColors as colors, safeTrackRadius as radius, safeTrackShadow as shadow } from "../../constants/safeTrackDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { safeTrackPalette } from "../../theme/legacy";
+
 type Props = {
   label: string;
   onPress: () => void;
@@ -32,6 +35,9 @@ export function SafeTrackButton({
   variant = "primary",
   style,
 }: Props) {
+  const styles = useStyles();
+  const colors = safeTrackPalette(useTheme().colors);
+
   const blocked = loading || disabled;
   const isOutline = variant === "outline";
   const isDanger = variant === "danger";
@@ -58,7 +64,9 @@ export function SafeTrackButton({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = safeTrackPalette(__c);
+  return StyleSheet.create({
   base: {
     minHeight: 54,
     borderRadius: radius.pill,
@@ -74,4 +82,5 @@ const styles = StyleSheet.create({
   trailing: { marginLeft: 10 },
   pressed: { opacity: 0.82, transform: [{ scale: 0.985 }] },
   disabled: { opacity: 0.55 },
+});
 });

@@ -29,6 +29,9 @@ import {
   adminSpacing as spacing,
 } from "../../constants/adminDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { adminPalette } from "../../theme/legacy";
+
 function formatDate(value: string | null) {
   if (!value) return "No stored record";
   const date = new Date(value);
@@ -43,6 +46,9 @@ function formatDate(value: string | null) {
 }
 
 export default function AdminGuardianDetailsScreen() {
+  const styles = useStyles();
+  const colors = adminPalette(useTheme().colors);
+
   const router = useRouter();
   const { width } = useWindowDimensions();
   const wide = width >= 980;
@@ -275,6 +281,9 @@ function SummaryItem({
   danger?: boolean;
   last?: boolean;
 }) {
+  const styles = useStyles();
+  const colors = adminPalette(useTheme().colors);
+
   return (
     <View style={[styles.summaryItem, !last && styles.summaryDivider]}>
       <Ionicons name={icon} size={17} color={danger ? colors.danger : colors.primary} />
@@ -286,7 +295,9 @@ function SummaryItem({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = adminPalette(__c);
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   scrollContent: { paddingBottom: 118 },
   page: {
@@ -458,4 +469,5 @@ const styles = StyleSheet.create({
   retryText: { color: colors.white, fontSize: 12, fontWeight: "800" },
   pressed: { opacity: 0.78, transform: [{ scale: 0.99 }] },
   disabled: { opacity: 0.5 },
+});
 });

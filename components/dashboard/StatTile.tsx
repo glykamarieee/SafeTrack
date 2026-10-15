@@ -7,6 +7,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { Card } from "../common/Card";
 import { colors, spacing, typography } from "../../constants/theme";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { themePalette, themeTypography } from "../../theme/legacy";
+
 interface StatTileProps {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
@@ -15,6 +18,8 @@ interface StatTileProps {
 }
 
 export function StatTile({ icon, label, value, accentColor = colors.emerald }: StatTileProps) {
+  const styles = useStyles();
+
   return (
     <Card style={styles.card}>
       <View style={[styles.iconWrap, { backgroundColor: `${accentColor}1A` }]}>
@@ -26,7 +31,10 @@ export function StatTile({ icon, label, value, accentColor = colors.emerald }: S
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = themePalette(__c);
+  const typography = themeTypography(colors);
+  return StyleSheet.create({
   card: {
     flex: 1,
     padding: spacing.md,
@@ -47,4 +55,5 @@ const styles = StyleSheet.create({
     ...typography.caption,
     marginTop: 2,
   },
+});
 });

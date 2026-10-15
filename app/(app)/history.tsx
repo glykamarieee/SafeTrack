@@ -62,6 +62,9 @@ import {
   guardianSpacing as spacing,
 } from "../../constants/guardianDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { guardianPalette } from "../../theme/legacy";
+
 type StatId = "records" | "distance" | "span" | "zones" | "sos";
 
 type PointInfo = { title: string; point: ActivityLocationPoint };
@@ -95,6 +98,9 @@ function positionAt(points: ActivityLocationPoint[], time: number) {
 }
 
 export default function HistoryScreen() {
+  const styles = useStyles();
+  const colors = guardianPalette(useTheme().colors);
+
   const router = useRouter();
   const { width } = useWindowDimensions();
   const wide = width >= 1040;
@@ -764,6 +770,8 @@ function Stat({
   danger?: boolean;
   onPress(id: StatId): void;
 }) {
+  const styles = useStyles();
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -782,6 +790,8 @@ function Stat({
 }
 
 const StopList = memo(function StopList({ stops, onFocus }: { stops: ActivityStop[]; onFocus(stop: ActivityStop): void }) {
+  const styles = useStyles();
+  const colors = guardianPalette(useTheme().colors);
   return (
     <View style={styles.stops}>
       {stops.map((stop) => (
@@ -811,6 +821,8 @@ const StopList = memo(function StopList({ stops, onFocus }: { stops: ActivitySto
 });
 
 const Timeline = memo(function Timeline({ events, onOpen }: { events: ActivityEvent[]; onOpen(event: ActivityEvent): void }) {
+  const styles = useStyles();
+  const colors = guardianPalette(useTheme().colors);
   return (
     <View>
       {events.map((event, index) => {
@@ -853,7 +865,9 @@ const Timeline = memo(function Timeline({ events, onOpen }: { events: ActivityEv
   );
 });
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = guardianPalette(__c);
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   header: {
@@ -1067,4 +1081,5 @@ const styles = StyleSheet.create({
   noteText: { flex: 1, color: colors.muted, fontSize: 11, lineHeight: 16 },
   explain: { color: "#33413B", fontSize: 13.5, lineHeight: 20 },
   pressed: { opacity: 0.82 },
+});
 });

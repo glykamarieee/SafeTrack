@@ -26,6 +26,9 @@ import {
   adminSpacing as spacing,
 } from "../../constants/adminDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { adminPalette } from "../../theme/legacy";
+
 const TABS: { id: AdminRecordKind; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { id: "sos", label: "SOS alerts", icon: "warning-outline" },
   { id: "location", label: "Location records", icon: "location-outline" },
@@ -59,6 +62,9 @@ function messageOf(reason: unknown) {
 
 /** Administrator lists of SOS alerts, location records and safety events. */
 export default function AdminRecordsScreen() {
+  const styles = useStyles();
+  const colors = adminPalette(useTheme().colors);
+
   const today = todayKey();
   const [kind, setKind] = useState<AdminRecordKind>("sos");
   const [fromKey, setFromKey] = useState(moveDate(today, -6));
@@ -196,6 +202,9 @@ export default function AdminRecordsScreen() {
 }
 
 function DateInput({ label, value, onChange }: { label: string; value: string; onChange(value: string): void }) {
+  const styles = useStyles();
+  const colors = adminPalette(useTheme().colors);
+
   return (
     <View style={styles.dateField}>
       <Text style={styles.dateLabel}>{label}</Text>
@@ -212,7 +221,9 @@ function DateInput({ label, value, onChange }: { label: string; value: string; o
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = adminPalette(__c);
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   content: { width: "100%", maxWidth: adminLayout.pageMax, alignSelf: "center", padding: spacing.xl, paddingBottom: 100 },
   tabs: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 18 },
@@ -264,4 +275,5 @@ const styles = StyleSheet.create({
   more: { alignSelf: "center", marginTop: 14, paddingHorizontal: 18, height: 42, borderRadius: radius.pill, justifyContent: "center", backgroundColor: colors.primarySoft },
   moreText: { color: colors.primaryDark, fontSize: 12.5, fontWeight: "800" },
   pressed: { opacity: 0.8 },
+});
 });

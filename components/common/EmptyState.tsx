@@ -7,6 +7,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors, radii, spacing, typography } from "../../constants/theme";
 import { Button } from "./Button";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { themePalette, themeTypography } from "../../theme/legacy";
+
 interface EmptyStateProps {
   icon?: keyof typeof Ionicons.glyphMap;
   title: string;
@@ -16,6 +19,9 @@ interface EmptyStateProps {
 }
 
 export function EmptyState({ icon = "leaf-outline", title, message, actionLabel, onAction }: EmptyStateProps) {
+  const styles = useStyles();
+  const colors = themePalette(useTheme().colors);
+
   return (
     <View style={styles.container}>
       <View style={styles.iconWrap}>
@@ -30,7 +36,10 @@ export function EmptyState({ icon = "leaf-outline", title, message, actionLabel,
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = themePalette(__c);
+  const typography = themeTypography(colors);
+  return StyleSheet.create({
   container: {
     alignItems: "center",
     justifyContent: "center",
@@ -63,4 +72,5 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     paddingHorizontal: spacing.lg,
   },
+});
 });

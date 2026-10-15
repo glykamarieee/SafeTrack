@@ -8,6 +8,9 @@ import { Text } from "../ui/NativeText";
 import { Ionicons } from "@expo/vector-icons";
 import { safeTrackColors as colors, safeTrackShadow as shadow } from "../../constants/safeTrackDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { safeTrackPalette } from "../../theme/legacy";
+
 type SafeTrackAvatarProps = {
   imageUri?: string | null;
   name?: string | null;
@@ -40,6 +43,9 @@ export function SafeTrackAvatar({
   editable = false,
   onPress,
 }: SafeTrackAvatarProps) {
+  const styles = useStyles();
+  const colors = safeTrackPalette(useTheme().colors);
+
   const radius = Math.round(size * 0.32);
   const initials = getInitials(name);
   const canEdit = editable && typeof onPress === "function";
@@ -128,7 +134,9 @@ export function SafeTrackAvatar({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = safeTrackPalette(__c);
+  return StyleSheet.create({
   container: {
     position: "relative",
   },
@@ -172,4 +180,5 @@ const styles = StyleSheet.create({
     opacity: 0.78,
     transform: [{ scale: 0.97 }],
   },
+});
 });

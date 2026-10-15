@@ -18,6 +18,9 @@ import {
   childSpacing as spacing,
 } from "../../constants/childDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { childPalette } from "../../theme/legacy";
+
 const COUNTDOWN_SECONDS = 5;
 const REALERT_INTERVAL_MS = 60_000;
 
@@ -34,6 +37,9 @@ function formatTime(value?: string | null) {
 }
 
 export default function ChildSosScreen() {
+  const styles = useStyles();
+  const colors = childPalette(useTheme().colors);
+
   const activeSos = useChildMobileStore((state) => state.activeSos);
   const isLoading = useChildMobileStore((state) => state.isLoading);
   const triggerSos = useChildMobileStore((state) => state.triggerSos);
@@ -217,6 +223,8 @@ export default function ChildSosScreen() {
 }
 
 function Fact({ label, value }: { label: string; value: string }) {
+  const styles = useStyles();
+
   return (
     <View style={styles.fact}>
       <Text style={styles.factLabel}>{label}</Text>
@@ -225,7 +233,9 @@ function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = childPalette(__c);
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.canvas },
   content: {
     width: "100%",
@@ -317,4 +327,5 @@ const styles = StyleSheet.create({
   guidanceTitle: { color: colors.text, fontSize: 12.5, fontWeight: "900", marginLeft: 10 },
   guidanceText: { color: colors.muted, fontSize: 10.5, lineHeight: 16, marginLeft: 10, marginTop: 3 },
   pressed: { opacity: 0.72 },
+});
 });

@@ -14,9 +14,14 @@ import {
   childShadow as shadow,
 } from "../../constants/childDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { childPalette } from "../../theme/legacy";
+
 function createTabIcon(
   iconName: keyof typeof Ionicons.glyphMap,
-  options: { danger?: boolean } = {}
+  options: { danger?: boolean },
+  styles: ReturnType<typeof useStyles>,
+  colors: ReturnType<typeof childPalette>
 ) {
   return ({
     color,
@@ -45,6 +50,9 @@ function createTabIcon(
 }
 
 export default function ChildLayout() {
+  const styles = useStyles();
+  const colors = childPalette(useTheme().colors);
+
   const bootstrap = useChildMobileStore((state) => state.bootstrap);
   const isBootstrapped = useChildMobileStore((state) => state.isBootstrapped);
   const context = useChildMobileStore((state) => state.context);
@@ -98,14 +106,14 @@ export default function ChildLayout() {
         name="child-home"
         options={{
           title: "Home",
-          tabBarIcon: createTabIcon("home-outline"),
+          tabBarIcon: createTabIcon("home-outline", {}, styles, colors),
         }}
       />
       <Tabs.Screen
         name="child-safety"
         options={{
           title: "Safety",
-          tabBarIcon: createTabIcon("shield-checkmark-outline"),
+          tabBarIcon: createTabIcon("shield-checkmark-outline", {}, styles, colors),
         }}
       />
       <Tabs.Screen
@@ -113,14 +121,14 @@ export default function ChildLayout() {
         options={{
           title: "SOS",
           tabBarActiveTintColor: colors.danger,
-          tabBarIcon: createTabIcon("warning-outline", { danger: true }),
+          tabBarIcon: createTabIcon("warning-outline", { danger: true }, styles, colors),
         }}
       />
       <Tabs.Screen
         name="child-profile"
         options={{
           title: "Profile",
-          tabBarIcon: createTabIcon("person-outline"),
+          tabBarIcon: createTabIcon("person-outline", {}, styles, colors),
         }}
       />
       <Tabs.Screen name="index" options={{ href: null }} />
@@ -128,7 +136,9 @@ export default function ChildLayout() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = childPalette(__c);
+  return StyleSheet.create({
   loading: {
     flex: 1,
     alignItems: "center",
@@ -154,4 +164,5 @@ const styles = StyleSheet.create({
   iconShellFocused: { backgroundColor: colors.brandSoft },
   iconShellDanger: { backgroundColor: "transparent" },
   iconShellDangerFocused: { backgroundColor: colors.dangerSoft },
+});
 });

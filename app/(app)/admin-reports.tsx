@@ -56,6 +56,9 @@ import {
 
 
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { adminPalette } from "../../theme/legacy";
+
 // Local calendar date; toISOString() would give the UTC date, a day early
 // before 8 AM in the Philippines.
 function toIsoDate(date: Date) {
@@ -79,6 +82,9 @@ function isValidDate(value: string) {
 
 
 export default function AdminReportsScreen() {
+  const styles = useStyles();
+  const colors = adminPalette(useTheme().colors);
+
 
   const { width } = useWindowDimensions();
 
@@ -541,6 +547,9 @@ export default function AdminReportsScreen() {
 
 
 function DateField({ label, value, onChangeText }: { label: string; value: string; onChangeText: (value: string) => void }) {
+  const styles = useStyles();
+  const colors = adminPalette(useTheme().colors);
+
 
   return (
 
@@ -607,6 +616,9 @@ function SummaryRow({
   last?: boolean;
 
 }) {
+  const styles = useStyles();
+  const colors = adminPalette(useTheme().colors);
+
 
   const color = tone === "danger" ? colors.danger : tone === "blue" ? colors.blue : colors.primary;
 
@@ -630,7 +642,9 @@ function SummaryRow({
 
 
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = adminPalette(__c);
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   scrollContent: { paddingBottom: 118 },
   page: {
@@ -798,4 +812,5 @@ const styles = StyleSheet.create({
   privacyText: { flex: 1, color: colors.muted, fontSize: 10.8, lineHeight: 16 },
   pressed: { opacity: 0.8, transform: [{ scale: 0.99 }] },
   disabled: { opacity: 0.48 },
+});
 });

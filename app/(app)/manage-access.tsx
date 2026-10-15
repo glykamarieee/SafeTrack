@@ -17,6 +17,9 @@ import { useMenuManagementStore } from "../../store/menuManagementStore";
 import { colors, radii, spacing, typography } from "../../constants/theme";
 import { showAlert } from "../../lib/platformAlert";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { themePalette, themeTypography } from "../../theme/legacy";
+
 const MENU_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   HOME: "home-outline",
   LOCATION: "location-outline",
@@ -26,6 +29,9 @@ const MENU_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 };
 
 export default function ManageAccessScreen() {
+  const styles = useStyles();
+  const colors = themePalette(useTheme().colors);
+
   const role = useAuthStore((s) => s.role);
   const menus = useMenuManagementStore((s) => s.menus);
   const roles = useMenuManagementStore((s) => s.roles);
@@ -134,7 +140,10 @@ export default function ManageAccessScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = themePalette(__c);
+  const typography = themeTypography(colors);
+  return StyleSheet.create({
   title: {
     ...typography.display,
   },
@@ -176,4 +185,5 @@ const styles = StyleSheet.create({
     ...typography.bodyStrong,
     flex: 1,
   },
+});
 });

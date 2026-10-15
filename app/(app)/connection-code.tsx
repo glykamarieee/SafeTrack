@@ -48,7 +48,13 @@ import {
 
 
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { guardianPalette } from "../../theme/legacy";
+
 export default function ConnectionCodeScreen(){
+  const styles = useStyles();
+  const C = guardianPalette(useTheme().colors);
+
 
   const router = useRouter();
 
@@ -278,6 +284,8 @@ export default function ConnectionCodeScreen(){
 }
 
 function Instruction({ number, text, last = false }: { number: string; text: string; last?: boolean }) {
+  const styles = useStyles();
+
   return (
     <View style={styles.instructionRow}>
       <View style={styles.stepRail}>
@@ -289,7 +297,9 @@ function Instruction({ number, text, last = false }: { number: string; text: str
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const C = guardianPalette(__c);
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.background },
   content: { flexGrow: 1, width: "100%", maxWidth: 900, alignSelf: "center", padding: spacing.lg, paddingTop: 22, paddingBottom: 70 },
   back: { alignSelf: "flex-start", minHeight: 40, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 2, borderRadius: radius.sm },
@@ -325,4 +335,5 @@ const styles = StyleSheet.create({
   note: { flex: 1, color: C.muted, fontSize: 10.5, lineHeight: 16 },
   pressed: { opacity: 0.72, transform: [{ scale: 0.99 }] },
   disabled: { opacity: 0.55 },
+});
 });

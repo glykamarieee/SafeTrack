@@ -31,6 +31,9 @@ import {
   adminSpacing as spacing,
 } from "../../constants/adminDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { adminPalette } from "../../theme/legacy";
+
 function formatTime(value: string | null) {
   if (!value) return "No stored location";
   const date = new Date(value);
@@ -44,6 +47,9 @@ function formatTime(value: string | null) {
 }
 
 export default function AdminDevicesScreen() {
+  const styles = useStyles();
+  const colors = adminPalette(useTheme().colors);
+
   const router = useRouter();
   const { width } = useWindowDimensions();
   const desktop = width >= 1000;
@@ -263,6 +269,9 @@ export default function AdminDevicesScreen() {
 }
 
 function StateBlock({ title, description, loading = false, error = false }: { title: string; description?: string; loading?: boolean; error?: boolean }) {
+  const styles = useStyles();
+  const colors = adminPalette(useTheme().colors);
+
   return (
     <View style={styles.stateBlock}>
       <View style={[styles.stateIcon, error && styles.stateIconError]}>
@@ -274,7 +283,9 @@ function StateBlock({ title, description, loading = false, error = false }: { ti
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = adminPalette(__c);
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   scrollContent: { paddingBottom: 118 },
   page: {
@@ -410,4 +421,5 @@ const styles = StyleSheet.create({
   stateDescription: { color: colors.muted, fontSize: 12, lineHeight: 18, textAlign: "center", marginTop: 6, maxWidth: 440 },
   pressed: { opacity: 0.78, transform: [{ scale: 0.99 }] },
   disabled: { opacity: 0.5 },
+});
 });

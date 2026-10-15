@@ -23,6 +23,9 @@ import {
   guardianShadow as shadow,
 } from "../../constants/guardianDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { guardianPalette } from "../../theme/legacy";
+
 export type LocationMapCardProps = {
   location: LocationLog | null | undefined;
   height?: number;
@@ -80,6 +83,9 @@ export function LocationMapCard({
   batteryPercent = null,
   networkType = null,
 }: LocationMapCardProps) {
+  const styles = useStyles();
+  const colors = guardianPalette(useTheme().colors);
+
   const validLocation =
     Boolean(location) &&
     Number.isFinite(location?.latitude) &&
@@ -203,7 +209,9 @@ export function LocationMapCard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = guardianPalette(__c);
+  return StyleSheet.create({
   container: {
     overflow: "hidden",
     borderRadius: radius.xl,
@@ -350,4 +358,5 @@ const styles = StyleSheet.create({
     opacity: 0.84,
     transform: [{ scale: 0.98 }],
   },
+});
 });

@@ -7,6 +7,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors, radii, spacing, typography } from "../../constants/theme";
 import type { LocationLog } from "../../types/safetrack";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { themePalette, themeTypography } from "../../theme/legacy";
+
 interface LocationListItemProps {
   log: LocationLog;
 }
@@ -17,6 +20,9 @@ function formatDateTime(iso: string) {
 }
 
 export function LocationListItem({ log }: LocationListItemProps) {
+  const styles = useStyles();
+  const colors = themePalette(useTheme().colors);
+
   return (
     <View style={styles.container}>
       <View style={styles.iconWrap}>
@@ -32,7 +38,10 @@ export function LocationListItem({ log }: LocationListItemProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = themePalette(__c);
+  const typography = themeTypography(colors);
+  return StyleSheet.create({
   container: {
     flexDirection: "row",
     alignItems: "center",
@@ -59,4 +68,5 @@ const styles = StyleSheet.create({
   meta: {
     ...typography.caption,
   },
+});
 });

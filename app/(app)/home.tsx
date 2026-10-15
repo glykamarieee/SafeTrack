@@ -5,7 +5,13 @@ import { GuardianHome } from "../../components/dashboard/GuardianHome";
 import { AdminHome } from "../../components/dashboard/AdminHome";
 import { safeTrackColors as colors } from "../../constants/safeTrackDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { safeTrackPalette } from "../../theme/legacy";
+
 export default function HomeScreen() {
+  const styles = useStyles();
+  const colors = safeTrackPalette(useTheme().colors);
+
   const isBootstrapped = useAuthStore((state) => state.isBootstrapped);
   const role = useAuthStore((state) => state.role);
 
@@ -28,11 +34,14 @@ export default function HomeScreen() {
   return <Redirect href="/(auth)/login" />;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = safeTrackPalette(__c);
+  return StyleSheet.create({
   loading: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.background,
   },
+});
 });

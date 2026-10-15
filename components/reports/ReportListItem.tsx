@@ -8,6 +8,9 @@ import { Card } from "../common/Card";
 import { colors, radii, spacing, typography } from "../../constants/theme";
 import type { ActivityReport } from "../../types/safetrack";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { themePalette, themeTypography } from "../../theme/legacy";
+
 const TYPE_LABELS: Record<ActivityReport["type"], string> = {
   daily_summary: "Daily Summary",
   location_history: "Location History",
@@ -30,6 +33,9 @@ interface ReportListItemProps {
 }
 
 export function ReportListItem({ report }: ReportListItemProps) {
+  const styles = useStyles();
+  const colors = themePalette(useTheme().colors);
+
   const statusMeta = STATUS_META[report.status];
   return (
     <Card style={styles.card}>
@@ -53,7 +59,10 @@ export function ReportListItem({ report }: ReportListItemProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = themePalette(__c);
+  const typography = themeTypography(colors);
+  return StyleSheet.create({
   card: {
     marginBottom: spacing.md,
   },
@@ -99,4 +108,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
   },
+});
 });

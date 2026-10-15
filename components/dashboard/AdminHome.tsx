@@ -25,6 +25,9 @@ import {
   adminSpacing as spacing,
 } from "../../constants/adminDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { adminPalette } from "../../theme/legacy";
+
 function formatNumber(value: number) {
   return value.toLocaleString();
 }
@@ -103,6 +106,9 @@ const EMPTY_METRICS: AdminSummaryMetrics = {
 };
 
 export function AdminHome() {
+  const styles = useStyles();
+  const colors = adminPalette(useTheme().colors);
+
   const router = useRouter();
   const { width } = useWindowDimensions();
 
@@ -858,6 +864,8 @@ function OrbitNode({
   color: string;
   style: object;
 }) {
+  const styles = useStyles();
+
   const ratio =
     maxValue > 0 ? value / maxValue : 0;
 
@@ -909,6 +917,9 @@ function LedgerLine({
   value: number;
   last?: boolean;
 }) {
+  const styles = useStyles();
+  const colors = adminPalette(useTheme().colors);
+
   return (
     <View
       style={[
@@ -951,6 +962,8 @@ function LedgerMetric({
   accent: string;
   last?: boolean;
 }) {
+  const styles = useStyles();
+
   return (
     <View
       style={[
@@ -999,7 +1012,9 @@ function LedgerMetric({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = adminPalette(__c);
+  return StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
@@ -1891,4 +1906,5 @@ const styles = StyleSheet.create({
       },
     ],
   },
+});
 });

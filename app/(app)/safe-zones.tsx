@@ -44,6 +44,9 @@ import {
   safeTrackSpacing as spacing,
 } from "../../constants/safeTrackDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { safeTrackPalette } from "../../theme/legacy";
+
 /*
  * SafeTrack Safe Zone screen
  * --------------------------
@@ -252,6 +255,9 @@ function selectionLabel(source: PointSource): string {
 }
 
 export default function SafeZonesScreen() {
+  const styles = useStyles();
+  const colors = safeTrackPalette(useTheme().colors);
+
   const guardian = useAuthStore(
     (state) => state.guardian
   );
@@ -1581,7 +1587,9 @@ export default function SafeZonesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = safeTrackPalette(__c);
+  return StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.background,
@@ -2399,4 +2407,5 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.72,
   },
+});
 });

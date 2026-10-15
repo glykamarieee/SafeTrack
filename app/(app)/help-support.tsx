@@ -24,7 +24,13 @@ import {
 
 
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { guardianPalette } from "../../theme/legacy";
+
 export default function HelpSupportScreen() {
+  const styles = useStyles();
+  const colors = guardianPalette(useTheme().colors);
+
 
 
 
@@ -181,6 +187,9 @@ function SupportItem({
   title:string;
   description:string;
 }){
+  const styles = useStyles();
+  const colors = guardianPalette(useTheme().colors);
+
 
 
 return (
@@ -222,6 +231,8 @@ color={colors.primary}
 
 
 function Divider(){
+  const styles = useStyles();
+
 
 return (
 
@@ -235,7 +246,9 @@ return (
 
 
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = guardianPalette(__c);
+  return StyleSheet.create({
 
 safe:{
 flex:1,
@@ -369,4 +382,5 @@ opacity:0.8,
 },
 
 
+});
 });

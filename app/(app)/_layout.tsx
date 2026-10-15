@@ -6,26 +6,27 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../store/authStore";
 import { useGuardianPushRegistration } from "../../hooks/useGuardianPushRegistration";
 import { useGuardianSosRealtime } from "../../hooks/useGuardianSosRealtime";
-import { guardianColors } from "../../constants/guardianDesign";
-import { adminColors, adminLayout } from "../../constants/adminDesign";
+import { adminLayout } from "../../constants/adminDesign";
+import { fontStyle, useFontsReady } from "../../theme/fonts";
+import { useTheme } from "../../theme/ThemeProvider";
+import type { Palette } from "../../theme/tokens";
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
-function renderNavIcon(
-  outline: IconName,
-  filled: IconName = outline,
-  isAdmin = false,
-) {
-  return ({ color, size, focused }: { color: ColorValue; size: number; focused: boolean }) => (
-    <View
-      style={[
-        styles.iconShell,
-        isAdmin && styles.iconShellAdmin,
-        focused && styles.iconShellActive,
-        focused && isAdmin && styles.iconShellAdminActive,
-      ]}
-    >
-      <Ionicons name={focused ? filled : outline} size={size} color={color} />
+function renderNavIcon(outline: IconName, filled: IconName, mode: "bar" | "sidebar", colors: Palette, sidebarForest: boolean) {
+  return ({ color, focused }: { color: ColorValue; size: number; focused: boolean }) => (
+    <View style={styles.iconWrap}>
+      {/* A short green line above the active tab on phones. */}
+      {mode === "bar" && focused ? <View style={[styles.indicator, { backgroundColor: colors.primary }]} /> : null}
+      <View
+        style={[
+          styles.iconShell,
+          focused && mode === "bar" && { backgroundColor: colors.primaryTint },
+          focused && mode === "sidebar" && { backgroundColor: sidebarForest ? "rgba(61,220,132,0.14)" : colors.primaryTint },
+        ]}
+      >
+        <Ionicons name={focused ? filled : outline} size={22} color={focused && sidebarForest ? "#3DDC84" : color} />
+      </View>
     </View>
   );
 }
@@ -33,10 +34,15 @@ function renderNavIcon(
 export default function AppLayout() {
   const role = useAuthStore((state) => state.role);
   const { width } = useWindowDimensions();
+  const { colors, scheme } = useTheme();
+  const fontsReady = useFontsReady();
   const isAdmin = role === "admin";
   const isGuardian = role === "guardian";
   const wide = width >= adminLayout.sidebarBreakpoint;
-  const colors = isAdmin ? adminColors : guardianColors;
+  // The admin sidebar is forest green, as on the approved admin dashboard.
+  const forestSidebar = isAdmin && wide;
+  const mode = wide ? "sidebar" : "bar";
+  const icon = (outline: IconName, filled: IconName) => renderNavIcon(outline, filled, mode, colors, forestSidebar);
 
   const guardianId = useAuthStore((state) => state.guardian?.id);
 
@@ -47,44 +53,32 @@ export default function AppLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        sceneStyle: { backgroundColor: colors.background },
+        sceneStyle: { backgroundColor: colors.paper },
         tabBarPosition: wide ? "left" : "bottom",
         tabBarVariant: wide ? "material" : "uikit",
         tabBarLabelPosition: wide ? "beside-icon" : "below-icon",
-        tabBarActiveTintColor: isAdmin ? adminColors.primaryDark : guardianColors.primary,
-        tabBarInactiveTintColor: isAdmin ? adminColors.sidebarMuted : guardianColors.muted,
-        tabBarActiveBackgroundColor: isAdmin && wide ? "rgba(255,255,255,0.72)" : undefined,
+        tabBarActiveTintColor: forestSidebar ? "#FFFFFF" : colors.primary,
+        tabBarInactiveTintColor: forestSidebar ? "#BFD8C9" : colors.muted,
+        tabBarActiveBackgroundColor: forestSidebar ? "#1E4633" : wide ? colors.primaryTint : undefined,
         tabBarHideOnKeyboard: true,
-        tabBarLabelStyle: wide
-          ? [styles.desktopLabel, isAdmin && styles.desktopLabelAdmin]
-          : styles.mobileLabel,
-        tabBarItemStyle: wide
-          ? [styles.desktopItem, isAdmin && styles.desktopItemAdmin]
-          : styles.mobileItem,
+        tabBarLabelStyle: [wide ? styles.desktopLabel : styles.mobileLabel, fontStyle("700", fontsReady)],
+        tabBarItemStyle: wide ? styles.desktopItem : styles.mobileItem,
         tabBarStyle: wide
           ? [
               styles.sidebar,
-              isAdmin ? styles.sidebarAdmin : null,
               {
-                backgroundColor: isAdmin ? adminColors.sidebar : guardianColors.surface,
-                borderRightColor: isAdmin ? adminColors.sidebarBorder : guardianColors.border,
+                backgroundColor: forestSidebar ? (scheme === "dark" ? colors.forest : "#0D2A1E") : colors.surface,
+                borderRightColor: forestSidebar ? "transparent" : colors.rule,
               },
             ]
-          : [
-              styles.bottomBar,
-              isAdmin ? styles.bottomBarAdmin : null,
-              {
-                backgroundColor: isAdmin ? adminColors.surface : guardianColors.surface,
-                borderTopColor: isAdmin ? adminColors.border : guardianColors.border,
-              },
-            ],
+          : [styles.bottomBar, { backgroundColor: colors.surface, borderTopColor: colors.rule }],
       }}
     >
       <Tabs.Screen
         name="home"
         options={{
           title: isAdmin ? "Overview" : "Home",
-          tabBarIcon: renderNavIcon("home-outline", "home", isAdmin),
+          tabBarIcon: icon("home-outline", "home"),
         }}
       />
 
@@ -93,7 +87,7 @@ export default function AppLayout() {
         options={{
           title: "Location",
           href: isGuardian ? undefined : null,
-          tabBarIcon: renderNavIcon("location-outline", "location", isAdmin),
+          tabBarIcon: icon("location-outline", "location"),
         }}
       />
       <Tabs.Screen
@@ -101,7 +95,7 @@ export default function AppLayout() {
         options={{
           title: "Safety",
           href: isGuardian ? undefined : null,
-          tabBarIcon: renderNavIcon("shield-checkmark-outline", "shield-checkmark", isAdmin),
+          tabBarIcon: icon("shield-checkmark-outline", "shield-checkmark"),
         }}
       />
       <Tabs.Screen
@@ -109,7 +103,7 @@ export default function AppLayout() {
         options={{
           title: "Activity",
           href: isGuardian ? undefined : null,
-          tabBarIcon: renderNavIcon("time-outline", "time", isAdmin),
+          tabBarIcon: icon("time-outline", "time"),
         }}
       />
       <Tabs.Screen
@@ -117,7 +111,7 @@ export default function AppLayout() {
         options={{
           title: "Profile",
           href: isGuardian ? undefined : null,
-          tabBarIcon: renderNavIcon("person-outline", "person", isAdmin),
+          tabBarIcon: icon("person-outline", "person"),
         }}
       />
 
@@ -126,7 +120,7 @@ export default function AppLayout() {
         options={{
           title: "Guardians",
           href: isAdmin ? undefined : null,
-          tabBarIcon: renderNavIcon("people-outline", "people", true),
+          tabBarIcon: icon("people-outline", "people"),
         }}
       />
       <Tabs.Screen
@@ -134,7 +128,7 @@ export default function AppLayout() {
         options={{
           title: "Devices",
           href: isAdmin ? undefined : null,
-          tabBarIcon: renderNavIcon("watch-outline", "watch", true),
+          tabBarIcon: icon("watch-outline", "watch"),
         }}
       />
       <Tabs.Screen
@@ -142,7 +136,7 @@ export default function AppLayout() {
         options={{
           title: "Records",
           href: isAdmin ? undefined : null,
-          tabBarIcon: renderNavIcon("list-outline", "list", true),
+          tabBarIcon: icon("list-outline", "list"),
         }}
       />
       <Tabs.Screen
@@ -150,7 +144,7 @@ export default function AppLayout() {
         options={{
           title: "Reports",
           href: isAdmin ? undefined : null,
-          tabBarIcon: renderNavIcon("document-text-outline", "document-text", true),
+          tabBarIcon: icon("document-text-outline", "document-text"),
         }}
       />
       <Tabs.Screen
@@ -158,7 +152,7 @@ export default function AppLayout() {
         options={{
           title: "Admin",
           href: isAdmin ? undefined : null,
-          tabBarIcon: renderNavIcon("person-circle-outline", "person-circle", true),
+          tabBarIcon: icon("person-circle-outline", "person-circle"),
         }}
       />
 
@@ -189,79 +183,27 @@ export default function AppLayout() {
 
 const styles = StyleSheet.create({
   sidebar: {
-    width: 242,
-    paddingTop: Platform.OS === "web" ? 26 : 18,
+    width: 248,
+    paddingTop: Platform.OS === "web" ? 28 : 18,
     paddingHorizontal: 12,
     borderRightWidth: 1,
     borderTopWidth: 0,
     elevation: 0,
     shadowOpacity: 0,
   },
-  sidebarAdmin: {
-    width: 264,
-    paddingTop: Platform.OS === "web" ? 30 : 18,
-    paddingHorizontal: 14,
-  },
   bottomBar: {
-    height: 74,
-    paddingTop: 7,
-    paddingBottom: Platform.OS === "ios" ? 8 : 10,
+    height: 78,
+    paddingTop: 8,
+    paddingBottom: Platform.OS === "ios" ? 10 : 12,
     borderTopWidth: 1,
     elevation: 0,
     shadowOpacity: 0,
   },
-  bottomBarAdmin: {
-    height: 78,
-  },
-  desktopItem: {
-    minHeight: 54,
-    marginVertical: 3,
-    borderRadius: 14,
-  },
-  desktopItemAdmin: {
-    marginVertical: 4,
-    borderRadius: 16,
-    overflow: "hidden",
-  },
-  mobileItem: {
-    minHeight: 56,
-  },
-  desktopLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    letterSpacing: 0.1,
-  },
-  desktopLabelAdmin: {
-    fontSize: 12.5,
-    fontWeight: "800",
-    letterSpacing: 0.18,
-  },
-  mobileLabel: {
-    fontSize: 10,
-    fontWeight: "700",
-    marginTop: 1,
-  },
-  iconShell: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  iconShellAdmin: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.42)",
-    borderWidth: 1,
-    borderColor: "rgba(22,122,92,0.05)",
-  },
-  iconShellActive: {
-    backgroundColor: "rgba(31, 166, 117, 0.10)",
-  },
-  iconShellAdminActive: {
-    backgroundColor: "#DDF0E7",
-    borderWidth: 1,
-    borderColor: "#BDDCCF",
-  },
+  desktopItem: { minHeight: 48, marginVertical: 3, borderRadius: 14, overflow: "hidden" },
+  mobileItem: { minHeight: 56 },
+  desktopLabel: { fontSize: 13.5, letterSpacing: 0.1 },
+  mobileLabel: { fontSize: 11, marginTop: 2 },
+  iconWrap: { alignItems: "center" },
+  indicator: { position: "absolute", top: -9, width: 22, height: 3, borderRadius: 2 },
+  iconShell: { width: 38, height: 30, borderRadius: 12, alignItems: "center", justifyContent: "center" },
 });

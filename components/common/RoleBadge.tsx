@@ -7,6 +7,9 @@ import { ROLE_LABELS } from "../../constants/roles";
 import { colors, radii, spacing } from "../../constants/theme";
 import type { UserRole } from "../../types/safetrack";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { themePalette } from "../../theme/legacy";
+
 interface RoleBadgeProps {
   role: UserRole;
 }
@@ -18,6 +21,8 @@ const ROLE_COLORS: Record<UserRole, { bg: string; text: string }> = {
 };
 
 export function RoleBadge({ role }: RoleBadgeProps) {
+  const styles = useStyles();
+
   const palette = ROLE_COLORS[role];
   return (
     <View style={[styles.badge, { backgroundColor: palette.bg }]}>
@@ -26,7 +31,9 @@ export function RoleBadge({ role }: RoleBadgeProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = themePalette(__c);
+  return StyleSheet.create({
   badge: {
     alignSelf: "flex-start",
     paddingHorizontal: spacing.md,
@@ -37,4 +44,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
   },
+});
 });

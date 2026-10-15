@@ -1,45 +1,45 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  Pressable,
-  StyleSheet,
-  View,
-  useWindowDimensions,
-} from "react-native";
-import { Text } from "../ui/NativeText";
-import { LinearGradient } from "expo-linear-gradient";
+import { useEffect, useMemo, useState, type ComponentProps } from "react";
+import { Animated, Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuthStore } from "../../store/authStore";
 import { useLocationStore } from "../../store/locationStore";
 import { useSosStore } from "../../store/sosStore";
 import { useGeofenceStore } from "../../store/geofenceStore";
 import { useAnomalyStore } from "../../store/anomalyStore";
-import {
-  fetchSmartwatchForChild,
-  type SmartwatchStatus,
-} from "../../services/smartwatchService";
+import { fetchSmartwatchForChild, type SmartwatchStatus } from "../../services/smartwatchService";
 import { LocationMapCard } from "../location/LocationMapCard";
 import { MapAwareScrollView } from "../location/MapScrollLock";
-import { toZoneCircles } from "../location/zoneCircles";
+import { childRing, toZoneCircles } from "../location/zoneCircles";
+import { freshness } from "../location/mapTypes";
+import { Button } from "../ui/Button";
+import { Entrance } from "../ui/Entrance";
+import { MapPattern } from "../ui/MapPattern";
+import { StateRing } from "../ui/StateRing";
+import { Text } from "../ui/Text";
+import { usePressFeedback, usePulse } from "../../theme/motion";
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { radius, shadow, space, type ChildState } from "../../theme/tokens";
 
-import {
-  guardianColors as colors,
-  guardianRadius as radius,
-  guardianShadow as shadow,
-  guardianSpacing as spacing,
-} from "../../constants/guardianDesign";
+function minutesAgo(value?: string | null) {
+  if (!value) return null;
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return null;
+  return Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+}
 
-function formatTime(value?: string | null) {
-  if (!value) return "No recent update";
-  const timestamp = new Date(value).getTime();
-  if (!Number.isFinite(timestamp)) return "Latest stored update";
-  const minutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
-  if (minutes < 1) return "Updated just now";
-  if (minutes < 60) return `Updated ${minutes} min ago`;
+/** "2 min ago", "3 hrs ago": always the age of the latest location. */
+function ago(value?: string | null) {
+  const minutes = minutesAgo(value);
+  if (minutes === null) return null;
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `Updated ${hours} hr${hours === 1 ? "" : "s"} ago`;
-  return `Updated ${Math.floor(hours / 24)} day${hours < 48 ? "" : "s"} ago`;
+  if (hours < 24) return `${hours} hr${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
 function firstName(value?: string | null) {
@@ -53,10 +53,17 @@ function initials(value?: string | null) {
   return `${words[0][0]}${words[1][0]}`.toUpperCase();
 }
 
+function greeting() {
+  const hour = new Date().getHours();
+  return hour < 12 ? "Good morning," : hour < 18 ? "Good afternoon," : "Good evening,";
+}
+
 export function GuardianHome() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const wide = width >= 1040;
+  const { colors } = useTheme();
+  const styles = useStyles();
 
   const guardian = useAuthStore((state) => state.guardian);
   const child = useAuthStore((state) => state.linkedChildren?.[0] ?? null);
@@ -77,9 +84,7 @@ export function GuardianHome() {
   // Only a recent AI notice needs the guardian's attention on Home; older
   // ones stay in Activity History.
   const latestAnomaly =
-    storedAnomaly && Date.now() - Date.parse(storedAnomaly.occurredAt) < 24 * 60 * 60 * 1000
-      ? storedAnomaly
-      : null;
+    storedAnomaly && Date.now() - Date.parse(storedAnomaly.occurredAt) < 24 * 60 * 60 * 1000 ? storedAnomaly : null;
   const loadAnomaly = useAnomalyStore((state) => state.loadForChild);
 
   const [watch, setWatch] = useState<SmartwatchStatus | null>(null);
@@ -106,636 +111,410 @@ export function GuardianHome() {
 
   const zoneCircles = useMemo(() => toZoneCircles(zones, zoneEvents), [zones, zoneEvents]);
 
-  const activeSOS = useMemo(
-    () => sosAlerts.find((item) => item.status === "active"),
-    [sosAlerts],
-  );
+  const activeSOS = useMemo(() => sosAlerts.find((item) => item.status === "active"), [sosAlerts]);
 
-  const safetyTone = !child
+  // The same rule as the map marker: SOS, then stale, then the server's
+  // latest zone entry/exit.
+  const ring = childRing(zoneCircles, { sosActive: Boolean(activeSOS), freshness: freshness(latestLocation?.recordedAt) });
+  const state: ChildState =
+    ring === "sos" ? "sos" : ring === "stale" ? "offline" : ring === "inside" ? "inside" : ring === "outside" ? "outside" : "unknown";
+  const insideZone = zoneCircles.find((circle) => circle.status === "inside");
+  const age = ago(latestLocation?.recordedAt);
+
+  const statusLine = !child
     ? "Register a child to begin"
     : activeSOS
       ? "SOS needs attention"
-      : latestAnomaly
-        ? "Review a safety notice"
-        : "No active SOS or anomaly notice";
+      : !latestLocation || !age
+        ? "Waiting for the first location"
+        : state === "offline"
+          ? `Last seen ${age}`
+          : state === "inside"
+            ? `Safe at ${insideZone?.label ?? "a safe zone"} · ${age}`
+            : state === "outside"
+              ? `Outside safe zones · ${age}`
+              : `Updated ${age}`;
 
-  const safetyIcon: keyof typeof Ionicons.glyphMap = activeSOS
-    ? "warning"
-    : latestAnomaly
-      ? "analytics-outline"
-      : "shield-checkmark";
-
-  const watchStatus = !child
-    ? "No child setup"
+  const statusTone = state === "sos" ? "danger" : state === "outside" ? "warning" : state === "offline" ? "muted" : "primary";
+  const dotColor =
+    state === "sos" ? colors.danger : state === "outside" ? colors.warningFill : state === "offline" ? colors.offline : colors.brand;
+  const deviceLine = !child
+    ? null
     : !hasWatch
-      ? "Phone source"
+      ? "Location from the child's phone"
       : watch?.connectionStatus === "connected"
         ? "Watch connected"
         : "Watch not recently connected";
 
   return (
-    <MapAwareScrollView
-      showsVerticalScrollIndicator={false}
-      contentContainerStyle={styles.container}
-    >
-      <View style={styles.topbar}>
-        <View>
-          <Text style={styles.brand}>SAFETRACK</Text>
-          <Text style={styles.greeting}>Hi, {firstName(guardian?.fullName)}</Text>
-        </View>
+    <MapAwareScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+      {activeSOS ? <SosBand childName={child?.fullName ?? "Your child"} onOpen={() => router.push("/(app)/sos-alerts")} /> : null}
 
-        <Pressable
-          accessibilityLabel="Open notifications"
-          style={({ pressed }) => [styles.notificationButton, pressed && styles.pressed]}
-          onPress={() => router.push("/(app)/notifications")}
-        >
-          <Ionicons name="notifications-outline" size={23} color={colors.primaryDeep} />
-          {(activeSOS || latestAnomaly) && <View style={styles.notificationDot} />}
-        </Pressable>
-      </View>
-
-      <LinearGradient
-        colors={[colors.heroTop, colors.heroBottom]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.hero}
-      >
-        <View style={styles.heroGlowOne} />
-        <View style={styles.heroGlowTwo} />
-
-        <View style={styles.heroTopRow}>
-          <View style={styles.childAvatar}>
-            <Text style={styles.childAvatarText}>{initials(child?.fullName)}</Text>
-          </View>
-
-          <View style={styles.childCopy}>
-            <Text style={styles.heroKicker}>MONITORING</Text>
-            <Text numberOfLines={1} style={styles.childName}>
-              {child?.fullName ?? "Register a child profile"}
-            </Text>
-            {child ? (
-              <Text style={styles.childMeta}>
-                {child.age ?? "—"} years old
-                {child.relationship ? `  •  ${child.relationship}` : ""}
+      <SafeAreaView edges={activeSOS ? [] : ["top"]} style={styles.header}>
+        <MapPattern opacity={0.08} />
+        <View style={styles.headerRow}>
+          <View style={styles.guardianRow}>
+            <View style={styles.guardianAvatar}>
+              <Text variant="label" tone="primary" weight="800" style={styles.guardianInitials}>
+                {initials(guardian?.fullName)}
               </Text>
-            ) : null}
+            </View>
+            <View>
+              <Text variant="label" weight="500" style={styles.headerSoft}>
+                {greeting()}
+              </Text>
+              <Text variant="heading" weight="800" style={styles.headerName}>
+                {firstName(guardian?.fullName)}
+              </Text>
+            </View>
           </View>
-
           <Pressable
-            accessibilityLabel="Edit child profile"
-            style={({ pressed }) => [styles.heroEdit, pressed && styles.pressed]}
-            onPress={() => {
-              if (!child) return;
-              router.push({
-                pathname: "/(app)/edit-child-profile",
-                params: { childId: child.id, section: "details" },
-              });
-            }}
+            accessibilityRole="button"
+            accessibilityLabel={activeSOS || latestAnomaly ? "Open notifications, new alerts" : "Open notifications"}
+            onPress={() => router.push("/(app)/notifications")}
+            style={({ pressed }) => [styles.bell, pressed && styles.pressed]}
           >
-            <Ionicons name="create-outline" size={18} color={colors.white} />
+            <Ionicons name="notifications-outline" size={22} color="#FFFFFF" />
+            {activeSOS || latestAnomaly ? <View style={[styles.bellDot, { backgroundColor: activeSOS ? "#FF6B5C" : "#3DDC84" }]} /> : null}
           </Pressable>
         </View>
+      </SafeAreaView>
 
-        <View style={styles.statusStrip}>
-          <View style={styles.statusItem}>
-            <View
-              style={[
-                styles.statusIcon,
-                activeSOS
-                  ? styles.statusIconDanger
-                  : latestAnomaly
-                    ? styles.statusIconWarning
-                    : styles.statusIconGreen,
-              ]}
-            >
-              <Ionicons
-                name={safetyIcon}
-                size={15}
-                color={
-                  activeSOS
-                    ? colors.dangerDark
-                    : latestAnomaly
-                      ? colors.warning
-                      : colors.primaryDeep
-                }
+      <View style={styles.body}>
+        <Entrance index={0} style={styles.childCard}>
+          {child ? (
+            <>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${child.fullName}. ${statusLine}. Edit child profile`}
+                onPress={() => router.push({ pathname: "/(app)/edit-child-profile", params: { childId: child.id, section: "details" } })}
+                style={styles.childRow}
+              >
+                <StateRing
+                  name={child.fullName}
+                  photoUrl={child.avatarUrl}
+                  state={state}
+                  size={60}
+                  live={state === "inside" || state === "outside"}
+                />
+                <View style={styles.childCopy}>
+                  <Text variant="heading" weight="800" numberOfLines={1}>
+                    {child.fullName}
+                  </Text>
+                  <View style={styles.statusRow}>
+                    <View style={[styles.statusDot, { backgroundColor: dotColor }]} />
+                    <Text variant="label" tone={statusTone} weight="600" numberOfLines={1} style={styles.flex}>
+                      {statusLine}
+                    </Text>
+                  </View>
+                </View>
+                {watch?.batteryPercent != null ? (
+                  <View style={styles.battery}>
+                    <Text variant="heading" weight="800" tabular>
+                      {watch.batteryPercent}%
+                    </Text>
+                    <Text variant="legend">Watch</Text>
+                  </View>
+                ) : (
+                  <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+                )}
+              </Pressable>
+
+              <View style={styles.stats}>
+                <Stat label="Safe zones" value={String(zones.length)} onPress={() => router.push("/(app)/safe-zones")} />
+                <View style={styles.statRule} />
+                <Stat
+                  label="SOS"
+                  value={activeSOS ? "Active" : "Clear"}
+                  tone={activeSOS ? "danger" : "ink"}
+                  onPress={() => router.push("/(app)/sos-alerts")}
+                />
+                <View style={styles.statRule} />
+                <Stat
+                  label="AI notice"
+                  value={latestAnomaly ? "Review" : "None"}
+                  tone={latestAnomaly ? "warning" : "ink"}
+                  onPress={() => router.push("/(app)/anomaly-details")}
+                />
+              </View>
+            </>
+          ) : (
+            <View style={styles.empty}>
+              <View style={styles.emptyIcon}>
+                <Ionicons name="person-add-outline" size={26} color={colors.primary} />
+              </View>
+              <Text variant="heading">Register your child</Text>
+              <Text variant="body" align="center">
+                Add your child and link their SafeTrack watch or phone to see their latest location here.
+              </Text>
+              <Button label="Register your child" icon="person-add-outline" onPress={() => router.push("/(auth)/child-registration")} block />
+            </View>
+          )}
+        </Entrance>
+
+        {child ? (
+          <>
+            <Entrance index={1} style={styles.sectionHeader}>
+              <View style={styles.flex}>
+                <Text variant="heading" weight="800">
+                  Latest location
+                </Text>
+                <Text variant="caption">
+                  {latestLocation && age
+                    ? `Updated ${age} · from ${latestLocation.source === "smartwatch" ? "watch" : "phone"} · not real-time`
+                    : "Waiting for the child's device to send a location"}
+                </Text>
+              </View>
+              <Pressable accessibilityRole="link" onPress={() => router.push("/(app)/location")} hitSlop={8} style={styles.linkRow}>
+                <Text variant="label" tone="primary" weight="800">
+                  Open map
+                </Text>
+                <Ionicons name="arrow-forward" size={15} color={colors.primary} />
+              </Pressable>
+            </Entrance>
+
+            <Entrance index={2}>
+              <LocationMapCard
+                location={latestLocation}
+                loading={locationLoading}
+                trackingSource={trackingSource === "mobile" || trackingSource === "both" ? trackingSource : "smartwatch"}
+                height={wide ? 460 : 330}
+                onRefresh={() => child && loadLocation(child.id, child.fullName)}
+                zones={zoneCircles}
+                avatarPath={child?.avatarPath}
+                avatarUrl={child?.avatarUrl}
+                sosActive={Boolean(activeSOS)}
+                batteryPercent={watch?.batteryPercent ?? null}
+                networkType={watch?.networkType ?? null}
               />
-            </View>
-            <View style={styles.statusCopy}>
-              <Text style={styles.statusLabel}>Safety pulse</Text>
-              <Text numberOfLines={1} style={styles.statusValue}>{safetyTone}</Text>
-            </View>
-          </View>
+            </Entrance>
 
-          <View style={styles.statusDivider} />
+            <Entrance index={3} style={styles.tiles}>
+              <Tile icon="radio-button-on-outline" label="Safe zones" onPress={() => router.push("/(app)/safe-zones")} />
+              <Tile icon="time-outline" label="Activity" detail={`${locationHistory.length} records`} onPress={() => router.push("/(app)/history")} />
+              <Tile
+                icon="key-outline"
+                label="Connect"
+                onPress={() => router.push({ pathname: "/(app)/device-connection-code", params: { childId: child.id, section: "details" } })}
+              />
+              <Tile icon="notifications-outline" label="Notices" strong onPress={() => router.push("/(app)/notifications")} />
+            </Entrance>
 
-          <View style={styles.statusItem}>
-            <View style={styles.statusIcon}>
-              <Ionicons name={hasWatch ? "watch-outline" : "phone-portrait-outline"} size={15} color={colors.white} />
-            </View>
-            <View style={styles.statusCopy}>
-              <Text style={styles.statusLabel}>Device</Text>
-              <Text numberOfLines={1} style={styles.statusValue}>{watchStatus}</Text>
-            </View>
-          </View>
-        </View>
-      </LinearGradient>
-
-      <View style={styles.sectionHeaderRow}>
-        <View>
-          <Text style={styles.sectionEyebrow}>LIVE LOCATION</Text>
-          <Text style={styles.sectionTitle}>Latest available position</Text>
-        </View>
-        <Pressable
-          style={({ pressed }) => [styles.textButton, pressed && styles.pressed]}
-          onPress={() => router.push("/(app)/location")}
-        >
-          <Text style={styles.textButtonLabel}>Open map</Text>
-          <Ionicons name="arrow-forward" size={15} color={colors.primaryDark} />
-        </Pressable>
-      </View>
-
-      <LocationMapCard
-        location={latestLocation}
-        loading={locationLoading}
-        trackingSource={
-          trackingSource === "mobile" || trackingSource === "both"
-            ? trackingSource
-            : "smartwatch"
-        }
-        height={wide ? 500 : 385}
-        onRefresh={() => child && loadLocation(child.id, child.fullName)}
-        zones={zoneCircles}
-        avatarPath={child?.avatarPath}
-        avatarUrl={child?.avatarUrl}
-        sosActive={Boolean(activeSOS)}
-        batteryPercent={watch?.batteryPercent ?? null}
-        networkType={watch?.networkType ?? null}
-      />
-
-      <View style={styles.locationFootnote}>
-        <Ionicons name="time-outline" size={15} color={colors.primaryDark} />
-        <Text style={styles.locationFootnoteText}>
-          {latestLocation
-            ? `${formatTime(latestLocation.recordedAt)} • ${latestLocation.source === "smartwatch" ? "Smartwatch" : "Mobile device"}`
-            : "Waiting for the registered child device to send a location update."}
-        </Text>
-      </View>
-
-      <View style={styles.sectionHeaderRowCompact}>
-        <View>
-          <Text style={styles.sectionEyebrow}>AT A GLANCE</Text>
-          <Text style={styles.sectionTitle}>Safety summary</Text>
-        </View>
-      </View>
-
-      <View style={styles.summaryRail}>
-        <Pressable
-          style={({ pressed }) => [styles.summaryItem, pressed && styles.pressed]}
-          onPress={() => router.push("/(app)/safe-zones")}
-        >
-          <View style={[styles.summaryIcon, { backgroundColor: colors.softMint }]}> 
-            <Ionicons name="map-outline" size={20} color={colors.primaryDark} />
-          </View>
-          <Text style={styles.summaryValue}>{zones.length}</Text>
-          <Text style={styles.summaryLabel}>Safe zones</Text>
-        </Pressable>
-
-        <View style={styles.summaryLine} />
-
-        <Pressable
-          style={({ pressed }) => [styles.summaryItem, pressed && styles.pressed]}
-          onPress={() => router.push("/(app)/anomaly-details")}
-        >
-          <View style={[styles.summaryIcon, { backgroundColor: latestAnomaly ? colors.warningSoft : colors.softMint }]}> 
-            <Ionicons name="sparkles-outline" size={20} color={latestAnomaly ? colors.warning : colors.primaryDark} />
-          </View>
-          <Text style={styles.summaryValue}>{latestAnomaly ? "Review" : "No notice"}</Text>
-          <Text style={styles.summaryLabel}>AI notice</Text>
-        </Pressable>
-
-        <View style={styles.summaryLine} />
-
-        <Pressable
-          style={({ pressed }) => [styles.summaryItem, pressed && styles.pressed]}
-          onPress={() => router.push("/(app)/sos-alerts")}
-        >
-          <View style={[styles.summaryIcon, { backgroundColor: activeSOS ? colors.dangerSoft : colors.softMint }]}> 
-            <Ionicons name="warning-outline" size={20} color={activeSOS ? colors.danger : colors.primaryDark} />
-          </View>
-          <Text style={styles.summaryValue}>{activeSOS ? "Active" : "Clear"}</Text>
-          <Text style={styles.summaryLabel}>SOS status</Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.activityBand}>
-        <View style={styles.activityBandIcon}>
-          <Ionicons name="pulse-outline" size={23} color={colors.primaryDark} />
-        </View>
-        <View style={styles.activityBandCopy}>
-          <Text style={styles.activityBandTitle}>Recent recorded activity</Text>
-          <Text style={styles.activityBandText}>
-            {locationHistory.length} recent location record{locationHistory.length === 1 ? "" : "s"} • {sosAlerts.length} SOS record{sosAlerts.length === 1 ? "" : "s"}
-          </Text>
-        </View>
-        <Pressable
-          accessibilityLabel="Open activity history"
-          style={({ pressed }) => [styles.activityArrow, pressed && styles.pressed]}
-          onPress={() => router.push("/(app)/history")}
-        >
-          <Ionicons name="arrow-forward" size={19} color={colors.primaryDeep} />
-        </Pressable>
-      </View>
-
-      <Text style={styles.sectionEyebrow}>QUICK ACTIONS</Text>
-      <View style={styles.quickActions}>
-        <Pressable
-          style={({ pressed }) => [styles.quickAction, pressed && styles.pressed]}
-          onPress={() => router.push("/(app)/safe-zones")}
-        >
-          <View style={styles.quickIcon}><Ionicons name="add-circle-outline" size={19} color={colors.primaryDark} /></View>
-          <Text style={styles.quickLabel}>Safe zones</Text>
-        </Pressable>
-
-        <Pressable
-          style={({ pressed }) => [styles.quickAction, pressed && styles.pressed]}
-          onPress={() => {
-            if (!child) return;
-            router.push({
-              pathname: "/(app)/device-connection-code",
-              params: { childId: child.id, section: "details" },
-            });
-          }}
-        >
-          <View style={styles.quickIcon}><Ionicons name="key-outline" size={19} color={colors.primaryDark} /></View>
-          <Text style={styles.quickLabel}>Connection code</Text>
-        </Pressable>
-
-        <Pressable
-          style={({ pressed }) => [styles.quickAction, pressed && styles.pressed]}
-          onPress={() => router.push("/(app)/notifications")}
-        >
-          <View style={styles.quickIcon}><Ionicons name="notifications-outline" size={19} color={colors.primaryDark} /></View>
-          <Text style={styles.quickLabel}>Notices</Text>
-        </Pressable>
+            {deviceLine ? (
+              <Entrance index={4} style={styles.deviceLine}>
+                <Ionicons name={hasWatch ? "watch-outline" : "phone-portrait-outline"} size={15} color={colors.muted} />
+                <Text variant="caption">{deviceLine}</Text>
+              </Entrance>
+            ) : null}
+          </>
+        ) : null}
       </View>
     </MapAwareScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    width: "100%",
-    maxWidth: 1160,
-    alignSelf: "center",
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: 128,
-    backgroundColor: colors.background,
-  },
-  topbar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 18,
-  },
-  brand: {
-    color: colors.primary,
-    fontSize: 10.5,
-    fontWeight: "900",
-    letterSpacing: 1.5,
-  },
-  greeting: {
-    marginTop: 3,
-    color: colors.ink,
-    fontSize: 29,
-    lineHeight: 34,
-    fontWeight: "900",
-    letterSpacing: -0.6,
-  },
-  notificationButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadow.soft,
-  },
-  notificationDot: {
-    position: "absolute",
-    right: 10,
-    top: 9,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.danger,
-    borderWidth: 2,
-    borderColor: colors.white,
-  },
-  hero: {
-    minHeight: 215,
-    borderRadius: radius.xl,
-    padding: 20,
-    overflow: "hidden",
-    marginBottom: 28,
-    ...shadow.floating,
-  },
-  heroGlowOne: {
-    position: "absolute",
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    right: -55,
-    top: -72,
-    backgroundColor: "rgba(117, 235, 174, 0.12)",
-  },
-  heroGlowTwo: {
-    position: "absolute",
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    left: -52,
-    bottom: -88,
-    backgroundColor: "rgba(255,255,255,0.07)",
-  },
-  heroTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  childAvatar: {
-    width: 58,
-    height: 58,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,.5)",
-  },
-  childAvatarText: {
-    color: colors.primaryDark,
-    fontSize: 19,
-    fontWeight: "900",
-    letterSpacing: 0.4,
-  },
-  childCopy: {
-    flex: 1,
-    minWidth: 0,
-    marginLeft: 13,
-  },
-  heroKicker: {
-    color: "rgba(255,255,255,.68)",
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 1.5,
-  },
-  childName: {
-    marginTop: 3,
-    color: colors.white,
-    fontSize: 23,
-    lineHeight: 28,
-    fontWeight: "900",
-  },
-  childMeta: {
-    marginTop: 3,
-    color: "rgba(255,255,255,.72)",
-    fontSize: 11.5,
-    fontWeight: "600",
-  },
-  heroEdit: {
-    width: 39,
-    height: 39,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,.12)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,.18)",
-  },
-  statusStrip: {
-    marginTop: 24,
-    paddingVertical: 13,
-    paddingHorizontal: 12,
-    borderRadius: 21,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(4,37,27,.26)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,.09)",
-  },
-  statusItem: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  statusIcon: {
-    width: 31,
-    height: 31,
-    borderRadius: 11,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,.12)",
-  },
-  statusIconGreen: {
-    backgroundColor: colors.mintGlow,
-  },
-  statusIconWarning: {
-    backgroundColor: colors.warningSoft,
-  },
-  statusIconDanger: {
-    backgroundColor: colors.dangerSoft,
-  },
-  statusCopy: {
-    flex: 1,
-    minWidth: 0,
-    marginLeft: 8,
-  },
-  statusLabel: {
-    color: "rgba(255,255,255,.58)",
-    fontSize: 8.5,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
-  statusValue: {
-    marginTop: 2,
-    color: colors.white,
-    fontSize: 10.5,
-    fontWeight: "800",
-  },
-  statusDivider: {
-    width: 1,
-    height: 34,
-    marginHorizontal: 10,
-    backgroundColor: "rgba(255,255,255,.14)",
-  },
-  sectionHeaderRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    marginBottom: 13,
-  },
-  sectionHeaderRowCompact: {
-    marginTop: 30,
-    marginBottom: 14,
-  },
-  sectionEyebrow: {
-    color: colors.primaryDark,
-    fontSize: 9.5,
-    fontWeight: "900",
-    letterSpacing: 1.35,
-  },
-  sectionTitle: {
-    marginTop: 3,
-    color: colors.ink,
-    fontSize: 18,
-    fontWeight: "900",
-    letterSpacing: -0.2,
-  },
-  textButton: {
-    minHeight: 36,
-    paddingHorizontal: 11,
-    borderRadius: radius.pill,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.surfaceMuted,
-  },
-  textButtonLabel: {
-    marginRight: 4,
-    color: colors.primaryDark,
-    fontSize: 10.5,
-    fontWeight: "900",
-  },
-  locationFootnote: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 12,
-    paddingHorizontal: 4,
-  },
-  locationFootnoteText: {
-    flex: 1,
-    marginLeft: 7,
-    color: colors.muted,
-    fontSize: 10.5,
-    lineHeight: 15,
-  },
-  summaryRail: {
-    minHeight: 116,
-    borderRadius: radius.lg,
-    flexDirection: "row",
-    alignItems: "stretch",
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadow.soft,
-  },
-  summaryItem: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 5,
-  },
-  summaryIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  summaryValue: {
-    marginTop: 8,
-    color: colors.ink,
-    fontSize: 13.5,
-    fontWeight: "900",
-  },
-  summaryLabel: {
-    marginTop: 2,
-    color: colors.muted,
-    fontSize: 9.5,
-    fontWeight: "700",
-  },
-  summaryLine: {
-    width: 1,
-    marginVertical: 18,
-    backgroundColor: colors.border,
-  },
-  activityBand: {
-    marginTop: 16,
-    marginBottom: 28,
-    padding: 15,
-    borderRadius: 22,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.softMint,
-  },
-  activityBandIcon: {
-    width: 45,
-    height: 45,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.white,
-  },
-  activityBandCopy: {
-    flex: 1,
-    marginLeft: 11,
-  },
-  activityBandTitle: {
-    color: colors.ink,
-    fontSize: 12.5,
-    fontWeight: "900",
-  },
-  activityBandText: {
-    marginTop: 3,
-    color: colors.muted,
-    fontSize: 10.5,
-    lineHeight: 15,
-  },
-  activityArrow: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.white,
-  },
-  quickActions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 10,
-  },
-  quickAction: {
-    minHeight: 43,
-    paddingHorizontal: 11,
-    borderRadius: radius.pill,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  quickIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.surfaceMuted,
-  },
-  quickLabel: {
-    marginLeft: 7,
-    color: colors.ink,
-    fontSize: 10.5,
-    fontWeight: "800",
-  },
-  pressed: {
-    opacity: 0.82,
-    transform: [{ scale: 0.985 }],
-  },
-});
+/** Full-width red band at the very top while an SOS is active. */
+function SosBand({ childName, onOpen }: { childName: string; onOpen: () => void }) {
+  const styles = useStyles();
+  const pulse = usePulse(true, 1400);
+
+  return (
+    <SafeAreaView edges={["top"]} style={styles.sosBand}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`SOS active. ${childName} needs help. Open SOS alerts`}
+        onPress={onOpen}
+        style={styles.sosRow}
+      >
+        <View style={styles.sosIconWrap}>
+          <Animated.View
+            style={[
+              styles.sosHalo,
+              {
+                opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] }),
+                transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.8] }) }],
+              },
+            ]}
+          />
+          <Ionicons name="alert" size={20} color="#B42318" />
+        </View>
+        <View style={styles.flex}>
+          <Text variant="legend" style={styles.sosEyebrow}>
+            SOS · Active
+          </Text>
+          <Text variant="body" weight="800" style={styles.white} numberOfLines={1}>
+            {childName} needs help
+          </Text>
+        </View>
+        <View style={styles.sosOpen}>
+          <Text variant="label" weight="800" style={styles.sosOpenText}>
+            Open
+          </Text>
+        </View>
+      </Pressable>
+    </SafeAreaView>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  tone = "ink",
+  onPress,
+}: {
+  label: string;
+  value: string;
+  tone?: "ink" | "danger" | "warning";
+  onPress: () => void;
+}) {
+  const styles = useStyles();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${label}: ${value}`}
+      onPress={onPress}
+      style={({ pressed }) => [styles.stat, pressed && styles.pressed]}
+    >
+      <Text variant="heading" weight="800" tone={tone} tabular numberOfLines={1} style={styles.statValue}>
+        {value}
+      </Text>
+      <Text variant="legend">{label}</Text>
+    </Pressable>
+  );
+}
+
+function Tile({
+  icon,
+  label,
+  detail,
+  strong,
+  onPress,
+}: {
+  icon: ComponentProps<typeof Ionicons>["name"];
+  label: string;
+  detail?: string;
+  strong?: boolean;
+  onPress: () => void;
+}) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+  const press = usePressFeedback();
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={detail ? `${label}, ${detail}` : label}
+      onPress={onPress}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      style={styles.tileCell}
+    >
+      <Animated.View style={[styles.tile, press.style]}>
+        <View style={[styles.tileIcon, strong && { backgroundColor: colors.forest }]}>
+          <Ionicons name={icon} size={20} color={strong ? "#3DDC84" : colors.primary} />
+        </View>
+        <Text variant="caption" tone="ink" weight="700" numberOfLines={1}>
+          {label}
+        </Text>
+        {detail ? (
+          <Text variant="caption" numberOfLines={1} style={styles.tileDetail}>
+            {detail}
+          </Text>
+        ) : null}
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+const useStyles = makeStyles((c, scheme) =>
+  StyleSheet.create({
+    scroll: { flexGrow: 1, paddingBottom: 120, backgroundColor: c.paper },
+    flex: { flex: 1 },
+    white: { color: "#FFFFFF" },
+    pressed: { opacity: 0.8 },
+    header: {
+      backgroundColor: scheme === "dark" ? c.forest : "#15803D",
+      paddingHorizontal: space.gutter + 4,
+      paddingBottom: 96,
+      borderBottomLeftRadius: radius.lg + 2,
+      borderBottomRightRadius: radius.lg + 2,
+      overflow: "hidden",
+    },
+    headerRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingTop: space.lg,
+      width: "100%",
+      maxWidth: 1080,
+      alignSelf: "center",
+    },
+    guardianRow: { flexDirection: "row", alignItems: "center", gap: space.md },
+    guardianAvatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },
+    guardianInitials: { color: "#15803D" },
+    headerSoft: { color: "#D5F0DE" },
+    headerName: { color: "#FFFFFF", fontSize: 20, lineHeight: 26 },
+    bell: { width: 46, height: 46, borderRadius: 23, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.16)" },
+    bellDot: {
+      position: "absolute",
+      top: 10,
+      right: 11,
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      borderWidth: 2,
+      borderColor: scheme === "dark" ? c.forest : "#15803D",
+    },
+    body: { width: "100%", maxWidth: 1080, alignSelf: "center", paddingHorizontal: space.gutter, gap: space.lg, marginTop: -76 },
+    childCard: {
+      backgroundColor: c.surface,
+      borderRadius: radius.md + 2,
+      padding: space.lg + 2,
+      gap: space.lg,
+      ...(scheme === "dark" ? { borderWidth: 1, borderColor: c.rule } : shadow(scheme, "float")),
+    },
+    childRow: { flexDirection: "row", alignItems: "center", gap: space.md + 2 },
+    childCopy: { flex: 1, minWidth: 0, gap: 3 },
+    statusRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+    statusDot: { width: 8, height: 8, borderRadius: 4 },
+    battery: { alignItems: "flex-end" },
+    stats: { flexDirection: "row", borderTopWidth: 1, borderTopColor: c.rule, paddingTop: space.md },
+    stat: { flex: 1, gap: 2, paddingVertical: space.xs },
+    statValue: { fontSize: 20, lineHeight: 26 },
+    statRule: { width: 1, backgroundColor: c.rule, marginHorizontal: space.md },
+    empty: { alignItems: "center", gap: space.md, paddingVertical: space.md },
+    emptyIcon: { width: 60, height: 60, borderRadius: 20, backgroundColor: c.primaryTint, alignItems: "center", justifyContent: "center" },
+    sectionHeader: { flexDirection: "row", alignItems: "flex-end", gap: space.md, marginTop: space.sm },
+    linkRow: { flexDirection: "row", alignItems: "center", gap: 4, minHeight: 36 },
+    tiles: { flexDirection: "row", gap: space.sm + 2 },
+    tileCell: { flex: 1 },
+    tile: {
+      alignItems: "center",
+      gap: space.sm,
+      paddingVertical: space.md + 2,
+      paddingHorizontal: space.xs,
+      borderRadius: radius.md - 2,
+      backgroundColor: c.surface,
+      ...(scheme === "dark" ? { borderWidth: 1, borderColor: c.rule } : shadow(scheme)),
+    },
+    tileIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: c.primaryTint },
+    tileDetail: { marginTop: -6 },
+    deviceLine: { flexDirection: "row", alignItems: "center", gap: 6, justifyContent: "center" },
+    sosBand: { backgroundColor: "#B42318" },
+    sosRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: space.md,
+      paddingHorizontal: space.gutter + 4,
+      paddingVertical: space.md,
+      width: "100%",
+      maxWidth: 1080,
+      alignSelf: "center",
+    },
+    sosIconWrap: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },
+    sosHalo: { position: "absolute", width: 40, height: 40, borderRadius: 20, backgroundColor: "#FFFFFF" },
+    sosEyebrow: { color: "#FFE1DD" },
+    sosOpen: { paddingHorizontal: space.lg, minHeight: 36, borderRadius: radius.pill, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },
+    sosOpenText: { color: "#B42318" },
+  }),
+);

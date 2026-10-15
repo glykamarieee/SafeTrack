@@ -16,6 +16,9 @@ import {
   childSpacing as spacing,
 } from "../../constants/childDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { childPalette } from "../../theme/legacy";
+
 function displayForStatus(status: string | undefined) {
   if (status === "inside") {
     return {
@@ -66,6 +69,9 @@ function dateTime(value: string | null | undefined) {
 }
 
 export default function ChildSafetyScreen() {
+  const styles = useStyles();
+  const colors = childPalette(useTheme().colors);
+
   const safeZoneStatus = useChildMobileStore((state) => state.safeZoneStatus);
   const latestLocation = useChildMobileStore((state) => state.latestLocation);
   const sendLocation = useChildMobileStore((state) => state.sendLocation);
@@ -181,6 +187,9 @@ function InfoRow({
   title: string;
   value: string;
 }) {
+  const styles = useStyles();
+  const colors = childPalette(useTheme().colors);
+
   return (
     <View style={styles.infoRow}>
       <View style={styles.infoIcon}>
@@ -194,7 +203,9 @@ function InfoRow({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = childPalette(__c);
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.canvas },
   content: {
     width: "100%",
@@ -253,4 +264,5 @@ const styles = StyleSheet.create({
   noteText: { flex: 1, color: colors.muted, fontSize: 10.5, lineHeight: 16, marginLeft: 8 },
   pressed: { opacity: 0.72 },
   disabled: { opacity: 0.56 },
+});
 });

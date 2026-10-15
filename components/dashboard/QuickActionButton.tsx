@@ -7,6 +7,9 @@ import { Text } from "../ui/NativeText";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, radii, spacing, typography } from "../../constants/theme";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { themePalette, themeTypography } from "../../theme/legacy";
+
 interface QuickActionButtonProps {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
@@ -14,6 +17,9 @@ interface QuickActionButtonProps {
 }
 
 export function QuickActionButton({ icon, label, onPress }: QuickActionButtonProps) {
+  const styles = useStyles();
+  const colors = themePalette(useTheme().colors);
+
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.button, pressed && styles.pressed]}>
       <View style={styles.iconWrap}>
@@ -25,7 +31,10 @@ export function QuickActionButton({ icon, label, onPress }: QuickActionButtonPro
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = themePalette(__c);
+  const typography = themeTypography(colors);
+  return StyleSheet.create({
   button: {
     flexDirection: "row",
     alignItems: "center",
@@ -54,4 +63,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     flex: 1,
   },
+});
 });

@@ -8,6 +8,9 @@ import {
 import { Text } from "../ui/NativeText";
 import { colors, radii, spacing, typography } from "../../constants/theme";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { themePalette, themeTypography } from "../../theme/legacy";
+
 type ButtonVariant = "primary" | "secondary" | "outline" | "danger" | "ghost";
 
 interface ButtonProps {
@@ -31,6 +34,9 @@ export function Button({
   style,
   fullWidth = true,
 }: ButtonProps) {
+  const styles = useStyles();
+  const colors = themePalette(useTheme().colors);
+
   const isDisabled = disabled || loading;
 
   return (
@@ -60,7 +66,10 @@ export function Button({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = themePalette(__c);
+  const typography = themeTypography(colors);
+  return StyleSheet.create({
   base: {
     flexDirection: "row",
     alignItems: "center",
@@ -82,6 +91,7 @@ const styles = StyleSheet.create({
     ...typography.bodyStrong,
     fontSize: 16,
   },
+});
 });
 
 const variantStyles: Record<ButtonVariant, ViewStyle> = StyleSheet.create({

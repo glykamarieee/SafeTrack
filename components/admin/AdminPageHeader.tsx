@@ -6,6 +6,9 @@ import {
 import { Text } from "../ui/NativeText";
 import { adminColors as colors } from "../../constants/adminDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { adminPalette } from "../../theme/legacy";
+
 export function AdminPageHeader({
   eyebrow,
   title,
@@ -17,6 +20,8 @@ export function AdminPageHeader({
   description?: string;
   action?: ReactNode;
 }) {
+  const styles = useStyles();
+
   return (
     <View style={styles.root}>
       <View style={styles.copy}>
@@ -33,7 +38,9 @@ export function AdminPageHeader({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = adminPalette(__c);
+  return StyleSheet.create({
   root: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -85,4 +92,5 @@ const styles = StyleSheet.create({
   action: {
     paddingTop: 2,
   },
+});
 });

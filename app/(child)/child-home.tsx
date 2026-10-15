@@ -19,6 +19,9 @@ import {
   childSpacing as spacing,
 } from "../../constants/childDesign";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { childPalette } from "../../theme/legacy";
+
 function firstName(value: string) {
   return value.trim().split(/\s+/)[0] || "Child";
 }
@@ -73,6 +76,9 @@ function statusDetails(status: string | undefined) {
 }
 
 export default function ChildHomeScreen() {
+  const styles = useStyles();
+  const colors = childPalette(useTheme().colors);
+
   const router = useRouter();
   const context = useChildMobileStore((state) => state.context);
   const latestLocation = useChildMobileStore((state) => state.latestLocation);
@@ -259,6 +265,9 @@ function QuickAction({
   danger?: boolean;
   onPress: () => void;
 }) {
+  const styles = useStyles();
+  const colors = childPalette(useTheme().colors);
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -277,7 +286,9 @@ function QuickAction({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((__c) => {
+  const colors = childPalette(__c);
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.canvas },
   content: {
     width: "100%",
@@ -440,4 +451,5 @@ const styles = StyleSheet.create({
   noteText: { flex: 1, color: colors.muted, fontSize: 10.5, lineHeight: 16, marginLeft: 8 },
   pressed: { opacity: 0.72 },
   disabled: { opacity: 0.56 },
+});
 });
