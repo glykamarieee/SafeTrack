@@ -602,7 +602,9 @@ and safety events for a date range, 50 per page, through
     Android stops asking.
 - **Migrations waiting to be applied** (run in order in the SQL Editor, then
   confirm with the user):
-  `20261014_child_activity_days.sql`, `20261015_accounts_notifications_fixes.sql`.
+  `20261014_child_activity_days.sql`, `20261015_accounts_notifications_fixes.sql`,
+  `20261016_activity_reports_export_fix.sql` (the live `activity_reports` check
+  constraints rejected `export_format = 'PDF'`, so admin PDF/Excel export failed).
 
 ## Known open issues
 
