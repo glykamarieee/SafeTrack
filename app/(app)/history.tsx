@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 
 import { useAuthStore } from "../../store/authStore";
+import { matchRouteToRoads } from "../../services/routeMatching";
 import {
   estimateStops,
   loadDailyActivity,
@@ -242,7 +243,22 @@ export default function HistoryScreen() {
   const sources = Array.from(new Set(points.map((point) => (point.source === "mobile" ? "phone" : "smartwatch"))));
 
   // ---- Map content (memoized so unrelated renders never reach the map).
-  const path = useMemo(() => points.map(({ latitude, longitude }) => ({ latitude, longitude })), [points]);
+  const straightPath = useMemo(() => points.map(({ latitude, longitude }) => ({ latitude, longitude })), [points]);
+  // The same route snapped to roads (Mapbox Map Matching); straight lines
+  // until it arrives, and wherever no road could be matched.
+  const [roadPath, setRoadPath] = useState<{ latitude: number; longitude: number }[] | null>(null);
+  useEffect(() => {
+    setRoadPath(null);
+    if (!child?.id || points.length < 2) return;
+    let active = true;
+    void matchRouteToRoads(`${child.id}:${selectedDate}`, points).then((line) => {
+      if (active) setRoadPath(line);
+    });
+    return () => {
+      active = false;
+    };
+  }, [child?.id, selectedDate, points]);
+  const path = roadPath ?? straightPath;
 
   const zoneCircles = useMemo(() => toZoneCircles(zones, transitions), [zones, transitions]);
 
@@ -740,7 +756,7 @@ export default function HistoryScreen() {
           {statOpen === "records"
             ? `${points.length} location record${points.length === 1 ? "" : "s"} were stored for ${childName} on ${selectedLabel.toLowerCase() === "today" ? "today" : selectedLabel}${sources.length ? `, from the ${sources.join(" and ")}` : ""}. Only records that reached SafeTrack's server are counted; nothing is estimated.`
             : statOpen === "distance"
-              ? `Straight lines between records, added up: ${distance.counted} move${distance.counted === 1 ? "" : "s"} counted. ${distance.ignoredSmall} small move${distance.ignoredSmall === 1 ? " was" : "s were"} left out because they were within the GPS accuracy of the two records (at least ${MIN_MOVE_METERS} m), which is the position wobbling while ${childName} stays still.${distance.ignoredJumps ? ` ${distance.ignoredJumps} impossible jump${distance.ignoredJumps === 1 ? " was" : "s were"} skipped (faster than ${Math.round(MAX_SPEED_MPS * 3.6)} km/h).` : ""} Travel along roads is usually a little longer.`
+              ? `Straight lines between records, added up: ${distance.counted} move${distance.counted === 1 ? "" : "s"} counted. ${distance.ignoredSmall} small move${distance.ignoredSmall === 1 ? " was" : "s were"} left out because they were within the GPS accuracy of the two records (at least ${MIN_MOVE_METERS} m), which is the position wobbling while ${childName} stays still.${distance.ignoredJumps ? ` ${distance.ignoredJumps} impossible jump${distance.ignoredJumps === 1 ? " was" : "s were"} skipped (faster than ${Math.round(MAX_SPEED_MPS * 3.6)} km/h).` : ""} Travel along roads is usually a little longer. The green line on the map is drawn along the roads between records where they could be matched.`
               : statOpen === "span"
                 ? firstPoint && latestPoint
                   ? `From the first record at ${timeLabel(firstPoint.recordedAt)} to the latest at ${timeLabel(latestPoint.recordedAt)}. Gaps without records are included.`
