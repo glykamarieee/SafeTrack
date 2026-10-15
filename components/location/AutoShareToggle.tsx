@@ -17,8 +17,11 @@ import {
 } from "../../services/childBackgroundLocation";
 import { isExpoGo } from "./mapSupport";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
 /** The child's own switch for automatic location sharing (consent). */
 export function AutoShareToggle() {
+  const styles = useStyles();
+  const { colors: c } = useTheme();
   const [on, setOn] = useState(false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -64,7 +67,7 @@ export function AutoShareToggle() {
   if (!supported) {
     return (
       <View style={styles.card}>
-        <Ionicons name="information-circle-outline" size={18} color="#5F6B66" />
+        <Ionicons name="information-circle-outline" size={18} color={c.muted} />
         <Text style={styles.note}>
           Automatic sharing works in the installed SafeTrack app (not in Expo Go or a browser). Use "Share latest location" here.
         </Text>
@@ -75,7 +78,7 @@ export function AutoShareToggle() {
   return (
     <View style={styles.card}>
       <View style={styles.row}>
-        <Ionicons name={on ? "radio" : "radio-outline"} size={20} color={on ? "#137A50" : "#5F6B66"} />
+        <Ionicons name={on ? "radio" : "radio-outline"} size={20} color={on ? c.primary : c.muted} />
         <View style={styles.copy}>
           <Text style={styles.title}>Share location automatically</Text>
           <Text style={styles.note}>
@@ -89,8 +92,8 @@ export function AutoShareToggle() {
           value={on}
           disabled={busy}
           onValueChange={(value) => void toggle(value)}
-          trackColor={{ true: "#7FCBA8", false: "#D5DDD9" }}
-          thumbColor={on ? "#137A50" : "#FFFFFF"}
+          trackColor={{ true: c.primary, false: c.ruleStrong }}
+          thumbColor="#FFFFFF"
         />
       </View>
       {problem ? <Text style={styles.problem}>{problem}</Text> : null}
@@ -106,22 +109,24 @@ export function AutoShareToggle() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) =>
+  StyleSheet.create({
   card: {
     marginTop: 12,
     padding: 14,
     borderRadius: 18,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: c.surface,
     borderWidth: 1,
-    borderColor: "#DCE9E3",
+    borderColor: c.rule,
     flexDirection: "column",
     gap: 6,
   },
   row: { flexDirection: "row", alignItems: "center", gap: 10 },
   copy: { flex: 1 },
-  title: { color: "#14211B", fontSize: 13.5, fontWeight: "800" },
-  note: { flex: 1, color: "#5F6B66", fontSize: 11.5, lineHeight: 16 },
-  problem: { color: "#B3261E", fontSize: 12, lineHeight: 17 },
-  link: { color: "#137A50", fontSize: 12.5, fontWeight: "800" },
-  small: { color: "#7A8681", fontSize: 11 },
-});
+  title: { color: c.ink, fontSize: 13.5, fontWeight: "800" },
+  note: { flex: 1, color: c.muted, fontSize: 11.5, lineHeight: 16 },
+  problem: { color: c.danger, fontSize: 12, lineHeight: 17 },
+  link: { color: c.primary, fontSize: 12.5, fontWeight: "800" },
+  small: { color: c.muted, fontSize: 11 },
+}),
+);

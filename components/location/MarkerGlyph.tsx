@@ -59,14 +59,14 @@ export const MarkerGlyph = memo(function MarkerGlyph({ marker, onSettled }: Glyp
       );
     case "event":
       return (
-        <View style={[styles.event, { backgroundColor: marker.tint ?? "#137A50" }]}>
+        <View style={[styles.event, { backgroundColor: marker.tint ?? "#15803D" }]}>
           <Ionicons name={(marker.icon ?? "ellipse") as keyof typeof Ionicons.glyphMap} size={15} color="#FFFFFF" />
         </View>
       );
     case "zoneCenter":
       return (
         <View style={[styles.zoneBox, { width: box.width }]}>
-          <View style={[styles.zoneDot, { backgroundColor: marker.tint ?? "#1E8E5A" }]} />
+          <View style={[styles.zoneDot, { backgroundColor: marker.tint ?? "#22B35E" }]} />
           <View style={styles.zoneChip}>
             <Text numberOfLines={1} style={styles.zoneChipText}>
               {marker.title}
@@ -81,7 +81,7 @@ export const MarkerGlyph = memo(function MarkerGlyph({ marker, onSettled }: Glyp
         </View>
       );
     default: {
-      const color = marker.kind === "sos" ? "#D93025" : marker.kind === "end" ? "#137A50" : marker.tint ?? "#1A73E8";
+      const color = marker.kind === "sos" ? "#B42318" : marker.kind === "end" ? "#15803D" : marker.tint ?? "#245E9C";
       return (
         <View style={styles.pinBox}>
           <View style={[styles.pinHead, { backgroundColor: color }]} />
@@ -147,7 +147,7 @@ function AvatarGlyph({
             onError={onSettled}
           />
         ) : (
-          <View style={[styles.initials, { backgroundColor: marker.color ?? "#137A50" }]}>
+          <View style={[styles.initials, { backgroundColor: marker.color ?? "#15803D" }]}>
             <Text style={styles.initialsText}>{marker.initials ?? "?"}</Text>
           </View>
         )}
@@ -159,7 +159,7 @@ function AvatarGlyph({
           <Ionicons
             name={marker.source === "smartwatch" ? "watch" : "phone-portrait"}
             size={11}
-            color="#33413B"
+            color="#0E1411"
           />
         </View>
       ) : null}
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#DDE4E0",
+    borderColor: "#E3E9E5",
   },
   battery: {
     position: "absolute",
@@ -229,18 +229,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#DDE4E0",
+    borderColor: "#E3E9E5",
   },
-  batteryLow: { backgroundColor: "#FCE8E8", borderColor: "#F4C5C9" },
-  batteryText: { fontSize: 9, fontWeight: "800", color: "#33413B" },
-  batteryTextLow: { color: "#B3261E" },
+  batteryLow: { backgroundColor: "#FDECEA", borderColor: "#F6C9C3" },
+  batteryText: { fontSize: 9, fontWeight: "800", color: "#0E1411" },
+  batteryTextLow: { color: "#B42318" },
   youChip: {
     marginTop: 2,
     paddingHorizontal: 7,
     height: 18,
     borderRadius: 9,
     justifyContent: "center",
-    backgroundColor: "#1A73E8",
+    backgroundColor: "#245E9C",
   },
   youText: { color: "#FFFFFF", fontSize: 10, fontWeight: "800" },
   start: {
@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 9,
     borderWidth: 4,
-    borderColor: "#137A50",
+    borderColor: "#15803D",
     backgroundColor: "#FFFFFF",
   },
   stop: {
@@ -260,7 +260,7 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#0B5E3E",
+    backgroundColor: "#0D2A1E",
     borderWidth: 2,
     borderColor: "#FFFFFF",
   },
@@ -286,9 +286,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.95)",
     borderWidth: 1,
-    borderColor: "#DDE4E0",
+    borderColor: "#E3E9E5",
   },
-  zoneChipText: { color: "#1E2B25", fontSize: 11, fontWeight: "700" },
+  zoneChipText: { color: "#0E1411", fontSize: 11, fontWeight: "700" },
   draft: {
     width: 20,
     height: 20,
@@ -298,9 +298,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(30,79,216,0.18)",
     borderWidth: 2,
-    borderColor: "#1E4FD8",
+    borderColor: "#245E9C",
   },
-  draftDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#1E4FD8" },
+  draftDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#245E9C" },
   pinBox: { width: 30, height: 40, alignItems: "center" },
   pinHead: {
     marginTop: 2,

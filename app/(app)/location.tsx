@@ -1,63 +1,53 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  Pressable,
-  StyleSheet,
-  View,
-  useWindowDimensions,
-} from "react-native";
-import { Text } from "../../components/ui/NativeText";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useEffect, useMemo, useState, type ComponentProps } from "react";
+import { Animated, Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 
 import { useAuthStore } from "../../store/authStore";
 import { useLocationStore } from "../../store/locationStore";
 import { useGeofenceStore } from "../../store/geofenceStore";
 import { LocationMapCard } from "../../components/location/LocationMapCard";
-import { toZoneCircles } from "../../components/location/zoneCircles";
-import { MapAwareScrollView } from "../../components/location/MapScrollLock";
+import { childRing, toZoneCircles } from "../../components/location/zoneCircles";
+import { freshness } from "../../components/location/mapTypes";
 import { useSosStore } from "../../store/sosStore";
 import { fetchSmartwatchForChild, type SmartwatchStatus } from "../../services/smartwatchService";
-
-import {
-  guardianColors as colors,
-  guardianSpacing as spacing,
-  guardianRadius as radius,
-  guardianShadow as shadow,
-} from "../../constants/guardianDesign";
-
+import { Text } from "../../components/ui/Text";
+import { useEntrance, usePulse } from "../../theme/motion";
 import { makeStyles, useTheme } from "../../theme/ThemeProvider";
-import { guardianPalette } from "../../theme/legacy";
+import { radius, shadow, space } from "../../theme/tokens";
 
-function getSourceLabel(source?: string) {
-  if (source === "mobile") return "Mobile device";
-  if (source === "both") return "Smartwatch + mobile";
-  return "Smartwatch";
+/** Space the tab bar takes at the bottom of the screen. */
+const TAB_BAR = 78;
+
+function ago(value?: string | null) {
+  if (!value) return null;
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return null;
+  const minutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hr${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
-function getSourceIcon(source?: string): keyof typeof Ionicons.glyphMap {
-  if (source === "mobile") return "phone-portrait-outline";
-  if (source === "both") return "git-compare-outline";
-  return "watch-outline";
-}
-
-function formatTimestamp(value?: string | null) {
-  if (!value) return "No location record yet";
+function clockTime(value?: string | null) {
+  if (!value) return null;
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Latest stored location";
-  return new Intl.DateTimeFormat("en-PH", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" });
 }
 
 export default function LocationScreen() {
+  const router = useRouter();
   const styles = useStyles();
-  const colors = guardianPalette(useTheme().colors);
+  const { colors } = useTheme();
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const wide = width >= 960;
 
-  const { width } = useWindowDimensions();
-  const wide = width >= 1040;
   const role = useAuthStore((state) => state.role);
   const child = useAuthStore((state) => state.child);
   const children = useAuthStore((state) => state.linkedChildren);
@@ -77,10 +67,7 @@ export default function LocationScreen() {
   const [watch, setWatch] = useState<SmartwatchStatus | null>(null);
 
   const trackingSource = primaryChild?.trackingSource ?? "mobile";
-  const supportedTrackingSource =
-    trackingSource === "mobile" || trackingSource === "both"
-      ? trackingSource
-      : "smartwatch";
+  const supportedTrackingSource = trackingSource === "mobile" || trackingSource === "both" ? trackingSource : "smartwatch";
 
   useEffect(() => {
     if (primaryChild?.id) {
@@ -123,10 +110,7 @@ export default function LocationScreen() {
 
   const sosActive = sosAlerts.some((alert) => alert.childId === primaryChild?.id && alert.status === "active");
 
-  const zoneCircles = useMemo(
-    () => toZoneCircles(zones, zoneEvents),
-    [zones, zoneEvents],
-  );
+  const zoneCircles = useMemo(() => toZoneCircles(zones, zoneEvents), [zones, zoneEvents]);
 
   const refresh = () => {
     if (primaryChild?.id) {
@@ -134,325 +118,216 @@ export default function LocationScreen() {
     }
   };
 
+  // ---- Status for the top card: the same rule as the marker's ring.
+  const fresh = freshness(location?.recordedAt);
+  const ring = childRing(zoneCircles, { sosActive, freshness: fresh });
+  const inside = zoneCircles.find((circle) => circle.status === "inside");
+  const name = primaryChild?.fullName?.split(/\s+/)[0] ?? "Your child";
+  const age = ago(location?.recordedAt);
+
+  const status: { icon: ComponentProps<typeof Ionicons>["name"]; tile: string; title: string; detail: string } = !location
+    ? { icon: "time-outline", tile: colors.forestRaised, title: "Waiting for a location", detail: "The map focuses when the child's device sends one." }
+    : ring === "sos"
+      ? { icon: "alert", tile: "#B42318", title: `${name} needs help`, detail: "SOS active · open SOS alerts" }
+      : ring === "stale"
+        ? { icon: "cloud-offline-outline", tile: "#8C948F", title: `Last seen ${age ?? ""}`.trim(), detail: location.locationLabel ?? "No newer location received" }
+        : ring === "inside"
+          ? {
+              icon: "shield-checkmark",
+              tile: "#22B35E",
+              title: `Inside ${inside?.label ?? "a safe zone"}`,
+              detail: `${name} arrived ${clockTime(inside?.lastEventAt) ?? "earlier"}${location.locationLabel ? ` · ${location.locationLabel}` : ""}`,
+            }
+          : ring === "outside"
+            ? { icon: "walk-outline", tile: "#F5B83D", title: "Outside safe zones", detail: location.locationLabel ?? `${name}'s latest location` }
+            : { icon: "location", tile: "#22B35E", title: location.locationLabel ?? `${name}'s location`, detail: "No safe zones set up yet" };
+
+  const mapHeight = Math.max(420, height - TAB_BAR);
+  const top = useEntrance(0, -20, 420);
+  const bottom = useEntrance(2, 40, 420);
+  const pulse = usePulse(fresh === "fresh" && Boolean(location), 1600);
+
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <MapAwareScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.content}
-      >
-        <View style={styles.header}>
-          <View style={styles.headerCopy}>
-            <Text style={styles.eyebrow}>LOCATION TRACKING</Text>
-            <Text style={styles.heading}>
-              {primaryChild?.fullName ?? "Child"}'s location
-            </Text>
-            <Text style={styles.subtitle}>
-              Latest available position from the registered SafeTrack child device.
-            </Text>
-          </View>
+    <View style={styles.root}>
+      <LocationMapCard
+        location={location}
+        height={mapHeight}
+        loading={loading}
+        trackingSource={supportedTrackingSource}
+        onRefresh={refresh}
+        zones={zoneCircles}
+        avatarPath={primaryChild?.avatarPath}
+        avatarUrl={primaryChild?.avatarUrl}
+        sosActive={sosActive}
+        batteryPercent={watch?.batteryPercent ?? null}
+        networkType={watch?.networkType ?? null}
+        overlays={false}
+        bottomInset={location ? 190 : undefined}
+        topInset={location ? 100 + insets.top : 0}
+        flush
+      />
 
+      <SafeAreaView pointerEvents="box-none" edges={["top"]} style={styles.topLayer}>
+        <Animated.View style={[styles.topCard, wide && styles.narrow, top]}>
           <Pressable
-            accessibilityLabel="Refresh latest location"
-            onPress={refresh}
-            style={({ pressed }) => [styles.refresh, pressed && styles.pressed]}
+            accessibilityRole={ring === "sos" ? "button" : undefined}
+            disabled={ring !== "sos"}
+            onPress={() => router.push("/(app)/sos-alerts")}
+            style={styles.topRow}
           >
-            <Ionicons
-              name={loading ? "sync-outline" : "refresh-outline"}
-              size={20}
-              color={colors.primaryDark}
-            />
+            <View style={[styles.statusTile, { backgroundColor: status.tile }]}>
+              <Ionicons name={status.icon} size={26} color="#FFFFFF" />
+            </View>
+            <View style={styles.flex}>
+              <Text variant="heading" weight="800" style={styles.white} numberOfLines={1}>
+                {status.title}
+              </Text>
+              <Text variant="label" weight="500" style={styles.topDetail} numberOfLines={1}>
+                {status.detail}
+              </Text>
+            </View>
           </Pressable>
-        </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Check for a newer location"
+            onPress={refresh}
+            hitSlop={6}
+            style={({ pressed }) => [styles.refresh, pressed && { opacity: 0.75 }]}
+          >
+            <Ionicons name={loading ? "sync-outline" : "refresh"} size={18} color="#FFFFFF" />
+          </Pressable>
+        </Animated.View>
+      </SafeAreaView>
 
-        <View style={styles.sourceRibbon}>
-          <View style={styles.sourceIcon}>
-            <Ionicons
-              name={getSourceIcon(trackingSource)}
-              size={20}
-              color={colors.primaryDark}
-            />
+      {location ? (
+        <Animated.View pointerEvents="box-none" style={[styles.bottomLayer, wide && styles.narrow, bottom]}>
+          <View style={styles.note}>
+            <Ionicons name="information-circle" size={17} color="#3DDC84" style={styles.noteIcon} />
+            <Text variant="caption" style={styles.noteText}>
+              <Text variant="caption" weight="800" style={styles.white}>
+                Not real-time.{" "}
+              </Text>
+              This is {name}'s last reported location. The watch sends one about every 3 minutes; a phone with auto-share every 5 minutes or
+              100 m. The map updates by itself when a new one arrives.
+            </Text>
           </View>
 
-          <View style={styles.sourceCopy}>
-            <Text style={styles.sourceLabel}>Tracking source</Text>
-            <Text style={styles.sourceValue}>{getSourceLabel(trackingSource)}</Text>
-          </View>
-
-          <View style={styles.liveChip}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveChipText}>{location ? "RECEIVED" : "WAITING"}</Text>
-          </View>
-        </View>
-
-        <View style={styles.mapHeaderRow}>
-          <View>
-            <Text style={styles.mapTitle}>Explore the latest position</Text>
-            <Text style={styles.mapCaption}>Drag, pinch or scroll to explore. Safe Zones are shown to scale.</Text>
-          </View>
-          <View style={styles.mapHintIcon}>
-            <Ionicons name="map-outline" size={18} color={colors.primaryDark} />
-          </View>
-        </View>
-
-        <LocationMapCard
-          location={location}
-          height={wide ? 650 : 560}
-          loading={loading}
-          trackingSource={supportedTrackingSource}
-          onRefresh={refresh}
-          zones={zoneCircles}
-          avatarPath={primaryChild?.avatarPath}
-          avatarUrl={primaryChild?.avatarUrl}
-          sosActive={sosActive}
-          batteryPercent={watch?.batteryPercent ?? null}
-          networkType={watch?.networkType ?? null}
-        />
-
-        <View style={styles.metaRail}>
-          <View style={styles.metaItem}>
-            <Ionicons name="time-outline" size={17} color={colors.primaryDark} />
-            <View style={styles.metaCopy}>
-              <Text style={styles.metaLabel}>Last update</Text>
-              <Text numberOfLines={1} style={styles.metaValue}>
-                {formatTimestamp(location?.recordedAt)}
+          <View style={styles.glassBar}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open today's activity"
+              onPress={() => router.push("/(app)/history")}
+              style={({ pressed }) => [styles.barButton, pressed && { opacity: 0.8 }]}
+            >
+              <Ionicons name="time-outline" size={21} color={colors.primary} />
+            </Pressable>
+            <View style={styles.barCenter}>
+              <View style={styles.barTitle}>
+                <View style={styles.dotWrap}>
+                  <Animated.View
+                    style={[
+                      styles.dotHalo,
+                      {
+                        backgroundColor: fresh === "fresh" ? colors.brand : fresh === "stale" ? colors.warningFill : colors.offline,
+                        opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0] }),
+                        transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 2.4] }) }],
+                      },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.dot,
+                      { backgroundColor: fresh === "fresh" ? colors.brand : fresh === "stale" ? colors.warningFill : colors.offline },
+                    ]}
+                  />
+                </View>
+                <Text variant="heading" weight="800" tabular>
+                  Updated {age ?? "—"}
+                </Text>
+              </View>
+              <Text variant="caption" numberOfLines={1}>
+                Latest location
+                {location.accuracyMeters != null ? ` · ±${Math.round(location.accuracyMeters)} m` : ""}
+                {` · from ${location.source === "smartwatch" ? "watch" : "phone"}`}
+                {watch?.batteryPercent != null && location.source === "smartwatch" ? ` · ${watch.batteryPercent}%` : ""}
               </Text>
             </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open safe zones"
+              onPress={() => router.push("/(app)/safe-zones")}
+              style={({ pressed }) => [styles.barButton, pressed && { opacity: 0.8 }]}
+            >
+              <Ionicons name="radio-button-on-outline" size={21} color={colors.primary} />
+            </Pressable>
           </View>
-
-          <View style={styles.metaDivider} />
-
-          <View style={styles.metaItem}>
-            <Ionicons name="locate-outline" size={17} color={colors.primaryDark} />
-            <View style={styles.metaCopy}>
-              <Text style={styles.metaLabel}>Accuracy</Text>
-              <Text style={styles.metaValue}>
-                {location?.accuracyMeters != null
-                  ? `±${Math.round(location.accuracyMeters)} m`
-                  : "Not provided"}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.notice}>
-          <View style={styles.noticeIcon}>
-            <Ionicons name="information" size={15} color={colors.primaryDark} />
-          </View>
-          <Text style={styles.noticeText}>
-            SafeTrack shows the latest successfully stored device location. GPS/GNSS,
-            connectivity, permissions, and device availability can affect when the next
-            update appears.
-          </Text>
-        </View>
-      </MapAwareScrollView>
-    </SafeAreaView>
+        </Animated.View>
+      ) : null}
+    </View>
   );
 }
 
-const useStyles = makeStyles((__c) => {
-  const colors = guardianPalette(__c);
-  return StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  content: {
-    width: "100%",
-    maxWidth: 1160,
-    alignSelf: "center",
-    paddingHorizontal: spacing.lg,
-    paddingTop: 28,
-    paddingBottom: 118,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    marginBottom: 20,
-  },
-  headerCopy: {
-    flex: 1,
-    paddingRight: 12,
-  },
-  eyebrow: {
-    color: colors.primary,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.45,
-  },
-  heading: {
-    marginTop: 6,
-    color: colors.ink,
-    fontSize: 28,
-    lineHeight: 33,
-    fontWeight: "900",
-    letterSpacing: -0.7,
-  },
-  subtitle: {
-    maxWidth: 320,
-    marginTop: 6,
-    color: colors.muted,
-    fontSize: 12.5,
-    lineHeight: 18,
-  },
-  refresh: {
-    width: 46,
-    height: 46,
-    borderRadius: 17,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadow.soft,
-  },
-  sourceRibbon: {
-    minHeight: 70,
-    paddingHorizontal: 13,
-    borderRadius: 23,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadow.soft,
-  },
-  sourceIcon: {
-    width: 43,
-    height: 43,
-    borderRadius: 15,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.softMint,
-  },
-  sourceCopy: {
-    flex: 1,
-    marginLeft: 11,
-  },
-  sourceLabel: {
-    color: colors.muted,
-    fontSize: 9.5,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 0.75,
-  },
-  sourceValue: {
-    marginTop: 3,
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: "900",
-  },
-  liveChip: {
-    minHeight: 30,
-    paddingHorizontal: 10,
-    borderRadius: radius.pill,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.surfaceMuted,
-  },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 6,
-    backgroundColor: colors.primary,
-  },
-  liveChipText: {
-    color: colors.primaryDark,
-    fontSize: 8,
-    fontWeight: "900",
-    letterSpacing: 0.8,
-  },
-  mapHeaderRow: {
-    marginTop: 24,
-    marginBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  mapTitle: {
-    color: colors.ink,
-    fontSize: 17,
-    fontWeight: "900",
-  },
-  mapCaption: {
-    marginTop: 3,
-    color: colors.muted,
-    fontSize: 10.5,
-  },
-  mapHintIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.softMint,
-  },
-  metaRail: {
-    minHeight: 78,
-    marginTop: 14,
-    paddingHorizontal: 13,
-    borderRadius: 22,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  metaItem: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  metaCopy: {
-    flex: 1,
-    minWidth: 0,
-    marginLeft: 8,
-  },
-  metaLabel: {
-    color: colors.muted,
-    fontSize: 9,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 0.7,
-  },
-  metaValue: {
-    marginTop: 3,
-    color: colors.ink,
-    fontSize: 10.5,
-    fontWeight: "800",
-  },
-  metaDivider: {
-    width: 1,
-    height: 40,
-    marginHorizontal: 10,
-    backgroundColor: colors.border,
-  },
-  notice: {
-    marginTop: 18,
-    paddingHorizontal: 4,
-    flexDirection: "row",
-    alignItems: "flex-start",
-  },
-  noticeIcon: {
-    width: 25,
-    height: 25,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.softMint,
-  },
-  noticeText: {
-    flex: 1,
-    marginLeft: 9,
-    color: colors.muted,
-    fontSize: 10.5,
-    lineHeight: 15.5,
-  },
-  pressed: {
-    opacity: 0.82,
-    transform: [{ scale: 0.985 }],
-  },
-});
-});
+const useStyles = makeStyles((c, scheme) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: c.mapGround },
+    flex: { flex: 1, minWidth: 0 },
+    white: { color: "#FFFFFF" },
+    narrow: { width: "100%", maxWidth: 560, alignSelf: "center" },
+    topLayer: { position: "absolute", top: 0, left: 0, right: 0, paddingHorizontal: space.md + 2 },
+    topCard: {
+      marginTop: space.sm,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: space.md,
+      padding: space.md + 2,
+      borderRadius: radius.md,
+      backgroundColor: scheme === "dark" ? c.forest : "#0D2A1E",
+      ...shadow(scheme, "float"),
+    },
+    topRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: space.md },
+    statusTile: { width: 52, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+    topDetail: { color: "#BFD8C9" },
+    refresh: {
+      width: 42,
+      height: 42,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(255,255,255,0.12)",
+    },
+    bottomLayer: { position: "absolute", left: 0, right: 0, bottom: space.lg, paddingHorizontal: space.md + 2, gap: space.sm },
+    note: {
+      flexDirection: "row",
+      gap: space.sm,
+      padding: space.md,
+      borderRadius: radius.sm,
+      backgroundColor: "rgba(13, 42, 30, 0.92)",
+    },
+    noteIcon: { marginTop: 1 },
+    noteText: { flex: 1, color: "#D5E6DC" },
+    glassBar: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: space.md,
+      padding: space.md - 2,
+      borderRadius: radius.md + 2,
+      backgroundColor: c.glass,
+      borderWidth: 1,
+      borderColor: c.glassBorder,
+      ...shadow(scheme, "float"),
+    },
+    barButton: {
+      width: 48,
+      height: 48,
+      borderRadius: 16,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.primaryTint,
+    },
+    barCenter: { flex: 1, minWidth: 0, alignItems: "center", gap: 2 },
+    barTitle: { flexDirection: "row", alignItems: "center", gap: 8 },
+    dotWrap: { width: 10, height: 10, alignItems: "center", justifyContent: "center" },
+    dotHalo: { position: "absolute", width: 10, height: 10, borderRadius: 5 },
+    dot: { width: 10, height: 10, borderRadius: 5 },
+  }),
+);

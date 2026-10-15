@@ -42,6 +42,14 @@ export type LocationMapCardProps = {
   /** The watch's current battery and network (not historical values). */
   batteryPercent?: number | null;
   networkType?: string | null;
+  /** Hide the badge and info card (the screen draws its own overlays). */
+  overlays?: boolean;
+  /** Space kept clear at the bottom for the screen's own overlays. */
+  bottomInset?: number;
+  /** Square corners for a full-screen map. */
+  flush?: boolean;
+  /** Space kept clear at the top for the screen's own overlay. */
+  topInset?: number;
 };
 
 const NO_ZONES: SafeTrackMapCircle[] = [];
@@ -82,9 +90,14 @@ export function LocationMapCard({
   sosActive = false,
   batteryPercent = null,
   networkType = null,
+  overlays = true,
+  bottomInset,
+  flush = false,
+  topInset = 0,
 }: LocationMapCardProps) {
   const styles = useStyles();
-  const colors = guardianPalette(useTheme().colors);
+  const { colors: theme } = useTheme();
+  const colors = guardianPalette(theme);
 
   const validLocation =
     Boolean(location) &&
@@ -143,19 +156,24 @@ export function LocationMapCard({
   );
 
   return (
-    <View style={[styles.container, { height }]}>
+    <View style={[styles.container, flush && styles.flush, { height }]}>
       {validLocation && location ? (
         <>
           <SafeTrackInteractiveMap
             markers={markers}
             circles={zones}
             height={height}
-            mapPadding={MAP_PADDING}
+            mapPadding={bottomInset != null ? { bottom: bottomInset } : MAP_PADDING}
+            fitPadding={bottomInset != null ? { bottom: bottomInset + 20, top: topInset + 40 } : undefined}
+            style={flush ? styles.flush : undefined}
+            controlsTopInset={topInset}
           />
 
+          {overlays ? (
+          <>
           <View pointerEvents="none" style={styles.liveBadge}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveText}>LATEST AVAILABLE</Text>
+            <View style={[styles.liveDot, { backgroundColor: fresh === "fresh" ? theme.brand : fresh === "stale" ? theme.warningFill : theme.offline }]} />
+            <Text style={styles.liveText}>LATEST LOCATION</Text>
           </View>
 
           <View pointerEvents="none" style={styles.locationGlass}>
@@ -179,6 +197,8 @@ export function LocationMapCard({
               </View>
             ) : null}
           </View>
+          </>
+          ) : null}
         </>
       ) : (
         <View style={styles.empty}>
@@ -212,6 +232,7 @@ export function LocationMapCard({
 const useStyles = makeStyles((__c) => {
   const colors = guardianPalette(__c);
   return StyleSheet.create({
+  flush: { borderRadius: 0 },
   container: {
     overflow: "hidden",
     borderRadius: radius.xl,
@@ -229,7 +250,7 @@ const useStyles = makeStyles((__c) => {
     alignItems: "center",
     backgroundColor: colors.glass,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,.86)",
+    borderColor: __c.glassBorder,
     ...shadow.soft,
   },
   liveDot: {
@@ -259,7 +280,7 @@ const useStyles = makeStyles((__c) => {
     alignItems: "center",
     backgroundColor: colors.glass,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,.9)",
+    borderColor: __c.glassBorder,
     ...shadow.floating,
   },
   locationIcon: {

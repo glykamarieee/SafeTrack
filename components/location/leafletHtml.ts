@@ -82,12 +82,12 @@ export const LEAFLET_HTML = `<!doctype html>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
 html,body,#map{height:100%;width:100%;margin:0;padding:0;overflow:hidden;overscroll-behavior:none}
-body{background:#E8ECEA;-webkit-tap-highlight-color:transparent}
-body.dark{background:#1B1F22}
+body{background:#E9EDEB;-webkit-tap-highlight-color:transparent}
+body.dark{background:#0E1A14}
 #map{background:inherit;touch-action:none}
 body.picking .leaflet-container{cursor:crosshair}
-.leaflet-control-attribution{font-size:9px;line-height:14px;padding:0 6px;background:rgba(255,255,255,.78)!important;color:#5F6B66!important;border-top-right-radius:6px}
-.leaflet-control-attribution a{color:#3D6B58!important}
+.leaflet-control-attribution{font-size:9px;line-height:14px;padding:0 6px;background:rgba(255,255,255,.78)!important;color:#636D68!important;border-top-right-radius:6px}
+.leaflet-control-attribution a{color:#15803D!important}
 .st-icon{background:none;border:0}
 ${MARKER_CSS}
 </style>
@@ -235,8 +235,8 @@ function renderPath(path){
   var pts=path.map(function(p){return [p.latitude,p.longitude];});
   if(pts.length<2){routeGroup.clearLayers();state.routeOuter=state.routeInner=null;return;}
   if(!state.routeOuter){
-    state.routeOuter=L.polyline(pts,{pane:"route",color:"#0B5E3E",weight:8,opacity:.9,lineCap:"round",lineJoin:"round",interactive:false}).addTo(routeGroup);
-    state.routeInner=L.polyline(pts,{pane:"route",color:"#2DBE84",weight:5,opacity:1,lineCap:"round",lineJoin:"round",interactive:false}).addTo(routeGroup);
+    state.routeOuter=L.polyline(pts,{pane:"route",color:"#FFFFFF",weight:9,opacity:.95,lineCap:"round",lineJoin:"round",interactive:false}).addTo(routeGroup);
+    state.routeInner=L.polyline(pts,{pane:"route",color:"#22B35E",weight:5,opacity:1,lineCap:"round",lineJoin:"round",interactive:false}).addTo(routeGroup);
   }else{state.routeOuter.setLatLngs(pts);state.routeInner.setLatLngs(pts);}
 }
 

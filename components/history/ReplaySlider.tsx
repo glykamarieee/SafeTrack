@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { PanResponder, StyleSheet, View, type LayoutChangeEvent } from "react-native";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
 type Props = {
   /** 0 to 1. */
   value: number;
@@ -11,6 +12,7 @@ type Props = {
 
 /** A plain React Native slider (no native slider dependency). */
 export function ReplaySlider({ value, onChange, onSlidingStart, accessibilityLabel }: Props) {
+  const styles = useStyles();
   const width = useRef(1);
   const left = useRef(0);
   const track = useRef<View>(null);
@@ -75,19 +77,20 @@ export function ReplaySlider({ value, onChange, onSlidingStart, accessibilityLab
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) =>
+  StyleSheet.create({
   hitArea: { height: 36, justifyContent: "center", cursor: "pointer" },
-  track: { height: 6, borderRadius: 3, backgroundColor: "#DCE5E0", overflow: "hidden" },
-  fill: { height: 6, backgroundColor: "#137A50" },
+  track: { height: 6, borderRadius: 3, backgroundColor: c.rule, overflow: "hidden" },
+  fill: { height: 6, backgroundColor: c.primary },
   thumb: {
     position: "absolute",
     width: 22,
     height: 22,
     marginLeft: -11,
     borderRadius: 11,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: c.surface,
     borderWidth: 3,
-    borderColor: "#137A50",
+    borderColor: c.primary,
     shadowColor: "#0F231C",
     shadowOpacity: 0.2,
     shadowRadius: 4,
@@ -95,4 +98,5 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   thumbActive: { transform: [{ scale: 1.15 }] },
-});
+}),
+);

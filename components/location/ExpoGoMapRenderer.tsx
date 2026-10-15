@@ -222,8 +222,8 @@ export const ExpoGoMapRenderer = forwardRef<MapEngineHandle, MapEngineProps>(fun
 
         {path.length > 1 ? (
           <>
-            <Polyline coordinates={path} strokeColor="#0B5E3E" strokeWidth={8} lineCap="round" lineJoin="round" zIndex={2} />
-            <Polyline coordinates={path} strokeColor="#2DBE84" strokeWidth={5} lineCap="round" lineJoin="round" zIndex={3} />
+            <Polyline coordinates={path} strokeColor="#FFFFFF" strokeWidth={9} lineCap="round" lineJoin="round" zIndex={2} />
+            <Polyline coordinates={path} strokeColor="#22B35E" strokeWidth={5} lineCap="round" lineJoin="round" zIndex={3} />
           </>
         ) : null}
 

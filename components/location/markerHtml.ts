@@ -60,8 +60,8 @@ export function markerHtml(marker: MapMarker): MarkerHtml {
       const ring = RING_COLORS[marker.ring ?? "neutral"];
       const photo = safeUrl(marker.photoUrl);
       const face = photo
-        ? `<img class="st-av-photo" src="${esc(photo)}" alt="" draggable="false" referrerpolicy="no-referrer" onerror="this.remove()"/><div class="st-av-initials" style="background:${esc(marker.color ?? "#137A50")}">${esc(marker.initials ?? "?")}</div>`
-        : `<div class="st-av-initials" style="background:${esc(marker.color ?? "#137A50")}">${esc(marker.initials ?? "?")}</div>`;
+        ? `<img class="st-av-photo" src="${esc(photo)}" alt="" draggable="false" referrerpolicy="no-referrer" onerror="this.remove()"/><div class="st-av-initials" style="background:${esc(marker.color ?? "#15803D")}">${esc(marker.initials ?? "?")}</div>`
+        : `<div class="st-av-initials" style="background:${esc(marker.color ?? "#15803D")}">${esc(marker.initials ?? "?")}</div>`;
       const source = marker.source && ICONS[marker.source] ? `<div class="st-av-source">${ICONS[marker.source]}</div>` : "";
       const battery =
         marker.batteryPercent != null
@@ -84,7 +84,7 @@ export function markerHtml(marker: MapMarker): MarkerHtml {
       return { html: `<div class="st-stop">${esc(marker.label ?? "")}</div>`, width: 28, height: 28, anchorX: 14, anchorY: 14 };
     case "event":
       return {
-        html: `<div class="st-event" style="background:${esc(marker.tint ?? "#137A50")}">${iconSvg(marker.icon)}</div>`,
+        html: `<div class="st-event" style="background:${esc(marker.tint ?? "#15803D")}">${iconSvg(marker.icon)}</div>`,
         width: 30,
         height: 30,
         anchorX: 15,
@@ -92,7 +92,7 @@ export function markerHtml(marker: MapMarker): MarkerHtml {
       };
     case "zoneCenter":
       return {
-        html: `<div class="st-zone"><div class="st-zone-dot" style="background:${esc(marker.tint ?? "#1E8E5A")}"></div><div class="st-zone-chip">${esc(marker.title)}</div></div>`,
+        html: `<div class="st-zone"><div class="st-zone-dot" style="background:${esc(marker.tint ?? "#22B35E")}"></div><div class="st-zone-chip">${esc(marker.title)}</div></div>`,
         width: 150,
         height: 42,
         anchorX: 75,
@@ -101,7 +101,7 @@ export function markerHtml(marker: MapMarker): MarkerHtml {
     case "draft":
       return { html: '<div class="st-draft"></div>', width: 22, height: 22, anchorX: 11, anchorY: 11 };
     default: {
-      const color = marker.kind === "sos" ? "#D93025" : marker.kind === "end" ? "#137A50" : marker.tint ?? "#1A73E8";
+      const color = marker.kind === "sos" ? "#B42318" : marker.kind === "end" ? "#15803D" : marker.tint ?? "#245E9C";
       return {
         html: `<div class="st-pin"><div class="st-pin-head" style="background:${esc(color)}"></div><div class="st-pin-dot"></div></div>`,
         width: 30,
@@ -120,23 +120,23 @@ export const MARKER_CSS = `
 .st-av-photo{object-fit:cover;z-index:1}
 .st-av-initials{display:flex;align-items:center;justify-content:center;color:#fff;font:800 14px/1 inherit}
 .st-av-pointer{width:0;height:0;margin-top:-1px;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid var(--ring)}
-.st-av-source{position:absolute;top:2px;right:4px;width:20px;height:20px;border-radius:50%;background:#fff;border:1px solid #DDE4E0;display:flex;align-items:center;justify-content:center;box-sizing:border-box}
-.st-av-source svg{width:11px;height:11px;fill:#33413B}
-.st-av-battery{position:absolute;top:40px;right:0;padding:0 4px;height:16px;border-radius:8px;background:#fff;border:1px solid #DDE4E0;font:800 9px/14px inherit;color:#33413B;box-sizing:border-box}
-.st-av-battery.low{background:#FCE8E8;border-color:#F4C5C9;color:#B3261E}
-.st-av-label{margin-top:2px;padding:0 7px;height:18px;border-radius:9px;background:#1A73E8;color:#fff;font:800 10px/18px inherit}
+.st-av-source{position:absolute;top:2px;right:4px;width:20px;height:20px;border-radius:50%;background:#fff;border:1px solid #E3E9E5;display:flex;align-items:center;justify-content:center;box-sizing:border-box}
+.st-av-source svg{width:11px;height:11px;fill:#0E1411}
+.st-av-battery{position:absolute;top:40px;right:0;padding:0 4px;height:16px;border-radius:8px;background:#fff;border:1px solid #E3E9E5;font:800 9px/14px inherit;color:#0E1411;box-sizing:border-box}
+.st-av-battery.low{background:#FDECEA;border-color:#F6C9C3;color:#B42318}
+.st-av-label{margin-top:2px;padding:0 7px;height:18px;border-radius:9px;background:#245E9C;color:#fff;font:800 10px/18px inherit}
 .st-av.replay .st-av-ring{opacity:.92}
 .st-av-halo{position:absolute;top:3px;left:6px;width:52px;height:52px;box-sizing:border-box;border-radius:50%;border:4px solid var(--ring);animation:st-pulse 1.4s ease-out infinite}
 @keyframes st-pulse{from{transform:scale(1);opacity:.7}to{transform:scale(1.45);opacity:0}}
-.st-start{margin:2px;width:18px;height:18px;box-sizing:border-box;border-radius:50%;border:4px solid #137A50;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.25)}
-.st-stop{margin:1px;width:26px;height:26px;box-sizing:border-box;border-radius:50%;background:#0B5E3E;border:2px solid #fff;color:#fff;display:flex;align-items:center;justify-content:center;font:800 11px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.25);cursor:pointer}
+.st-start{margin:2px;width:18px;height:18px;box-sizing:border-box;border-radius:50%;border:4px solid #15803D;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.st-stop{margin:1px;width:26px;height:26px;box-sizing:border-box;border-radius:50%;background:#0D2A1E;border:2px solid #fff;color:#fff;display:flex;align-items:center;justify-content:center;font:800 11px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.25);cursor:pointer}
 .st-event{margin:1px;width:28px;height:28px;box-sizing:border-box;border-radius:50%;border:2px solid #fff;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.25);cursor:pointer}
 .st-event svg{width:15px;height:15px;fill:#fff}
 .st-zone{width:150px;height:42px;display:flex;flex-direction:column;align-items:center;cursor:pointer}
 .st-zone-dot{width:14px;height:14px;box-sizing:border-box;border-radius:50%;border:3px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.3)}
-.st-zone-chip{margin-top:3px;max-width:146px;padding:0 8px;height:22px;box-sizing:border-box;border-radius:11px;background:rgba(255,255,255,.95);border:1px solid #DDE4E0;color:#1E2B25;font:700 11px/20px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.st-draft{margin:1px;width:20px;height:20px;box-sizing:border-box;border-radius:50%;background:rgba(30,79,216,.18);border:2px solid #1E4FD8;display:flex;align-items:center;justify-content:center}
-.st-draft:after{content:"";width:6px;height:6px;border-radius:50%;background:#1E4FD8}
+.st-zone-chip{margin-top:3px;max-width:146px;padding:0 8px;height:22px;box-sizing:border-box;border-radius:11px;background:rgba(255,255,255,.95);border:1px solid #E3E9E5;color:#0E1411;font:700 11px/20px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-draft{margin:1px;width:20px;height:20px;box-sizing:border-box;border-radius:50%;background:rgba(30,79,216,.18);border:2px solid #245E9C;display:flex;align-items:center;justify-content:center}
+.st-draft:after{content:"";width:6px;height:6px;border-radius:50%;background:#245E9C}
 .st-pin{position:relative;width:30px;height:40px;cursor:pointer}
 .st-pin-head{position:absolute;left:2px;top:2px;width:26px;height:26px;box-sizing:border-box;border-radius:50% 50% 0 50%;transform:rotate(45deg);border:2px solid #fff;box-shadow:0 2px 8px rgba(16,40,30,.3)}
 .st-pin-dot{position:absolute;left:11px;top:11px;width:8px;height:8px;border-radius:50%;background:#fff}

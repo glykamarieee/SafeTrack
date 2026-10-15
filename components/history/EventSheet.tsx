@@ -18,6 +18,7 @@ import {
   type ActivityEvent,
 } from "../../services/activityHistoryService";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
 type Props = {
   event: ActivityEvent | null;
   onClose(): void;
@@ -28,6 +29,7 @@ type Props = {
 
 /** Details of one safety event, with a small map and SOS acknowledgement. */
 export function EventSheet({ event, onClose, onShowOnMap, onAcknowledged }: Props) {
+  const styles = useStyles();
   const [busy, setBusy] = useState(false);
   const look = event ? eventLook(event) : null;
   const located = event?.latitude != null && event?.longitude != null;
@@ -145,7 +147,9 @@ export function EventSheet({ event, onClose, onShowOnMap, onAcknowledged }: Prop
   );
 }
 
-const styles = StyleSheet.create({
-  detail: { color: "#33413B", fontSize: 13.5, lineHeight: 19, marginBottom: 10 },
+const useStyles = makeStyles((c) =>
+  StyleSheet.create({
+  detail: { color: c.ink, fontSize: 13.5, lineHeight: 19, marginBottom: 10 },
   mapBox: { marginBottom: 6, borderRadius: 16, overflow: "hidden" },
-});
+}),
+);

@@ -574,8 +574,8 @@ export default function HistoryScreen() {
           <View style={styles.statsCard}>
             {Array.from({ length: 5 }, (_, index) => (
               <View key={index} style={styles.stat}>
-                <View style={[styles.skeleton, { width: 44, height: 16 }]} />
-                <View style={[styles.skeleton, { width: 56, height: 10, marginTop: 6 }]} />
+                <View style={[styles.skeleton, styles.skeletonOnForest, { width: 44, height: 16 }]} />
+                <View style={[styles.skeleton, styles.skeletonOnForest, { width: 56, height: 10, marginTop: 6 }]} />
               </View>
             ))}
           </View>
@@ -908,7 +908,7 @@ const useStyles = makeStyles((__c) => {
   },
   childChipSelected: { borderColor: colors.primary, backgroundColor: colors.softMint },
   childDot: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  childDotText: { color: colors.white, fontSize: 10.5, fontWeight: "800" },
+  childDotText: { color: "#FFFFFF", fontSize: 10.5, fontWeight: "800" },
   childChipText: { flexShrink: 1, color: colors.ink, fontSize: 12.5, fontWeight: "700" },
   childChipTextSelected: { color: colors.primaryDeep },
   dateDeck: {
@@ -1019,22 +1019,23 @@ const useStyles = makeStyles((__c) => {
     backgroundColor: colors.dangerSoft,
   },
   problemsText: { flex: 1, marginLeft: 8, color: colors.dangerDark, fontSize: 11.5, lineHeight: 16 },
+  // The day's summary is the screen's one strong forest card.
   statsCard: {
     marginTop: 12,
-    minHeight: 78,
-    borderRadius: 22,
+    minHeight: 84,
+    borderRadius: 24,
     flexDirection: "row",
     alignItems: "stretch",
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
+    paddingHorizontal: 6,
+    backgroundColor: __c.forest,
   },
-  stat: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 3, paddingVertical: 12 },
-  statValue: { color: colors.ink, fontSize: 15, fontWeight: "900" },
-  statDanger: { color: colors.danger },
-  statLabel: { marginTop: 4, color: colors.muted, fontSize: 9.5, fontWeight: "700" },
+  stat: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 3, paddingVertical: 14 },
+  statValue: { color: "#FFFFFF", fontSize: 18, fontWeight: "800" },
+  statDanger: { color: "#FF6B5C" },
+  statLabel: { marginTop: 4, color: "#9FC3AE", fontSize: 9.5, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6 },
   statHint: { marginTop: 6, color: colors.muted, fontSize: 10.5, textAlign: "center" },
-  skeleton: { borderRadius: 6, backgroundColor: "#E4EAE7" },
+  skeleton: { borderRadius: 6, backgroundColor: colors.surfaceMuted },
+  skeletonOnForest: { backgroundColor: "rgba(255,255,255,0.14)" },
   skeletonCard: { height: 70, borderRadius: 18 },
   sectionHeader: { marginTop: 26, marginBottom: 12, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
   sectionEyebrow: { color: colors.primaryDark, fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },

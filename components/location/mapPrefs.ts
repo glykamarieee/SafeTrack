@@ -49,6 +49,6 @@ function sanitize(prefs: MapPrefs): MapPrefs {
     traffic: prefs.traffic === true,
     zones: prefs.zones !== false,
     route: prefs.route !== false,
-    theme: ["light", "dark", "auto"].includes(prefs.theme) ? prefs.theme : "light",
+    theme: ["light", "dark", "auto"].includes(prefs.theme) ? prefs.theme : "auto",
   };
 }

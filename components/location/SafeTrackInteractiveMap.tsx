@@ -21,7 +21,6 @@ import { MapRenderer } from "./MapRenderer";
 import { MapSheet, SheetButton, SheetRow, sheetStyles } from "./MapSheet";
 import { useMapScrollLock } from "./MapScrollLock";
 import { useMapPrefs } from "./mapPrefs";
-import { isNightTime } from "./mapStyles";
 import { nativeMapMode } from "./mapSupport";
 import { PREVIEW_TILES } from "./leafletHtml";
 import { useAvatarUrl } from "./useAvatarUrl";
@@ -44,6 +43,8 @@ import {
 } from "./mapTypes";
 import { showAlert } from "../../lib/platformAlert";
 import { useAuthStore } from "../../store/authStore";
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { shadow } from "../../theme/tokens";
 
 export type SafeTrackMapMarker = MapMarker;
 export type SafeTrackMapCircle = MapCircle;
@@ -78,6 +79,8 @@ type Props = {
   /** Taps choose a point (zone and marker sheets are suppressed). */
   picking?: boolean;
   showMapStyleControl?: boolean;
+  /** Pushes the top-right controls down, below a screen's own top overlay. */
+  controlsTopInset?: number;
   showMyLocation?: boolean;
   allowExpand?: boolean;
   onMapPress?: (coordinate: MapPoint) => void;
@@ -141,6 +144,8 @@ function openDirections(point: MapPoint) {
 }
 
 function MapCore(props: CoreProps) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const {
     markers = NO_MARKERS,
     circles = NO_CIRCLES,
@@ -151,6 +156,7 @@ function MapCore(props: CoreProps) {
     mapPadding,
     picking = false,
     showMapStyleControl = true,
+    controlsTopInset = 0,
     showMyLocation = true,
     allowExpand = true,
     onMapPress,
@@ -347,20 +353,20 @@ function MapCore(props: CoreProps) {
 
       {!loaded && !engineError ? (
         <View pointerEvents="none" style={styles.loading}>
-          <ActivityIndicator color="#137A50" />
+          <ActivityIndicator color={colors.primary} />
           <Text style={styles.loadingText}>Loading map</Text>
         </View>
       ) : null}
 
       {engineError ? (
         <View pointerEvents="none" style={styles.banner}>
-          <Ionicons name="alert-circle-outline" size={15} color="#B3261E" />
+          <Ionicons name="alert-circle-outline" size={15} color={colors.danger} />
           <Text style={styles.bannerText}>{engineError}</Text>
         </View>
       ) : null}
 
       {/* Top-right: layers, fit, full screen. */}
-      <View pointerEvents="box-none" style={styles.topRight}>
+      <View pointerEvents="box-none" style={[styles.topRight, { top: 12 + controlsTopInset }]}>
         <View style={styles.group}>
           {showMapStyleControl ? (
             <ControlButton icon="layers-outline" label="Map layers" active={layersOpen} onPress={() => setLayersOpen(true)} />
@@ -442,9 +448,11 @@ function MapCore(props: CoreProps) {
 }
 
 function KeyMissing() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <View style={styles.keyMissing}>
-      <Ionicons name="key-outline" size={26} color="#5F6B66" />
+      <Ionicons name="key-outline" size={26} color={colors.muted} />
       <Text style={styles.keyTitle}>Map token missing</Text>
       <Text style={styles.keyText}>
         Add EXPO_PUBLIC_MAPBOX_TOKEN (your Mapbox public token) to .env and rebuild the app.
@@ -466,6 +474,8 @@ function ControlButton({
   active?: boolean;
   busy?: boolean;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
@@ -479,9 +489,9 @@ function ControlButton({
       ]}
     >
       {busy ? (
-        <ActivityIndicator size="small" color="#137A50" />
+        <ActivityIndicator size="small" color={colors.primary} />
       ) : (
-        <Ionicons name={icon} size={19} color={active ? "#137A50" : "#3C4743"} />
+        <Ionicons name={icon} size={20} color={active ? colors.primary : colors.ink} />
       )}
     </Pressable>
   );
@@ -517,6 +527,8 @@ function LayersSheet({
   onChange(patch: Partial<MapPrefs>): void;
   onClose(): void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <MapSheet visible={visible} title="Map layers" onClose={onClose}>
       <Text style={styles.sheetSection}>Map type</Text>
@@ -590,7 +602,7 @@ function LayersSheet({
           );
         })}
       </View>
-      <Text style={sheetStyles.note}>Auto uses the dark map from 6 pm to 6 am. Themes apply to the Default map.</Text>
+      <Text style={sheetStyles.note}>Auto follows the app (Profile → Appearance). Themes apply to the Default map.</Text>
     </MapSheet>
   );
 }
@@ -610,9 +622,11 @@ function ToggleRow({
   disabled?: boolean;
   onChange(value: boolean): void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <View style={styles.toggleRow}>
-      <Ionicons name={icon} size={18} color="#137A50" />
+      <Ionicons name={icon} size={18} color={colors.primary} />
       <View style={styles.toggleCopy}>
         <Text style={styles.toggleLabel}>{label}</Text>
         {hint ? <Text style={styles.toggleHint}>{hint}</Text> : null}
@@ -622,8 +636,8 @@ function ToggleRow({
         value={value}
         disabled={disabled}
         onValueChange={onChange}
-        trackColor={{ true: "#7FCBA8", false: "#D5DDD9" }}
-        thumbColor={value ? "#137A50" : "#FFFFFF"}
+        trackColor={{ true: colors.primary, false: colors.ruleStrong }}
+        thumbColor="#FFFFFF"
       />
     </View>
   );
@@ -702,6 +716,8 @@ function ZoneSheet({
   onFocus(zone: MapCircle): void;
   onEdit?: (zone: MapCircle) => void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const zone = zones.length === 1 ? zones[0]! : null;
 
   return (
@@ -763,8 +779,10 @@ export function SafeTrackInteractiveMap(props: Props) {
   const [locating, setLocating] = useState(false);
   const lastView = useRef<MapView | null>(null);
 
-  // Re-evaluated on each render, so Auto switches at 6 pm without a reload.
-  const dark = prefs.theme === "dark" || (prefs.theme === "auto" && isNightTime());
+  // Auto follows the app's appearance (Light / Dark / Match phone).
+  const { scheme } = useTheme();
+  const styles = useStyles();
+  const dark = prefs.theme === "dark" || (prefs.theme === "auto" && scheme === "dark");
 
   useEffect(() => {
     void loadPrefs();
@@ -856,130 +874,118 @@ export function SafeTrackInteractiveMap(props: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { overflow: "hidden", borderRadius: 20, backgroundColor: "#E8ECEA" },
-  fill: { flex: 1 },
-  expanded: { flex: 1, backgroundColor: "#E8ECEA" },
-  loading: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    padding: 24,
-    backgroundColor: "#E8ECEA",
-  },
-  loadingText: { color: "#5F6B66", fontSize: 12.5, fontWeight: "600", textAlign: "center" },
-  keyMissing: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    padding: 24,
-    backgroundColor: "#E8ECEA",
-  },
-  keyTitle: { color: "#1E2B25", fontSize: 15, fontWeight: "800" },
-  keyText: { maxWidth: 300, color: "#5F6B66", fontSize: 12.5, lineHeight: 18, textAlign: "center" },
-  banner: {
-    position: "absolute",
-    left: 12,
-    right: 64,
-    top: 12,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 6,
-    padding: 9,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.96)",
-    shadowColor: "#0F231C",
-    shadowOpacity: 0.16,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
-  },
-  bannerText: { flex: 1, color: "#5A2420", fontSize: 11.5, lineHeight: 16 },
-  topRight: { position: "absolute", top: 12, right: 12 },
-  bottomRight: { position: "absolute", right: 12 },
-  group: {
-    width: 40,
-    borderRadius: 12,
-    overflow: "hidden",
-    backgroundColor: "#FFFFFF",
-    shadowColor: "#0F231C",
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
-  },
-  groupGap: { marginBottom: 10 },
-  control: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  controlPressed: { backgroundColor: "#EEF3F0" },
-  divider: { height: StyleSheet.hairlineWidth, marginHorizontal: 8, backgroundColor: "#D5DDD9" },
-  sheetSection: {
-    marginTop: 12,
-    marginBottom: 8,
-    color: "#5F6B66",
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-  },
-  typeRow: { flexDirection: "row", gap: 12 },
-  typeItem: { flex: 1, alignItems: "center" },
-  thumb: {
-    width: "100%",
-    aspectRatio: 1.25,
-    borderRadius: 14,
-    overflow: "hidden",
-    borderWidth: 2,
-    borderColor: "transparent",
-    backgroundColor: "#E8ECEA",
-  },
-  thumbSelected: { borderColor: "#137A50" },
-  thumbImage: { width: "100%", height: "100%" },
-  typeLabel: { marginTop: 6, color: "#4A5550", fontSize: 12, fontWeight: "600" },
-  typeLabelSelected: { color: "#137A50", fontWeight: "800" },
-  toggleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    minHeight: 48,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#E3E9E6",
-  },
-  toggleCopy: { flex: 1 },
-  toggleLabel: { color: "#1E2B25", fontSize: 13.5, fontWeight: "600" },
-  toggleHint: { marginTop: 1, color: "#7A8681", fontSize: 11 },
-  themeRow: { flexDirection: "row", gap: 8 },
-  themeChip: {
-    flex: 1,
-    minHeight: 40,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F1F4F2",
-    borderWidth: 1.5,
-    borderColor: "transparent",
-  },
-  themeChipSelected: { backgroundColor: "#E3F4EC", borderColor: "#137A50" },
-  themeText: { color: "#4A5550", fontSize: 13, fontWeight: "700" },
-  themeTextSelected: { color: "#137A50" },
-  zoneChoice: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    minHeight: 48,
-    paddingHorizontal: 10,
-    marginBottom: 6,
-    borderRadius: 12,
-    backgroundColor: "#F4F7F5",
-  },
-  zoneSwatch: { width: 12, height: 12, borderRadius: 6 },
-  zoneChoiceText: { flex: 1, color: "#1E2B25", fontSize: 13.5, fontWeight: "700" },
-  zoneChoiceMeta: { color: "#66736D", fontSize: 12 },
-});
-
-
+const useStyles = makeStyles((c, scheme) =>
+  StyleSheet.create({
+    container: { overflow: "hidden", borderRadius: 22, backgroundColor: c.mapGround },
+    fill: { flex: 1 },
+    expanded: { flex: 1, backgroundColor: c.mapGround },
+    loading: {
+      position: "absolute",
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      padding: 24,
+      backgroundColor: c.mapGround,
+    },
+    loadingText: { color: c.muted, fontSize: 12.5, fontWeight: "600", textAlign: "center" },
+    keyMissing: { flex: 1, alignItems: "center", justifyContent: "center", gap: 6, padding: 24, backgroundColor: c.mapGround },
+    keyTitle: { color: c.ink, fontSize: 15, fontWeight: "800" },
+    keyText: { maxWidth: 300, color: c.muted, fontSize: 12.5, lineHeight: 18, textAlign: "center" },
+    banner: {
+      position: "absolute",
+      left: 12,
+      right: 68,
+      top: 12,
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 6,
+      padding: 10,
+      borderRadius: 14,
+      backgroundColor: c.glass,
+      ...shadow(scheme, "float"),
+    },
+    bannerText: { flex: 1, color: c.danger, fontSize: 11.5, lineHeight: 16 },
+    topRight: { position: "absolute", top: 12, right: 12 },
+    bottomRight: { position: "absolute", right: 12 },
+    // Floating glass control groups.
+    group: {
+      width: 44,
+      borderRadius: 16,
+      overflow: "hidden",
+      backgroundColor: c.glass,
+      borderWidth: 1,
+      borderColor: c.glassBorder,
+      ...shadow(scheme, "float"),
+    },
+    groupGap: { marginBottom: 10 },
+    control: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+    controlPressed: { backgroundColor: c.primaryTint },
+    divider: { height: StyleSheet.hairlineWidth, marginHorizontal: 9, backgroundColor: c.ruleStrong },
+    sheetSection: {
+      marginTop: 14,
+      marginBottom: 8,
+      color: c.muted,
+      fontSize: 10.5,
+      fontWeight: "700",
+      letterSpacing: 0.9,
+      textTransform: "uppercase",
+    },
+    typeRow: { flexDirection: "row", gap: 12 },
+    typeItem: { flex: 1, alignItems: "center" },
+    thumb: {
+      width: "100%",
+      aspectRatio: 1.25,
+      borderRadius: 16,
+      overflow: "hidden",
+      borderWidth: 2,
+      borderColor: "transparent",
+      backgroundColor: c.mapGround,
+    },
+    thumbSelected: { borderColor: c.primary },
+    thumbImage: { width: "100%", height: "100%" },
+    typeLabel: { marginTop: 6, color: c.ink2, fontSize: 12, fontWeight: "600" },
+    typeLabelSelected: { color: c.primary, fontWeight: "800" },
+    toggleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      minHeight: 52,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: c.rule,
+    },
+    toggleCopy: { flex: 1 },
+    toggleLabel: { color: c.ink, fontSize: 13.5, fontWeight: "600" },
+    toggleHint: { marginTop: 1, color: c.muted, fontSize: 11 },
+    themeRow: { flexDirection: "row", gap: 8 },
+    themeChip: {
+      flex: 1,
+      minHeight: 42,
+      borderRadius: 999,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.sunken,
+      borderWidth: 1.5,
+      borderColor: "transparent",
+    },
+    themeChipSelected: { backgroundColor: c.primary, borderColor: c.primary },
+    themeText: { color: c.ink2, fontSize: 13, fontWeight: "700" },
+    themeTextSelected: { color: c.onPrimary },
+    zoneChoice: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      minHeight: 50,
+      paddingHorizontal: 12,
+      marginBottom: 6,
+      borderRadius: 14,
+      backgroundColor: c.sunken,
+    },
+    zoneSwatch: { width: 12, height: 12, borderRadius: 6 },
+    zoneChoiceText: { flex: 1, color: c.ink, fontSize: 13.5, fontWeight: "700" },
+    zoneChoiceMeta: { color: c.muted, fontSize: 12 },
+  }),
+);

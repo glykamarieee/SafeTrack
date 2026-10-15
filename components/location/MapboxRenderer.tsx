@@ -220,7 +220,7 @@ export const MapboxRenderer = forwardRef<MapEngineHandle, MapEngineProps>(functi
                 "heavy",
                 "#E8710A",
                 "severe",
-                "#D93025",
+                "#B42318",
                 "#9AA5A0",
               ],
               lineWidth: 2.5,
@@ -246,8 +246,8 @@ export const MapboxRenderer = forwardRef<MapEngineHandle, MapEngineProps>(functi
 
       {routeShape ? (
         <ShapeSource id="st-route" shape={routeShape}>
-          <LineLayer id="st-route-casing" style={{ lineColor: "#0B5E3E", lineWidth: 8, lineCap: "round", lineJoin: "round" }} />
-          <LineLayer id="st-route-line" style={{ lineColor: "#2DBE84", lineWidth: 5, lineCap: "round", lineJoin: "round" }} />
+          <LineLayer id="st-route-casing" style={{ lineColor: "#FFFFFF", lineWidth: 9, lineCap: "round", lineJoin: "round" }} />
+          <LineLayer id="st-route-line" style={{ lineColor: "#22B35E", lineWidth: 5, lineCap: "round", lineJoin: "round" }} />
         </ShapeSource>
       ) : null}
 

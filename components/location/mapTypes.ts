@@ -96,7 +96,8 @@ export const DEFAULT_PREFS: MapPrefs = {
   traffic: false,
   zones: true,
   route: true,
-  theme: "light",
+  // Auto follows the app's Light / Dark appearance.
+  theme: "auto",
 };
 
 /** Default view when nothing is known yet: Metro Manila. */
@@ -106,20 +107,20 @@ export const MIN_ZOOM = 3;
 export const MAX_ZOOM = 20;
 
 export const ZONE_COLORS: Record<ZoneStatus, string> = {
-  inside: "#1E8E5A",
-  active: "#1E8E5A",
-  outside: "#D93025",
-  inactive: "#8A9690",
-  draft: "#1E4FD8",
-  accuracy: "#1A73E8",
+  inside: "#22B35E",
+  active: "#22B35E",
+  outside: "#F5B83D",
+  inactive: "#8C948F",
+  draft: "#245E9C",
+  accuracy: "#22B35E",
 };
 
 export const RING_COLORS: Record<AvatarRing, string> = {
-  inside: "#1E8E5A",
-  outside: "#E8A317",
-  sos: "#D93025",
-  stale: "#8A9690",
-  neutral: "#137A50",
+  inside: "#22B35E",
+  outside: "#F5B83D",
+  sos: "#B42318",
+  stale: "#8C948F",
+  neutral: "#15803D",
 };
 
 /** What every engine draws and reports; the controls live in the shell. */
@@ -207,7 +208,7 @@ export function initialsOf(name?: string | null) {
   return parts.slice(0, 2).map((part) => part[0]!.toUpperCase()).join("") || "?";
 }
 
-const AVATAR_COLORS = ["#137A50", "#1A73E8", "#8E44AD", "#C2410C", "#0E7490", "#B45309", "#BE185D"];
+const AVATAR_COLORS = ["#15803D", "#0D2A1E", "#178A43", "#1F5C3F", "#2C7A52"];
 
 /** A stable colour for someone's initials. */
 export function colorFor(seed?: string | null) {

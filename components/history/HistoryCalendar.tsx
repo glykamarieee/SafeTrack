@@ -12,6 +12,7 @@ import { MapSheet, sheetStyles } from "../location/MapSheet";
 import { monthGrid, shiftMonth } from "./dates";
 import { errorMessage, loadActivityDays, type ActivityDays } from "../../services/activityHistoryService";
 
+import { makeStyles, useTheme } from "../../theme/ThemeProvider";
 type Props = {
   visible: boolean;
   childId: string | null;
@@ -25,6 +26,8 @@ const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 
 /** Month calendar with a dot on each day that has records. */
 export function HistoryCalendar({ visible, childId, selected, today, onSelect, onClose }: Props) {
+  const styles = useStyles();
+  const { colors: c } = useTheme();
   const [month, setMonth] = useState(selected);
   const [data, setData] = useState<ActivityDays | null>(null);
   const [loading, setLoading] = useState(false);
@@ -67,7 +70,7 @@ export function HistoryCalendar({ visible, childId, selected, today, onSelect, o
           onPress={() => setMonth((value) => shiftMonth(value, -1))}
           style={styles.monthButton}
         >
-          <Ionicons name="chevron-back" size={18} color="#137A50" />
+          <Ionicons name="chevron-back" size={18} color={c.primary} />
         </Pressable>
         <Text style={styles.monthTitle}>{grid.title}</Text>
         <Pressable
@@ -77,7 +80,7 @@ export function HistoryCalendar({ visible, childId, selected, today, onSelect, o
           onPress={() => setMonth((value) => shiftMonth(value, 1))}
           style={[styles.monthButton, !canGoForward && styles.disabled]}
         >
-          <Ionicons name="chevron-forward" size={18} color="#137A50" />
+          <Ionicons name="chevron-forward" size={18} color={c.primary} />
         </Pressable>
       </View>
 
@@ -122,7 +125,7 @@ export function HistoryCalendar({ visible, childId, selected, today, onSelect, o
 
       {loading ? (
         <View style={styles.status}>
-          <ActivityIndicator size="small" color="#137A50" />
+          <ActivityIndicator size="small" color={c.primary} />
           <Text style={styles.statusText}>Checking which days have records</Text>
         </View>
       ) : null}
@@ -142,27 +145,29 @@ export function HistoryCalendar({ visible, childId, selected, today, onSelect, o
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) =>
+  StyleSheet.create({
   monthRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
-  monthButton: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#EEF4F1" },
+  monthButton: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: c.sunken },
   disabled: { opacity: 0.35 },
-  monthTitle: { color: "#14211B", fontSize: 15, fontWeight: "800" },
+  monthTitle: { color: c.ink, fontSize: 15, fontWeight: "800" },
   grid: { flexDirection: "row", flexWrap: "wrap" },
-  weekday: { width: `${100 / 7}%`, textAlign: "center", color: "#7A8681", fontSize: 11, fontWeight: "700", paddingVertical: 6 },
+  weekday: { width: `${100 / 7}%`, textAlign: "center", color: c.muted, fontSize: 11, fontWeight: "700", paddingVertical: 6 },
   cell: { width: `${100 / 7}%`, alignItems: "center", paddingVertical: 3 },
   day: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  daySelected: { backgroundColor: "#137A50" },
-  dayToday: { borderWidth: 1.5, borderColor: "#137A50" },
-  dayText: { color: "#1E2B25", fontSize: 13.5, fontWeight: "600" },
-  dayTextSelected: { color: "#FFFFFF", fontWeight: "800" },
-  dayTextFuture: { color: "#B9C3BE" },
-  dot: { width: 6, height: 6, borderRadius: 3, marginTop: 2, backgroundColor: "#2DBE84" },
-  dotSos: { backgroundColor: "#D93025" },
+  daySelected: { backgroundColor: c.primary },
+  dayToday: { borderWidth: 1.5, borderColor: c.primary },
+  dayText: { color: c.ink, fontSize: 13.5, fontWeight: "600" },
+  dayTextSelected: { color: c.onPrimary, fontWeight: "800" },
+  dayTextFuture: { color: c.ruleStrong },
+  dot: { width: 6, height: 6, borderRadius: 3, marginTop: 2, backgroundColor: c.brand },
+  dotSos: { backgroundColor: c.danger },
   dotSpace: { height: 8 },
   status: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 },
-  statusText: { color: "#66736D", fontSize: 12 },
-  problem: { color: "#B3261E" },
+  statusText: { color: c.muted, fontSize: 12 },
+  problem: { color: c.danger },
   legend: { flexDirection: "row", alignItems: "center", marginTop: 12 },
-  legendText: { marginLeft: 6, color: "#66736D", fontSize: 11.5 },
+  legendText: { marginLeft: 6, color: c.muted, fontSize: 11.5 },
   legendGap: { marginLeft: 14 },
-});
+}),
+);

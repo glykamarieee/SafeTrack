@@ -10,6 +10,7 @@ import {
 } from "react";
 import { AccessibilityInfo, useColorScheme } from "react-native";
 
+import { setCurrentScheme } from "./currentScheme";
 import { palettes, type ColorScheme, type Palette } from "./tokens";
 
 /** What the user picked in Profile → Appearance. */
@@ -76,6 +77,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const scheme: ColorScheme =
     preference === "system" ? (system === "dark" ? "dark" : "light") : preference;
+  setCurrentScheme(scheme);
 
   const value = useMemo<ThemeValue>(
     () => ({ scheme, colors: palettes[scheme], preference, setPreference, reduceMotion }),
