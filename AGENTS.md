@@ -582,8 +582,13 @@ and safety events for a date range, 50 per page, through
     Switch to a transactional sender such as Brevo or Resend for real use.
 - Guardian screens other than History still show only the oldest child
   (`linkedChildren[0]`).
-- The AI service is not hosted yet, so no AI notices are produced (the model
-  is retrained and ready).
+- **AI pipeline:** live since 2026-10-15.
+  - Render hosts the service, the Supabase secrets are set (the
+    `AI_SERVICE_KEY` digest starts `df5196dd`), and `AI_ENABLED=true` (it had
+    been `false`).
+  - All four edge functions were redeployed.
+  - The first scan stamped `last_ai_review_at` within a minute.
+  - Only one child currently has enough history to be scored.
 - **Fixed in code; the database part takes effect once migration 20261015 is applied:**
   - **Open insert policy:** the `anomaly_events` INSERT policy of `true` for
     `public` is dropped.
