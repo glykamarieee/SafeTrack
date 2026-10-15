@@ -24,6 +24,7 @@ import {
   uploadProfileAvatar,
 } from "../../services/profileAvatarService";
 
+import { useAuthStore } from "../../store/authStore";
 import { supabase } from "../../lib/supabase";
 
 import {
@@ -381,6 +382,10 @@ export default function EditChildProfileScreen() {
       });
 
       setAvatarPath(nextAvatarPath);
+
+      // Home, Location, History and Safe Zones read the child from the auth
+      // store; reload it so the new photo shows on the map markers at once.
+      await useAuthStore.getState().refreshLinkedChildren().catch(() => undefined);
 
       if (selectedAvatar) {
         setAvatarUrl(await getProfileAvatarUrl(nextAvatarPath));

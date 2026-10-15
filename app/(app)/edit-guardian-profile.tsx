@@ -22,6 +22,7 @@ import {
   getProfileAvatarUrl,
   uploadProfileAvatar,
 } from "../../services/profileAvatarService";
+import { useAuthStore } from "../../store/authStore";
 import { supabase } from "../../lib/supabase";
 import {
   guardianColors as colors,
@@ -116,6 +117,23 @@ export default function EditGuardianProfileScreen() {
         p_avatar_path: nextPath,
       });
       if (dbError) throw dbError;
+
+      // The map's "You" marker and the Profile header read the guardian from
+      // the auth store: update it so the new photo and name show at once.
+      useAuthStore.setState((state) =>
+        state.guardian
+          ? {
+              guardian: {
+                ...state.guardian,
+                fullName: name.trim(),
+                email: email.trim().toLowerCase(),
+                avatarPath: nextPath ?? undefined,
+                // Signed again by useAvatarUrl from the new path.
+                avatarUrl: nextPath === state.guardian.avatarPath ? state.guardian.avatarUrl : undefined,
+              },
+            }
+          : {},
+      );
 
       router.back();
     } catch (reason) {
