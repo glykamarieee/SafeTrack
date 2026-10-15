@@ -189,3 +189,10 @@ def test_service_starts_without_supabase_credentials(monkeypatch):
     monkeypatch.delenv("SUPABASE_URL", raising=False)
     monkeypatch.delenv("SUPABASE_SERVICE_KEY", raising=False)
     assert client.get("/").json()["status"] == "running"
+
+
+def test_key_with_surrounding_whitespace_is_accepted(monkeypatch):
+    # A key pasted into a host's settings with a trailing space or newline.
+    monkeypatch.setenv("AI_SERVICE_KEY", "  test-key\n")
+    response = score({"history": [], "current": walk(1)[0]}, headers={"X-SafeTrack-AI-Key": " test-key "})
+    assert response.status_code == 200

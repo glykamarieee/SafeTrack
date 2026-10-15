@@ -20,7 +20,9 @@ def require_service_key(
 ):
     # Every data endpoint needs AI_SERVICE_KEY: this service holds the
     # Supabase service-role key, so it must never be open to the internet.
-    expected = os.getenv("AI_SERVICE_KEY", "")
+    # Stripped: a space or newline pasted into a host's settings must not
+    # silently break authentication.
+    expected = os.getenv("AI_SERVICE_KEY", "").strip()
 
     if not expected:
         raise HTTPException(
@@ -29,7 +31,7 @@ def require_service_key(
         )
 
     if not hmac.compare_digest(
-        x_safetrack_ai_key.encode(),
+        x_safetrack_ai_key.strip().encode(),
         expected.encode()
     ):
         raise HTTPException(status_code=401, detail="Unauthorized.")
