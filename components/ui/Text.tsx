@@ -1,21 +1,32 @@
-import { Text as RNText, type TextProps as RNTextProps, type TextStyle } from "react-native";
+import type { TextProps as RNTextProps, TextStyle } from "react-native";
 
-import { useFontsReady } from "../../theme/fonts";
 import { useTheme } from "../../theme/ThemeProvider";
-import { fonts, tabular as tabularStyle, type, type Palette } from "../../theme/tokens";
+import { tabular as tabularStyle, type, type Palette } from "../../theme/tokens";
+import { Text as FontText } from "./NativeText";
 
 export type TextVariant = keyof typeof type;
-export type TextTone = "ink" | "ink2" | "muted" | "primary" | "danger" | "warning" | "safe" | "info" | "onPrimary" | "onDanger";
-
-const SERIF: TextVariant[] = ["display", "title", "heading"];
+export type TextTone =
+  | "ink"
+  | "ink2"
+  | "muted"
+  | "primary"
+  | "danger"
+  | "warning"
+  | "safe"
+  | "info"
+  | "onPrimary"
+  | "onDanger"
+  | "onForest"
+  | "onForestMuted";
 
 const WEIGHT: Record<TextVariant, TextStyle["fontWeight"]> = {
-  display: "600",
-  title: "600",
-  heading: "600",
+  display: "800",
+  title: "800",
+  heading: "700",
   body: "400",
-  label: "500",
-  legend: "600",
+  label: "600",
+  caption: "500",
+  legend: "700",
 };
 
 const DEFAULT_TONE: Record<TextVariant, TextTone> = {
@@ -23,7 +34,8 @@ const DEFAULT_TONE: Record<TextVariant, TextTone> = {
   title: "ink",
   heading: "ink",
   body: "ink2",
-  label: "ink2",
+  label: "ink",
+  caption: "muted",
   legend: "muted",
 };
 
@@ -41,37 +53,20 @@ export function toneColor(colors: Palette, tone: TextTone) {
 }
 
 /**
- * The only text component new screens need. Headings use Fraunces; body,
- * labels and legends use the system font. Legends are uppercase map-legend
- * labels ("INSIDE · HOME · 2 MIN AGO").
+ * Text with a variant from the type scale. Legends are small uppercase
+ * labels above values ("DISTANCE", "SAFE ZONES").
  */
-export function Text({
-  variant = "body",
-  tone,
-  tabular,
-  weight,
-  align,
-  style,
-  children,
-  ...rest
-}: TextProps) {
+export function Text({ variant = "body", tone, tabular, weight, align, style, children, ...rest }: TextProps) {
   const { colors } = useTheme();
-  const fontsReady = useFontsReady();
-  const serif = SERIF.includes(variant);
+  const heading = variant === "display" || variant === "title" || variant === "heading";
 
   return (
-    <RNText
+    <FontText
       {...rest}
-      // Headings stay readable at large system font sizes, but don't grow
-      // without limit inside fixed layouts.
-      maxFontSizeMultiplier={rest.maxFontSizeMultiplier ?? (serif ? 1.4 : 1.8)}
+      maxFontSizeMultiplier={rest.maxFontSizeMultiplier ?? (heading ? 1.4 : 1.8)}
       style={[
         type[variant],
-        {
-          color: toneColor(colors, tone ?? DEFAULT_TONE[variant]),
-          fontWeight: serif && fontsReady ? undefined : weight ?? WEIGHT[variant],
-        },
-        serif && { fontFamily: fontsReady ? fonts.display : fonts.fallbackSerif },
+        { color: toneColor(colors, tone ?? DEFAULT_TONE[variant]), fontWeight: weight ?? WEIGHT[variant] },
         variant === "legend" && { textTransform: "uppercase" },
         tabular && tabularStyle,
         align && { textAlign: align },
@@ -79,6 +74,6 @@ export function Text({
       ]}
     >
       {children}
-    </RNText>
+    </FontText>
   );
 }

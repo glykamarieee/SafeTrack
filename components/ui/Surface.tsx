@@ -3,12 +3,15 @@ import { Animated, Pressable, StyleSheet, View, type StyleProp, type ViewStyle }
 
 import { usePressFeedback } from "../../theme/motion";
 import { makeStyles } from "../../theme/ThemeProvider";
-import { hairline, radius, space } from "../../theme/tokens";
+import { hairline, radius, shadow, space } from "../../theme/tokens";
 
 type Props = {
   children: ReactNode;
-  /** "card" sits on paper with a hairline; "sunken" is a quiet well. */
-  tone?: "card" | "sunken" | "tint";
+  /**
+   * card: white card with a soft shadow. flat: white, no shadow.
+   * sunken: quiet grey well. tint: mint wash. forest: the strong dark card.
+   */
+  tone?: "card" | "flat" | "sunken" | "tint" | "forest";
   padded?: boolean;
   onPress?: () => void;
   accessibilityLabel?: string;
@@ -16,7 +19,6 @@ type Props = {
   style?: StyleProp<ViewStyle>;
 };
 
-/** A card drawn with an ink-thin rule instead of a drop shadow. */
 export function Surface({ children, tone = "card", padded = true, onPress, accessibilityLabel, accessibilityHint, style }: Props) {
   const styles = useStyles();
   const press = usePressFeedback();
@@ -38,12 +40,18 @@ export function Surface({ children, tone = "card", padded = true, onPress, acces
   );
 }
 
-const useStyles = makeStyles((c) =>
+const useStyles = makeStyles((c, scheme) =>
   StyleSheet.create({
-    base: { borderRadius: radius.md, overflow: "hidden" },
-    card: { backgroundColor: c.surface, borderWidth: hairline, borderColor: c.rule },
+    base: { borderRadius: radius.md },
+    card: {
+      backgroundColor: c.surface,
+      // Dark mode separates cards with a rule; light mode with a soft shadow.
+      ...(scheme === "dark" ? { borderWidth: hairline, borderColor: c.rule } : shadow(scheme)),
+    },
+    flat: { backgroundColor: c.surface, borderWidth: hairline, borderColor: c.rule },
     sunken: { backgroundColor: c.sunken },
     tint: { backgroundColor: c.primaryTint },
+    forest: { backgroundColor: c.forest },
     padded: { padding: space.lg },
   }),
 );

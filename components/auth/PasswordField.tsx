@@ -1,5 +1,10 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Pressable,
+  StyleSheet,
+  View,
+} from "react-native";
+import { Text, TextInput } from "../ui/NativeText";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, radii, spacing, typography } from "../../constants/theme";
 

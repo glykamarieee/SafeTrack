@@ -2,10 +2,10 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   View,
   useWindowDimensions,
 } from "react-native";
+import { Text } from "../../components/ui/NativeText";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { showAlert } from "../../lib/platformAlert";
 import { useRouter } from "expo-router";

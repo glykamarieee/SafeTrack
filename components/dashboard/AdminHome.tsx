@@ -5,10 +5,10 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
-  Text,
   View,
   useWindowDimensions,
 } from "react-native";
+import { Text } from "../ui/NativeText";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 

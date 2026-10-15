@@ -1,23 +1,27 @@
+/**
+ * Legacy tokens, now mapped onto the SafeTrack design system
+ * (theme/tokens.ts, light palette). Deleted when nothing imports it.
+ */
 export const colors = {
-  sage: "#8FA684",
-  sageLight: "#EAF2E7",
-  emerald: "#2F6D4F",
-  emeraldDark: "#1F4B37",
+  sage: "#22B35E",
+  sageLight: "#E7F6EC",
+  emerald: "#15803D",
+  emeraldDark: "#0F5C2E",
   white: "#FFFFFF",
-  softGray: "#F4F7F3",
-  gray: "#8A948A",
-  border: "#E1E8DD",
-  textPrimary: "#1B2A20",
-  textSecondary: "#5B6B5E",
-  textMuted: "#8A948A",
-  danger: "#C0442E",
-  dangerLight: "#FBE7E3",
-  warning: "#B8863A",
-  warningLight: "#FBF2E1",
-  success: "#2F6D4F",
-  successLight: "#E6F0E9",
-  info: "#3E6E8E",
-  infoLight: "#E7F0F5",
+  softGray: "#F4F7F5",
+  gray: "#8C948F",
+  border: "#E3E9E5",
+  textPrimary: "#0E1411",
+  textSecondary: "#4B5550",
+  textMuted: "#636D68",
+  danger: "#B42318",
+  dangerLight: "#FDECEA",
+  warning: "#8A5A00",
+  warningLight: "#FFF6E2",
+  success: "#15803D",
+  successLight: "#E7F6EC",
+  info: "#245E9C",
+  infoLight: "#E2EBF5",
 } as const;
 
 export const spacing = {
@@ -30,36 +34,36 @@ export const spacing = {
 } as const;
 
 export const radii = {
-  sm: 8,
-  md: 14,
-  lg: 20,
-  xl: 28,
+  sm: 10,
+  md: 16,
+  lg: 22,
+  xl: 30,
   pill: 999,
 } as const;
 
 export const shadows = {
   soft: {
-    shadowColor: "#1B2A20",
+    shadowColor: "#0E1411",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.06,
     shadowRadius: 12,
     elevation: 2,
   },
   card: {
-    shadowColor: "#1B2A20",
+    shadowColor: "#0E1411",
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.07,
     shadowRadius: 16,
     elevation: 3,
   },
 } as const;
 
 export const typography = {
-  display: { fontSize: 28, fontWeight: "700" as const, color: colors.textPrimary },
-  title: { fontSize: 22, fontWeight: "700" as const, color: colors.textPrimary },
-  subtitle: { fontSize: 17, fontWeight: "600" as const, color: colors.textPrimary },
+  display: { fontSize: 28, fontWeight: "800" as const, color: colors.textPrimary },
+  title: { fontSize: 22, fontWeight: "800" as const, color: colors.textPrimary },
+  subtitle: { fontSize: 17, fontWeight: "700" as const, color: colors.textPrimary },
   body: { fontSize: 15, fontWeight: "400" as const, color: colors.textSecondary },
   bodyStrong: { fontSize: 15, fontWeight: "600" as const, color: colors.textPrimary },
   caption: { fontSize: 13, fontWeight: "500" as const, color: colors.textMuted },
-  label: { fontSize: 12, fontWeight: "600" as const, color: colors.textMuted, letterSpacing: 0.4 },
+  label: { fontSize: 12, fontWeight: "700" as const, color: colors.textMuted, letterSpacing: 0.4 },
 };

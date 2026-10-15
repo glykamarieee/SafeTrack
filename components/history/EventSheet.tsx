@@ -1,5 +1,10 @@
 import { useMemo, useState } from "react";
-import { Linking, StyleSheet, Text, View } from "react-native";
+import {
+  Linking,
+  StyleSheet,
+  View,
+} from "react-native";
+import { Text } from "../ui/NativeText";
 
 import { MapSheet, SheetButton, SheetRow, sheetStyles } from "../location/MapSheet";
 import { SafeTrackInteractiveMap, type SafeTrackMapMarker } from "../location/SafeTrackInteractiveMap";

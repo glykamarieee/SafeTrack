@@ -1,4 +1,9 @@
-import { Pressable, ScrollView, StyleSheet, Text } from "react-native";
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+} from "react-native";
+import { Text } from "../ui/NativeText";
 import { colors, radii, spacing } from "../../constants/theme";
 
 export type ReportDateFilter = "all" | "last7" | "last30";

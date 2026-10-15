@@ -1,5 +1,5 @@
 export { Button, type ButtonVariant } from "./Button";
-export { Contour } from "./Contour";
+export { MapPattern } from "./MapPattern";
 export { Entrance } from "./Entrance";
 export { Rule } from "./Rule";
 export { Screen } from "./Screen";

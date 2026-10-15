@@ -3,7 +3,7 @@ import { Animated, StyleSheet, View } from "react-native";
 
 import { usePulse } from "../../theme/motion";
 import { useTheme } from "../../theme/ThemeProvider";
-import { stateColor, type ChildState } from "../../theme/tokens";
+import { stateColor, stateTint, type ChildState } from "../../theme/tokens";
 import { Text } from "./Text";
 
 type Props = {
@@ -11,7 +11,7 @@ type Props = {
   photoUrl?: string | null;
   state: ChildState;
   size?: number;
-  /** Pulses only for live location or an active SOS. */
+  /** Pulses for a fresh location or an active SOS. */
   live?: boolean;
 };
 
@@ -23,7 +23,7 @@ const STATE_LABEL: Record<ChildState, string> = {
   unknown: "status unknown",
 };
 
-function initials(name: string) {
+export function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase() || "?";
 }
@@ -36,8 +36,8 @@ export function StateRing({ name, photoUrl, state, size = 56, live = false }: Pr
   const { colors } = useTheme();
   const color = stateColor(colors, state);
   const pulse = usePulse(live || state === "sos");
-  const ring = Math.max(2, Math.round(size / 20));
-  const inner = size - ring * 2 - 4;
+  const ring = Math.max(2, Math.round(size / 18));
+  const inner = size - ring * 2;
 
   return (
     <View
@@ -53,8 +53,8 @@ export function StateRing({ name, photoUrl, state, size = 56, live = false }: Pr
           {
             borderRadius: size / 2,
             backgroundColor: color,
-            opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0, 0.22] }),
-            transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.22] }) }],
+            opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.12, 0.28] }),
+            transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1.12, 1.3] }) }],
           },
         ]}
       />
@@ -65,28 +65,23 @@ export function StateRing({ name, photoUrl, state, size = 56, live = false }: Pr
           borderRadius: size / 2,
           borderWidth: ring,
           borderColor: color,
-          backgroundColor: colors.surface,
+          backgroundColor: stateTint(colors, state),
           alignItems: "center",
           justifyContent: "center",
+          overflow: "hidden",
         }}
       >
         {photoUrl ? (
           <Image source={{ uri: photoUrl }} style={{ width: inner, height: inner, borderRadius: inner / 2 }} contentFit="cover" />
         ) : (
-          <View
-            style={{
-              width: inner,
-              height: inner,
-              borderRadius: inner / 2,
-              backgroundColor: colors.primaryTint,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+          <Text
+            variant="heading"
+            weight="800"
+            tone={state === "sos" ? "danger" : state === "outside" ? "warning" : state === "inside" ? "primary" : "ink2"}
+            style={{ fontSize: Math.round(size * 0.32), lineHeight: Math.round(size * 0.42) }}
           >
-            <Text variant="heading" tone="primary" style={{ fontSize: Math.round(inner * 0.38), lineHeight: Math.round(inner * 0.5) }}>
-              {initials(name)}
-            </Text>
-          </View>
+            {initials(name)}
+          </Text>
         )}
       </View>
     </View>

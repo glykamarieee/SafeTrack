@@ -7,7 +7,7 @@ import {
   AccountScreenFrame,
   accountStyles,
 } from "../../components/profile/AccountScreenFrame";
-import { Text } from "react-native";
+import { Text } from "../../components/ui/NativeText";
 import { useAuthStore } from "../../store/authStore";
 import { MIN_PASSWORD_LENGTH, changeMyPassword, passwordProblem } from "../../services/supabaseAuthService";
 

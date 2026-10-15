@@ -1,4 +1,10 @@
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Image,
+  Pressable,
+  StyleSheet,
+  View,
+} from "react-native";
+import { Text } from "../../components/ui/NativeText";
 import { StatusBar } from "expo-status-bar";
 import { router } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";

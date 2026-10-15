@@ -1,4 +1,9 @@
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  StyleSheet,
+  View,
+} from "react-native";
+import { Text } from "../ui/NativeText";
 import { colors, spacing, typography } from "../../constants/theme";
 
 interface LoadingStateProps {

@@ -1,22 +1,26 @@
+/**
+ * Legacy shared tokens, now mapped onto the SafeTrack design system
+ * (theme/tokens.ts, light palette). Deleted when nothing imports it.
+ */
 export const safeTrackColors = {
-  background: "#F4FBF8",
+  background: "#F4F7F5",
   white: "#FFFFFF",
-  surfaceMuted: "#EAF8F0",
-  softMint: "#DFF5E8",
-  primary: "#1EA96B",
-  primaryDark: "#128754",
-  primaryLight: "#5BCB91",
-  sage: "#70A982",
-  accent: "#A7DDBB",
-  danger: "#E25E5E",
-  dangerSoft: "#FDE8E8",
-  warning: "#F4B63F",
-  warningSoft: "#FFF5D9",
-  ink: "#10201A",
-  text: "#22322C",
-  muted: "#71807A",
-  border: "#DCE9E3",
-  overlay: "rgba(10, 30, 20, 0.48)",
+  surfaceMuted: "#EEF2EF",
+  softMint: "#E7F6EC",
+  primary: "#15803D",
+  primaryDark: "#0F5C2E",
+  primaryLight: "#22B35E",
+  sage: "#8C948F",
+  accent: "#CFE6D6",
+  danger: "#B42318",
+  dangerSoft: "#FDECEA",
+  warning: "#F5B83D",
+  warningSoft: "#FFF6E2",
+  ink: "#0E1411",
+  text: "#4B5550",
+  muted: "#636D68",
+  border: "#E3E9E5",
+  overlay: "rgba(14, 20, 17, 0.45)",
 } as const;
 
 export const safeTrackRadius = {
@@ -39,15 +43,15 @@ export const safeTrackSpacing = {
 
 export const safeTrackShadow = {
   card: {
-    shadowColor: "#17392A",
+    shadowColor: "#0E1411",
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.07,
     shadowRadius: 18,
     elevation: 3,
   },
   soft: {
-    shadowColor: "#17392A",
-    shadowOffset: { width: 0, height: 5 },
+    shadowColor: "#0E1411",
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.06,
     shadowRadius: 10,
     elevation: 2,

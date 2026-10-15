@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { Linking, Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import {
+  Linking,
+  Pressable,
+  StyleSheet,
+  Switch,
+  View,
+} from "react-native";
+import { Text } from "../ui/NativeText";
 import { Ionicons } from "@expo/vector-icons";
 
 import {

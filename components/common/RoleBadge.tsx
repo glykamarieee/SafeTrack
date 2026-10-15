@@ -1,4 +1,8 @@
-import { StyleSheet, Text, View } from "react-native";
+import {
+  StyleSheet,
+  View,
+} from "react-native";
+import { Text } from "../ui/NativeText";
 import { ROLE_LABELS } from "../../constants/roles";
 import { colors, radii, spacing } from "../../constants/theme";
 import type { UserRole } from "../../types/safetrack";

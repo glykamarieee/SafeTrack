@@ -1,42 +1,55 @@
 import { Platform } from "react-native";
 
 /**
- * SafeTrack design tokens: "calm cartography".
+ * SafeTrack design tokens: green, white and a little forest night.
  *
- * One design system for the guardian, child phone, auth and admin surfaces.
- * Colours come in a light and a dark palette with the same keys, so a screen
- * styled from `useTheme().colors` works in both. Contrast ratios are listed in
- * docs/redesign-plan.md; every text pair passes WCAG AA.
+ * One design system for the guardian, child phone, auth and admin surfaces
+ * (the approved board: https://claude.ai/artifact/4h3Bh1nUEePYVT4YEnLQCE).
+ * Light and dark palettes share the same keys, so a screen styled from
+ * `useTheme().colors` works in both. Every text pair passes WCAG AA.
  *
- * Red (`danger`) is reserved for SOS and destructive actions.
+ * - `brand` (#22B35E) is for things that are live or safe: routes, rings,
+ *   dots, chart bars. Never text on white, never under white text.
+ * - `primary` is for buttons and green text.
+ * - `forest` is the "black": a deep green from the same family, at most once
+ *   per screen for the strongest card or button.
+ * - `danger` (red) is reserved for SOS and destructive actions.
  */
 
 export type ColorScheme = "light" | "dark";
 
 export type Palette = {
-  /** Page background: warm paper. */
+  /** Page background. */
   paper: string;
   /** Cards, sheets, inputs. */
   surface: string;
-  /** Wells, pressed rows, track backgrounds. */
+  /** Wells, pressed rows, track backgrounds, input fills. */
   sunken: string;
-  /** 1-px hairlines that replace drop shadows. */
+  /** Hairlines and dividers. */
   rule: string;
-  /** Stronger hairline for focused inputs and selected chips. */
+  /** Input borders, selected outlines. */
   ruleStrong: string;
   ink: string;
   ink2: string;
   muted: string;
+  /** Buttons and green text. */
   primary: string;
-  /** Text and icons placed on `primary`. */
   onPrimary: string;
+  /** Mint wash behind green icons and selected chips. */
   primaryTint: string;
+  /** Bright green for routes, rings, dots and bars (not text). */
+  brand: string;
+  /** The strongest card per screen. */
+  forest: string;
+  forestRaised: string;
+  onForest: string;
+  onForestMuted: string;
   danger: string;
   onDanger: string;
   dangerTint: string;
   /** Warning as text or icon. */
   warning: string;
-  /** Warning as a fill (badges, the warning dot). */
+  /** Warning as a fill (badges, the warning ring). */
   warningFill: string;
   onWarningFill: string;
   warningTint: string;
@@ -44,67 +57,88 @@ export type Palette = {
   safeTint: string;
   info: string;
   infoTint: string;
+  /** Offline ring / icon colour. */
   offline: string;
+  offlineTint: string;
   /** Behind modals and sheets. */
   scrim: string;
-  /** The faint contour-line motif. */
-  contour: string;
+  /** Glass bars floating over the map. */
+  glass: string;
+  glassBorder: string;
+  /** Map placeholder ground. */
+  mapGround: string;
 };
 
 export const lightPalette: Palette = {
-  paper: "#F5F2EA",
-  surface: "#FFFDF8",
-  sunken: "#ECE7DC",
-  rule: "#DED7C9",
-  ruleStrong: "#C2B9A7",
-  ink: "#1B2420",
-  ink2: "#46504A",
-  muted: "#666F69",
-  primary: "#1E5C45",
+  paper: "#F4F7F5",
+  surface: "#FFFFFF",
+  sunken: "#EEF2EF",
+  rule: "#E3E9E5",
+  ruleStrong: "#CFD8D2",
+  ink: "#0E1411",
+  ink2: "#4B5550",
+  muted: "#636D68",
+  primary: "#15803D",
   onPrimary: "#FFFFFF",
-  primaryTint: "#E1ECE4",
-  danger: "#B4301F",
+  primaryTint: "#E7F6EC",
+  brand: "#22B35E",
+  forest: "#0D2A1E",
+  forestRaised: "#163D2B",
+  onForest: "#FFFFFF",
+  onForestMuted: "#9FC3AE",
+  danger: "#B42318",
   onDanger: "#FFFFFF",
-  dangerTint: "#F8E3DD",
+  dangerTint: "#FDECEA",
   warning: "#8A5A00",
-  warningFill: "#F0B23C",
-  onWarningFill: "#1B2420",
-  warningTint: "#F7EAD0",
-  safe: "#2B7A4B",
-  safeTint: "#E1EFE5",
+  warningFill: "#F5B83D",
+  onWarningFill: "#0E1411",
+  warningTint: "#FFF6E2",
+  safe: "#15803D",
+  safeTint: "#E7F6EC",
   info: "#245E9C",
   infoTint: "#E2EBF5",
-  offline: "#636963",
-  scrim: "rgba(27, 36, 32, 0.45)",
-  contour: "rgba(30, 92, 69, 0.10)",
+  offline: "#8C948F",
+  offlineTint: "#EEF1EF",
+  scrim: "rgba(14, 20, 17, 0.45)",
+  glass: "rgba(255, 255, 255, 0.86)",
+  glassBorder: "rgba(255, 255, 255, 0.95)",
+  mapGround: "#E9EDEB",
 };
 
 export const darkPalette: Palette = {
-  paper: "#111513",
-  surface: "#181D1A",
-  sunken: "#0C0F0D",
-  rule: "#2A322D",
-  ruleStrong: "#3E4842",
-  ink: "#EDEFE9",
-  ink2: "#BCC3BC",
-  muted: "#8E968F",
-  primary: "#7CC79F",
-  onPrimary: "#111513",
-  primaryTint: "#1C2E25",
-  danger: "#FF7A6B",
-  onDanger: "#111513",
-  dangerTint: "#3A1D19",
+  paper: "#0A120E",
+  surface: "#12201A",
+  sunken: "#0E1A14",
+  rule: "#1E3329",
+  ruleStrong: "#2C4A3B",
+  ink: "#EEF2EF",
+  ink2: "#BFD0C6",
+  muted: "#97A89E",
+  primary: "#3DDC84",
+  onPrimary: "#0A120E",
+  primaryTint: "#163D2B",
+  brand: "#3DDC84",
+  forest: "#183027",
+  forestRaised: "#1F3D31",
+  onForest: "#FFFFFF",
+  onForestMuted: "#9FC3AE",
+  danger: "#FF6B5C",
+  onDanger: "#0A120E",
+  dangerTint: "#3A1512",
   warning: "#F2B94B",
   warningFill: "#F2B94B",
-  onWarningFill: "#111513",
+  onWarningFill: "#0A120E",
   warningTint: "#33280F",
-  safe: "#6ACB93",
-  safeTint: "#1A2E22",
+  safe: "#3DDC84",
+  safeTint: "#163D2B",
   info: "#7DB2EA",
   infoTint: "#18263A",
-  offline: "#9AA19B",
+  offline: "#97A89E",
+  offlineTint: "#1A2A22",
   scrim: "rgba(0, 0, 0, 0.6)",
-  contour: "rgba(124, 199, 159, 0.08)",
+  glass: "rgba(18, 32, 26, 0.88)",
+  glassBorder: "rgba(255, 255, 255, 0.08)",
+  mapGround: "#0E1A14",
 };
 
 export const palettes: Record<ColorScheme, Palette> = {
@@ -118,7 +152,7 @@ export type ChildState = "inside" | "outside" | "offline" | "sos" | "unknown";
 export function stateColor(palette: Palette, state: ChildState): string {
   switch (state) {
     case "inside":
-      return palette.safe;
+      return palette.brand;
     case "outside":
       return palette.warningFill;
     case "sos":
@@ -127,6 +161,21 @@ export function stateColor(palette: Palette, state: ChildState): string {
       return palette.offline;
     default:
       return palette.ruleStrong;
+  }
+}
+
+export function stateTint(palette: Palette, state: ChildState): string {
+  switch (state) {
+    case "inside":
+      return palette.primaryTint;
+    case "outside":
+      return palette.warningTint;
+    case "sos":
+      return palette.dangerTint;
+    case "offline":
+      return palette.offlineTint;
+    default:
+      return palette.sunken;
   }
 }
 
@@ -143,32 +192,42 @@ export const space = {
 } as const;
 
 export const radius = {
-  /** Inputs, chips. */
-  sm: 8,
-  /** Cards, sheets, the map. */
-  md: 14,
+  /** Small chips, tags. */
+  xs: 10,
+  /** Inputs, icon tiles. */
+  sm: 16,
+  /** Cards. */
+  md: 22,
+  /** Sheets, hero cards. */
+  lg: 30,
   pill: 999,
 } as const;
 
 export const hairline = 1;
 
 /**
- * Fraunces is loaded in app/_layout.tsx. Until it loads (or if it fails) the
- * headings fall back to the platform serif, never to a missing font.
+ * Plus Jakarta Sans, loaded in app/_layout.tsx. Custom fonts on Android pick
+ * the file by family name, not by fontWeight, so each weight is its own family.
+ * Until the font loads (or if it fails) the system font is used.
  */
-export const fonts = {
-  display: "Fraunces_600SemiBold",
-  displayItalic: "Fraunces_500Medium_Italic",
-  fallbackSerif: Platform.select({ ios: "Georgia", android: "serif", default: "Georgia, serif" }) as string,
+export const fontFamily = {
+  regular: "PlusJakartaSans_400Regular",
+  medium: "PlusJakartaSans_500Medium",
+  semibold: "PlusJakartaSans_600SemiBold",
+  bold: "PlusJakartaSans_700Bold",
+  extrabold: "PlusJakartaSans_800ExtraBold",
 } as const;
 
+export type FontWeightName = keyof typeof fontFamily;
+
 export const type = {
-  display: { fontSize: 34, lineHeight: 40, letterSpacing: -0.4 },
-  title: { fontSize: 26, lineHeight: 32, letterSpacing: -0.2 },
-  heading: { fontSize: 19, lineHeight: 26 },
+  display: { fontSize: 32, lineHeight: 38, letterSpacing: -0.8 },
+  title: { fontSize: 24, lineHeight: 30, letterSpacing: -0.5 },
+  heading: { fontSize: 18, lineHeight: 24, letterSpacing: -0.2 },
   body: { fontSize: 15, lineHeight: 22 },
   label: { fontSize: 13, lineHeight: 18 },
-  legend: { fontSize: 11, lineHeight: 14, letterSpacing: 0.8 },
+  caption: { fontSize: 12, lineHeight: 16 },
+  legend: { fontSize: 10.5, lineHeight: 14, letterSpacing: 0.9 },
 } as const;
 
 /** Times, distances, counts and battery line up in columns. */
@@ -176,28 +235,32 @@ export const tabular = { fontVariant: ["tabular-nums" as const] };
 
 export const motion = {
   press: 120,
-  enter: 200,
-  enterRise: 8,
-  stagger: 40,
-  sheetIn: 280,
+  enter: 260,
+  enterRise: 14,
+  stagger: 60,
+  sheetIn: 320,
   sheetOut: 200,
   segment: 220,
-  countUp: 400,
+  countUp: 500,
   check: 300,
-  pressScale: 0.98,
+  pressScale: 0.97,
 } as const;
 
-/** Only floating elements (map controls, sheets, the SOS band) get a shadow. */
-export function floatingShadow(scheme: ColorScheme) {
-  const opacity = scheme === "dark" ? 0.5 : 0.12;
+/** Soft shadow for raised cards and floating map controls. */
+export function shadow(scheme: ColorScheme, level: "card" | "float" = "card") {
+  const strong = level === "float";
+  const opacity = scheme === "dark" ? (strong ? 0.5 : 0.3) : strong ? 0.14 : 0.07;
   return Platform.select({
-    web: { boxShadow: `0 8px 24px rgba(0, 0, 0, ${opacity})` } as object,
+    web: { boxShadow: `0 ${strong ? 14 : 8}px ${strong ? 34 : 22}px rgba(14, 20, 17, ${opacity})` } as object,
     default: {
-      shadowColor: "#000000",
-      shadowOffset: { width: 0, height: 6 },
+      shadowColor: "#0E1411",
+      shadowOffset: { width: 0, height: strong ? 12 : 6 },
       shadowOpacity: opacity,
-      shadowRadius: 16,
-      elevation: 6,
+      shadowRadius: strong ? 24 : 14,
+      elevation: strong ? 8 : 3,
     },
   }) as object;
 }
+
+/** @deprecated use shadow(scheme, "float") */
+export const floatingShadow = (scheme: ColorScheme) => shadow(scheme, "float");

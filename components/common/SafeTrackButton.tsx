@@ -1,5 +1,12 @@
 import type { ReactNode } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  View,
+  type ViewStyle,
+} from "react-native";
+import { Text } from "../ui/NativeText";
 import { Ionicons } from "@expo/vector-icons";
 import { safeTrackColors as colors, safeTrackRadius as radius, safeTrackShadow as shadow } from "../../constants/safeTrackDesign";
 

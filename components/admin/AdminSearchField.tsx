@@ -1,4 +1,8 @@
-import { StyleSheet, TextInput, View } from "react-native";
+import {
+  StyleSheet,
+  View,
+} from "react-native";
+import { TextInput } from "../ui/NativeText";
 import { Ionicons } from "@expo/vector-icons";
 import { adminColors as colors, adminRadius as radius } from "../../constants/adminDesign";
 

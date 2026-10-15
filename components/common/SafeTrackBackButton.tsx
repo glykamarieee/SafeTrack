@@ -1,4 +1,8 @@
-import { Pressable, StyleSheet, Text } from "react-native";
+import {
+  Pressable,
+  StyleSheet,
+} from "react-native";
+import { Text } from "../ui/NativeText";
 import { useRouter, type Href } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 

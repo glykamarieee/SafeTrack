@@ -2,7 +2,7 @@ import { Redirect } from "expo-router";
 import { useState } from "react";
 import { View } from "react-native";
 
-import { Button, Contour, Entrance, Rule, Screen, Segmented, StateRing, Surface, Text } from "../components/ui";
+import { Button, Entrance, MapPattern, Rule, Screen, Segmented, StateRing, Surface, Text } from "../components/ui";
 import { useTheme, type AppearancePreference } from "../theme/ThemeProvider";
 import { space } from "../theme/tokens";
 
@@ -19,7 +19,7 @@ export default function DesignPreview() {
   return (
     <Screen>
       <View style={{ marginHorizontal: -space.gutter, paddingHorizontal: space.gutter, paddingVertical: space.xl, gap: space.md }}>
-        <Contour />
+        <MapPattern color="#22B35E" />
         <Text variant="legend">Design system · preview</Text>
         <Text variant="display">Calm cartography</Text>
         <Text>Warm paper, ink-thin rules, forest green. Red only for SOS.</Text>

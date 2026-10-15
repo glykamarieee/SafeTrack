@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Text } from "react-native";
+import { Text } from "../../components/ui/NativeText";
 import { useRouter } from "expo-router";
 
 import {

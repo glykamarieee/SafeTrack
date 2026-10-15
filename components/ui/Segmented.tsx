@@ -3,7 +3,7 @@ import { Animated, Pressable, StyleSheet, View, type LayoutChangeEvent } from "r
 
 import { easeOut, nativeDriver } from "../../theme/motion";
 import { makeStyles, useTheme } from "../../theme/ThemeProvider";
-import { hairline, motion, radius, space } from "../../theme/tokens";
+import { motion, radius, shadow, space } from "../../theme/tokens";
 import { Text } from "./Text";
 
 type Option<T extends string> = { value: T; label: string };
@@ -15,7 +15,7 @@ type Props<T extends string> = {
   accessibilityLabel?: string;
 };
 
-/** A segmented control whose indicator slides between options (220 ms). */
+/** A pill segmented control whose green indicator slides between options. */
 export function Segmented<T extends string>({ options, value, onChange, accessibilityLabel }: Props<T>) {
   const { reduceMotion } = useTheme();
   const styles = useStyles();
@@ -37,17 +37,14 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
     }).start();
   }, [index, position, reduceMotion]);
 
-  const onLayout = (event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width - 4);
+  const onLayout = (event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width - 8);
 
   return (
     <View accessibilityRole="tablist" accessibilityLabel={accessibilityLabel} style={styles.track} onLayout={onLayout}>
       {width > 0 ? (
         <Animated.View
           pointerEvents="none"
-          style={[
-            styles.indicator,
-            { width: segment, transform: [{ translateX: Animated.multiply(position, segment) }] },
-          ]}
+          style={[styles.indicator, { width: segment, transform: [{ translateX: Animated.multiply(position, segment) }] }]}
         />
       ) : null}
       {options.map((option) => {
@@ -61,7 +58,7 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
             onPress={() => onChange(option.value)}
             style={styles.option}
           >
-            <Text variant="label" tone={selected ? "ink" : "muted"} weight={selected ? "600" : "500"} numberOfLines={1}>
+            <Text variant="label" tone={selected ? "onPrimary" : "ink2"} weight={selected ? "700" : "600"} numberOfLines={1}>
               {option.label}
             </Text>
           </Pressable>
@@ -71,23 +68,22 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
   );
 }
 
-const useStyles = makeStyles((c) =>
+const useStyles = makeStyles((c, scheme) =>
   StyleSheet.create({
     track: {
       flexDirection: "row",
-      padding: 2,
+      padding: 4,
       borderRadius: radius.pill,
-      backgroundColor: c.sunken,
+      backgroundColor: c.surface,
+      ...(scheme === "dark" ? { borderWidth: 1, borderColor: c.rule } : shadow(scheme)),
     },
     indicator: {
       position: "absolute",
-      top: 2,
-      bottom: 2,
-      left: 2,
+      top: 4,
+      bottom: 4,
+      left: 4,
       borderRadius: radius.pill,
-      backgroundColor: c.surface,
-      borderWidth: hairline,
-      borderColor: c.rule,
+      backgroundColor: c.primary,
     },
     option: {
       flex: 1,

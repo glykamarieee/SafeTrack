@@ -28,7 +28,9 @@ function isRunningInExpoGo(): boolean {
  * this file because doing so causes Expo Go to throw during startup.
  */
 async function loadNotifications() {
-  if (isRunningInExpoGo()) {
+  // Push notifications only exist on phones: on the web build the module's
+  // native methods (getLastNotificationResponse, push tokens) throw.
+  if (isRunningInExpoGo() || Platform.OS === "web") {
     return null;
   }
 

@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { StyleSheet, Switch, Text, View } from "react-native";
+import {
+  StyleSheet,
+  Switch,
+  View,
+} from "react-native";
+import { Text } from "../../components/ui/NativeText";
 import { Ionicons } from "@expo/vector-icons";
 import { ScreenContainer } from "../../components/common/ScreenContainer";
 import { LoadingState } from "../../components/common/LoadingState";

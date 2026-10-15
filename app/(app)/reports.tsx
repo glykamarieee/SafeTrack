@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { FlatList, StyleSheet, Text } from "react-native";
+import {
+  FlatList,
+  StyleSheet,
+} from "react-native";
+import { Text } from "../../components/ui/NativeText";
 import { ScreenContainer } from "../../components/common/ScreenContainer";
 import { LoadingState } from "../../components/common/LoadingState";
 import { ErrorState } from "../../components/common/ErrorState";

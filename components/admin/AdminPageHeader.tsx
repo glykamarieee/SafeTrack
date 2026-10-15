@@ -1,5 +1,9 @@
 import { type ReactNode } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import {
+  StyleSheet,
+  View,
+} from "react-native";
+import { Text } from "../ui/NativeText";
 import { adminColors as colors } from "../../constants/adminDesign";
 
 export function AdminPageHeader({

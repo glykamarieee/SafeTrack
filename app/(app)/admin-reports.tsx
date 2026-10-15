@@ -1,27 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
-
   ActivityIndicator,
-
-
   Pressable,
-
   RefreshControl,
-
   ScrollView,
-
   StyleSheet,
-
-  Text,
-
-  TextInput,
-
   View,
-
   useWindowDimensions,
-
 } from "react-native";
+import { Text, TextInput } from "../../components/ui/NativeText";
 
 import { SafeAreaView } from "react-native-safe-area-context";
 import { showAlert } from "../../lib/platformAlert";
