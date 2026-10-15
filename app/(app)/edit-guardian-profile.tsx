@@ -276,7 +276,7 @@ const useStyles = makeStyles((__c) => {
     borderRadius: radius.lg,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.primaryDeep,
+    backgroundColor: __c.forest,
     ...shadow.card,
   },
   identityCopy: { flex: 1, minWidth: 0, marginLeft: 16 },
@@ -288,7 +288,7 @@ const useStyles = makeStyles((__c) => {
   },
   identityTitle: {
     marginTop: 4,
-    color: colors.white,
+    color: "#FFFFFF",
     fontSize: 15.5,
     fontWeight: "900",
   },

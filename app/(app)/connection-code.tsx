@@ -211,7 +211,7 @@ export default function ConnectionCodeScreen(){
         <View style={styles.shell}>
           <View style={styles.header}>
             <View style={styles.iconCircle}>
-              <Ionicons name={isPhone ? "phone-portrait-outline" : "watch-outline"} size={24} color={C.white} />
+              <Ionicons name={isPhone ? "phone-portrait-outline" : "watch-outline"} size={24} color="#FFFFFF" />
             </View>
             <View style={styles.headerCopy}>
               <Text style={styles.eyebrow}>CHILD DEVICE CONNECTION</Text>
@@ -267,7 +267,7 @@ export default function ConnectionCodeScreen(){
             onPress={generate}
             style={({ pressed }) => [styles.primary, pressed && styles.pressed, loading && styles.disabled]}
           >
-            <Ionicons name="refresh-outline" size={18} color={C.white} />
+            <Ionicons name="refresh-outline" size={18} color="#FFFFFF" />
             <Text style={styles.primaryText}>{loading ? "Generating..." : "Generate new code"}</Text>
           </Pressable>
 
@@ -306,7 +306,7 @@ const useStyles = makeStyles((__c) => {
   backText: { color: C.ink, fontSize: 11.5, fontWeight: "800" },
   shell: { width: "100%", maxWidth: 720, alignSelf: "center", marginTop: 18 },
   header: { flexDirection: "row", alignItems: "flex-start", gap: 14 },
-  iconCircle: { width: 48, height: 48, borderRadius: 17, backgroundColor: C.primaryDeep, alignItems: "center", justifyContent: "center", ...shadow.soft },
+  iconCircle: { width: 48, height: 48, borderRadius: 17, backgroundColor: __c.forest, alignItems: "center", justifyContent: "center", ...shadow.soft },
   headerCopy: { flex: 1 },
   eyebrow: { color: C.primary, fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
   title: { color: C.ink, fontSize: 28, fontWeight: "900", letterSpacing: -0.8, marginTop: 4 },
@@ -329,8 +329,8 @@ const useStyles = makeStyles((__c) => {
   instructionText: { flex: 1, color: C.text, fontSize: 11.5, lineHeight: 17, paddingTop: 4, paddingLeft: 5 },
   errorBox: { marginTop: 16, padding: 13, borderRadius: radius.md, backgroundColor: C.dangerSoft, flexDirection: "row", alignItems: "flex-start", gap: 8 },
   errorText: { flex: 1, color: C.dangerDark, fontSize: 11.5, lineHeight: 17 },
-  primary: { alignSelf: "flex-start", minHeight: 49, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, marginTop: 18, paddingHorizontal: 17, borderRadius: radius.md, backgroundColor: C.primaryDeep, ...shadow.soft },
-  primaryText: { color: C.white, fontWeight: "900", fontSize: 11.5 },
+  primary: { alignSelf: "flex-start", minHeight: 49, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, marginTop: 18, paddingHorizontal: 17, borderRadius: radius.md, backgroundColor: __c.forest, ...shadow.soft },
+  primaryText: { color: "#FFFFFF", fontWeight: "900", fontSize: 11.5 },
   noteRow: { flexDirection: "row", alignItems: "flex-start", gap: 7, marginTop: 17 },
   note: { flex: 1, color: C.muted, fontSize: 10.5, lineHeight: 16 },
   pressed: { opacity: 0.72, transform: [{ scale: 0.99 }] },

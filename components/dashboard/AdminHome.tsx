@@ -1325,12 +1325,12 @@ const useStyles = makeStyles((__c) => {
     borderRadius: 41,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.ink,
+    backgroundColor: __c.forest,
     ...shadow.soft,
   },
 
   orbitCoreValue: {
-    color: colors.white,
+    color: "#FFFFFF",
     fontSize: 22,
     fontWeight: "800",
     letterSpacing: -0.55,

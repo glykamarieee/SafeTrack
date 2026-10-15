@@ -2,13 +2,21 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Image,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
 } from "react-native";
-import { Text } from "../../components/ui/NativeText";
+
+import { Button } from "../../components/ui/Button";
+import { Entrance } from "../../components/ui/Entrance";
+import { MapPattern } from "../../components/ui/MapPattern";
+import { Segmented } from "../../components/ui/Segmented";
+import { Text } from "../../components/ui/Text";
+import { usePressFeedback } from "../../theme/motion";
+import { radius, shadow, space } from "../../theme/tokens";
 
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -18,15 +26,9 @@ import { useAuthStore } from "../../store/authStore";
 import { supabase } from "../../lib/supabase";
 import { getProfileAvatarUrl } from "../../services/profileAvatarService";
 
-import {
-  guardianColors as colors,
-  guardianRadius as radius,
-  guardianShadow as shadow,
-  guardianSpacing as spacing,
-} from "../../constants/guardianDesign";
 
 
-import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { makeStyles, useTheme, type AppearancePreference } from "../../theme/ThemeProvider";
 import { guardianPalette } from "../../theme/legacy";
 
 type Profile = {
@@ -90,56 +92,40 @@ function Row({
   title,
   detail,
   onPress,
+  danger,
+  last,
 }:{
   icon:keyof typeof Ionicons.glyphMap;
   title:string;
   detail:string;
   onPress:()=>void;
+  danger?:boolean;
+  last?:boolean;
 }){
   const styles = useStyles();
-  const colors = guardianPalette(useTheme().colors);
-
+  const { colors: c } = useTheme();
+  const press = usePressFeedback();
 
   return(
-
     <Pressable
-      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}. ${detail}`}
       onPress={onPress}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
     >
-
-      <View style={styles.rowIcon}>
-        <Ionicons
-          name={icon}
-          size={20}
-          color={colors.primaryDark}
-        />
-      </View>
-
-
-      <View style={styles.rowCopy}>
-
-        <Text style={styles.rowTitle}>
-          {title}
-        </Text>
-
-
-        <Text style={styles.rowDetail}>
-          {detail}
-        </Text>
-
-      </View>
-
-
-      <Ionicons
-        name="chevron-forward"
-        size={22}
-        color={colors.muted}
-      />
-
+      <Animated.View style={[styles.row, !last && styles.rowRule, press.style]}>
+        <View style={[styles.rowIcon, danger && { backgroundColor: c.dangerTint }]}>
+          <Ionicons name={icon} size={20} color={danger ? c.danger : c.primary} />
+        </View>
+        <View style={styles.rowCopy}>
+          <Text variant="label" weight="700" tone={danger ? "danger" : "ink"}>{title}</Text>
+          <Text variant="caption">{detail}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={c.muted} />
+      </Animated.View>
     </Pressable>
-
   );
-
 }
 
 
@@ -147,7 +133,8 @@ function Row({
 
 export default function ProfileScreen(){
   const styles = useStyles();
-  const colors = guardianPalette(useTheme().colors);
+  const { colors: theme, scheme, preference, setPreference } = useTheme();
+  const colors = guardianPalette(theme);
 
 
   const router = useRouter();
@@ -514,536 +501,188 @@ export default function ProfileScreen(){
 
 
   if(loading){
-
-
     return(
-
-      <SafeAreaView
-        style={styles.loading}
-      >
-
-        <ActivityIndicator
-          size="large"
-          color={colors.primary}
-        />
-
+      <SafeAreaView style={styles.loading}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </SafeAreaView>
-
     );
-
   }
 
-
-
-
-
-
+  const trackingDetail = child
+    ? `${trackingLabel(child.trackingSource)}${child.trackingSource === "mobile" ? "" : watchConnected ? " · Connected" : " · Not linked"}`
+    : "No tracking source selected.";
 
   return(
-
-    <SafeAreaView
-      style={styles.safe}
-      edges={[
-        "top",
-        "left",
-        "right"
-      ]}
-    >
-
-
-      <ScrollView
-
-        contentContainerStyle={
-          styles.content
-        }
-
-        showsVerticalScrollIndicator={false}
-
-      >
-
-
-
-        <Text style={styles.pageEyebrow}>PROFILE & SUPPORT</Text>
-        <Text style={styles.pageTitle}>Your SafeTrack space.</Text>
-        <Text style={styles.pageSubtitle}>
-          Keep guardian details, child setup, and support close without crowding the monitoring experience.
-        </Text>
-
-        <View style={styles.profileTop}>
-
-
-          {
-            guardianAvatar
-
-            ?
-
-            <Image
-
-              source={{
-                uri:guardianAvatar
-              }}
-
-              style={styles.avatar}
-
-            />
-
-
-            :
-
-
-            <View style={styles.avatar}>
-
-              <Text style={styles.avatarText}>
-
-                {
-                  initial(
-                    guardian?.full_name
-                  )
-                }
-
-              </Text>
-
+    <View style={styles.safe}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <SafeAreaView edges={["top"]} style={styles.header}>
+          <MapPattern opacity={0.08} />
+          <View style={styles.headerInner}>
+            <Text variant="legend" style={styles.headerEyebrow}>Profile & support</Text>
+            <View style={styles.profileTop}>
+              {guardianAvatar ? (
+                <Image source={{ uri: guardianAvatar }} style={styles.avatar} accessibilityLabel="Your profile picture" />
+              ) : (
+                <View style={styles.avatar}>
+                  <Text variant="title" weight="800" style={styles.avatarText}>{initial(guardian?.full_name)}</Text>
+                </View>
+              )}
+              <View style={styles.profileText}>
+                <Text variant="title" weight="800" style={styles.name} numberOfLines={1}>{guardian?.full_name ?? "Guardian"}</Text>
+                <Text variant="label" weight="500" style={styles.email} numberOfLines={1}>{guardian?.email ?? ""}</Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Edit guardian profile"
+                onPress={() => router.push("/(app)/edit-guardian-profile")}
+                style={({ pressed }) => [styles.editButton, pressed && { opacity: 0.8 }]}
+              >
+                <Ionicons name="create-outline" size={19} color="#FFFFFF" />
+              </Pressable>
             </View>
-
-          }
-
-
-
-
-          <View style={styles.profileText}>
-
-
-            <Text style={styles.label}>
-              YOUR ACCOUNT
-            </Text>
-
-
-            <Text style={styles.name}>
-              {
-                guardian?.full_name
-                ??
-                "Guardian"
-              }
-            </Text>
-
-
-            <Text style={styles.email}>
-              {
-                guardian?.email
-                ??
-                ""
-              }
-            </Text>
-
-
           </View>
+        </SafeAreaView>
 
+        <View style={styles.body}>
+          <Entrance index={0} style={styles.group}>
+            <Text variant="legend" style={styles.groupTitle}>Account</Text>
+            <View style={styles.card}>
+              <Row icon="create-outline" title="Guardian profile" detail="Edit your details and profile picture" onPress={() => router.push("/(app)/edit-guardian-profile")} />
+              <Row icon="key-outline" title="Change password" detail="Update the password for this account" onPress={() => router.push("/(app)/change-password")} />
+              <Row icon="notifications-outline" title="Notifications" detail="Choose which safety alerts you receive (SOS is always on)" onPress={() => router.push("/(app)/notification-settings")} last />
+            </View>
+          </Entrance>
 
+          <Entrance index={1} style={styles.group}>
+            <Text variant="legend" style={styles.groupTitle}>Appearance</Text>
+            <View style={[styles.card, styles.cardPadded]}>
+              <View style={styles.appearanceHead}>
+                <View style={styles.rowIcon}>
+                  <Ionicons name={scheme === "dark" ? "moon" : "sunny"} size={20} color={theme.primary} />
+                </View>
+                <View style={styles.rowCopy}>
+                  <Text variant="label" weight="700">Theme</Text>
+                  <Text variant="caption">Light, dark, or follow your phone's setting.</Text>
+                </View>
+              </View>
+              <Segmented<AppearancePreference>
+                accessibilityLabel="Appearance"
+                value={preference}
+                onChange={setPreference}
+                options={[
+                  { value: "light", label: "Light" },
+                  { value: "dark", label: "Dark" },
+                  { value: "system", label: "Match phone" },
+                ]}
+              />
+            </View>
+          </Entrance>
+
+          <Entrance index={2} style={styles.group}>
+            <Text variant="legend" style={styles.groupTitle}>Child profile</Text>
+            <View style={styles.card}>
+              <Row
+                icon="person-outline"
+                title={child?.full_name ?? "No child registered"}
+                detail={child ? `${child.age} years old · ${child.relationship}` : "Register child profile"}
+                onPress={() => {
+                  router.push(
+                    child
+                      ? { pathname: "/edit-child-profile", params: { childId: child.id, section: "details" } }
+                      : "/(auth)/child-registration",
+                  );
+                }}
+              />
+              <Row
+                icon={child?.trackingSource === "mobile" ? "phone-portrait-outline" : "watch-outline"}
+                title="Tracking source"
+                detail={trackingDetail}
+                onPress={() => {
+                  router.push(
+                    child
+                      ? { pathname: "/edit-child-profile", params: { childId: child.id, section: "tracking" } }
+                      : "/(auth)/child-registration",
+                  );
+                }}
+                last
+              />
+            </View>
+          </Entrance>
+
+          <Entrance index={3} style={styles.group}>
+            <Text variant="legend" style={styles.groupTitle}>Privacy and support</Text>
+            <View style={styles.card}>
+              <Row icon="help-circle-outline" title="Help & support" detail="SafeTrack guidance and support information" onPress={() => router.push("/(app)/help-support")} />
+              <Row
+                icon="play-circle-outline"
+                title="Replay the tour"
+                detail="See how SafeTrack works again"
+                onPress={() => router.push({ pathname: "/onboarding", params: { audience: "guardian", next: "/(app)/profile", replay: "1" } })}
+              />
+              <Row icon="trash-outline" title="Delete account" detail="Close your guardian account and remove your personal details" onPress={() => router.push("/(app)/delete-account")} danger last />
+            </View>
+          </Entrance>
+
+          <Button
+            label="Sign out"
+            variant="secondary"
+            icon="log-out-outline"
+            onPress={async () => {
+              await logout();
+              router.replace("/(auth)/welcome");
+            }}
+          />
         </View>
-
-
-
-
-
-
-        <Text style={styles.section}>
-          ACCOUNT
-        </Text>
-
-        <View style={styles.openGroup}>
-          <Row
-            icon="create-outline"
-            title="Guardian profile"
-            detail="Edit your stored account details and profile picture"
-            onPress={() => router.push("/(app)/edit-guardian-profile")}
-          />
-          <Row
-            icon="key-outline"
-            title="Change password"
-            detail="Update the password for this account"
-            onPress={() => router.push("/(app)/change-password")}
-          />
-          <Row
-            icon="notifications-outline"
-            title="Notifications"
-            detail="Choose which safety alerts you receive (SOS is always on)"
-            onPress={() => router.push("/(app)/notification-settings")}
-          />
-        </View>
-
-        <Text style={styles.section}>
-          CHILD PROFILE
-        </Text>
-
-
-
-
-
-        <Row
-
-          icon="person-outline"
-
-          title={
-            child?.full_name
-            ??
-            "No child registered"
-          }
-
-
-          detail={
-
-            child
-
-            ?
-
-            `${child.age} years old • ${child.relationship}`
-
-            :
-
-            "Register child profile"
-
-          }
-
-
-          onPress={()=>{
-
-            router.push(
-
-              child
-
-              ?
-
-              { pathname:"/edit-child-profile", params:{ childId:child.id, section:"details" } }
-
-              :
-
-              "/(auth)/child-registration"
-
-            );
-
-          }}
-
-        />
-
-
-
-
-
-
-
-
-        <Row
-
-          icon={
-
-            child?.trackingSource==="mobile"
-
-            ?
-
-            "phone-portrait-outline"
-
-            :
-
-            "watch-outline"
-
-          }
-
-
-          title="Tracking source"
-
-
-          detail={
-
-            child
-
-            ?
-
-            `${trackingLabel(child.trackingSource)}${
-              
-              child.trackingSource==="mobile"
-
-              ?
-
-              ""
-
-              :
-
-              watchConnected
-
-              ?
-
-              " • Connected"
-
-              :
-
-              " • Not linked"
-
-            }`
-
-            :
-
-            "No tracking source selected."
-
-          }
-
-
-
-          onPress={()=>{
-
-            router.push(
-              child
-              ?
-
-              { pathname:"/edit-child-profile", params:{ childId:child.id, section:"tracking" } }
-
-              :
-
-              "/(auth)/child-registration"
-            );
-
-          }}
-
-        />
-
-
-
-
-
-
-
-
-        <Text style={styles.section}>
-          PRIVACY AND SUPPORT
-        </Text>
-
-        <Row
-          icon="help-circle-outline"
-          title="Help & support"
-          detail="Open SafeTrack guidance and support information"
-          onPress={() => router.push("/(app)/help-support")}
-        />
-
-
-
-
-
-        <Row
-
-          icon="trash-outline"
-
-          title="Delete account"
-
-          detail="Close your guardian account and remove your personal details"
-
-          onPress={() => router.push("/(app)/delete-account")}
-
-        />
-
-
-
-
-
-
-        <Pressable
-
-          style={styles.signOut}
-
-          onPress={async()=>{
-
-            await logout();
-
-            router.replace(
-              "/(auth)/welcome"
-            );
-
-          }}
-
-        >
-
-          <Ionicons
-            name="log-out-outline"
-            size={20}
-            color={colors.primary}
-          />
-
-
-          <Text style={styles.signOutText}>
-            Sign out
-          </Text>
-
-
-        </Pressable>
-
-
-
-
       </ScrollView>
-
-
-
-    </SafeAreaView>
-
+    </View>
   );
-
 }
 
-
-
-
-
-const useStyles = makeStyles((__c) => {
-  const colors = guardianPalette(__c);
-  return StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  loading: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: colors.background,
-  },
-  content: {
-    width: "100%",
-    maxWidth: 780,
-    alignSelf: "center",
-    paddingHorizontal: spacing.lg,
-    paddingTop: 28,
-    paddingBottom: 118,
-  },
-  pageEyebrow: {
-    color: colors.primary,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-  },
-  pageTitle: {
-    marginTop: 7,
-    color: colors.ink,
-    fontSize: 29,
-    lineHeight: 34,
-    fontWeight: "900",
-    letterSpacing: -0.7,
-  },
-  pageSubtitle: {
-    maxWidth: 430,
-    marginTop: 7,
-    color: colors.muted,
-    fontSize: 12.5,
-    lineHeight: 19,
-  },
-  profileTop: {
-    marginTop: 22,
-    minHeight: 112,
-    padding: 18,
-    borderRadius: radius.lg,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.primaryDeep,
-    overflow: "hidden",
-    ...shadow.card,
-  },
-  avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 22,
-    backgroundColor: colors.softMint,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "rgba(255,255,255,.22)",
-  },
-  avatarText: {
-    color: colors.primaryDeep,
-    fontSize: 24,
-    fontWeight: "900",
-  },
-  profileText: {
-    flex: 1,
-    minWidth: 0,
-    marginLeft: 14,
-  },
-  label: {
-    fontSize: 9,
-    fontWeight: "900",
-    color: "rgba(255,255,255,.62)",
-    letterSpacing: 1.1,
-  },
-  name: {
-    marginTop: 4,
-    fontSize: 21,
-    fontWeight: "900",
-    color: colors.white,
-  },
-  email: {
-    marginTop: 4,
-    color: "rgba(255,255,255,.72)",
-    fontSize: 12,
-  },
-  section: {
-    marginTop: 26,
-    marginBottom: 4,
-    fontSize: 9.5,
-    fontWeight: "900",
-    color: colors.muted,
-    letterSpacing: 1.35,
-  },
-  openGroup: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  row: {
-    minHeight: 76,
-    paddingVertical: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  rowPressed: {
-    opacity: 0.72,
-  },
-  rowIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 15,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.softMint,
-  },
-  rowCopy: {
-    flex: 1,
-    minWidth: 0,
-    marginLeft: 12,
-    paddingRight: 10,
-  },
-  rowTitle: {
-    fontSize: 14.5,
-    fontWeight: "900",
-    color: colors.ink,
-  },
-  rowDetail: {
-    fontSize: 12,
-    lineHeight: 17,
-    color: colors.muted,
-    marginTop: 3,
-  },
-  signOut: {
-    marginTop: 28,
-    minHeight: 52,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-    backgroundColor: colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-  },
-  signOutText: {
-    marginLeft: 8,
-    fontWeight: "900",
-    color: colors.primaryDark,
-  },
-});
-});
+const useStyles = makeStyles((c, scheme) =>
+  StyleSheet.create({
+    safe: { flex: 1, backgroundColor: c.paper },
+    loading: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.paper },
+    content: { flexGrow: 1, paddingBottom: 120 },
+    header: {
+      backgroundColor: scheme === "dark" ? c.forest : "#15803D",
+      paddingHorizontal: space.gutter + 4,
+      paddingBottom: space.xl,
+      borderBottomLeftRadius: radius.lg + 2,
+      borderBottomRightRadius: radius.lg + 2,
+      overflow: "hidden",
+    },
+    headerInner: { width: "100%", maxWidth: 760, alignSelf: "center", paddingTop: space.lg, gap: space.lg },
+    headerEyebrow: { color: "#D5F0DE" },
+    profileTop: { flexDirection: "row", alignItems: "center", gap: space.lg },
+    avatar: {
+      width: 72,
+      height: 72,
+      borderRadius: 36,
+      backgroundColor: "#FFFFFF",
+      borderWidth: 3,
+      borderColor: "rgba(255,255,255,0.5)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    avatarText: { color: "#15803D" },
+    profileText: { flex: 1, minWidth: 0, gap: 2 },
+    name: { color: "#FFFFFF" },
+    email: { color: "#D5F0DE" },
+    editButton: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.16)" },
+    body: { width: "100%", maxWidth: 760, alignSelf: "center", paddingHorizontal: space.gutter, marginTop: space.lg, gap: space.xl },
+    group: { gap: space.sm },
+    groupTitle: { marginLeft: space.xs },
+    card: {
+      backgroundColor: c.surface,
+      borderRadius: radius.md,
+      overflow: "hidden",
+      ...(scheme === "dark" ? { borderWidth: 1, borderColor: c.rule } : shadow(scheme)),
+    },
+    cardPadded: { padding: space.lg, gap: space.lg },
+    appearanceHead: { flexDirection: "row", alignItems: "center", gap: space.md },
+    row: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md + 2, minHeight: 64 },
+    rowRule: { borderBottomWidth: 1, borderBottomColor: c.rule },
+    rowIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: c.primaryTint },
+    rowCopy: { flex: 1, gap: 2 },
+  }),
+);

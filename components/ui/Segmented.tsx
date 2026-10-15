@@ -58,7 +58,7 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
             onPress={() => onChange(option.value)}
             style={styles.option}
           >
-            <Text variant="label" tone={selected ? "onPrimary" : "ink2"} weight={selected ? "700" : "600"} numberOfLines={1}>
+            <Text variant="label" tone={selected ? "onPrimary" : "ink2"} weight={selected ? "700" : "600"} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
               {option.label}
             </Text>
           </Pressable>
@@ -88,7 +88,7 @@ const useStyles = makeStyles((c, scheme) =>
     option: {
       flex: 1,
       minHeight: 40,
-      paddingHorizontal: space.md,
+      paddingHorizontal: space.xs,
       alignItems: "center",
       justifyContent: "center",
     },

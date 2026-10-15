@@ -33,7 +33,8 @@ function trackingCopy(source?: string) {
 
 export default function SafetyCenterScreen() {
   const styles = useStyles();
-  const colors = guardianPalette(useTheme().colors);
+  const { colors: theme, scheme } = useTheme();
+  const colors = guardianPalette(theme);
 
   const router = useRouter();
 
@@ -104,7 +105,7 @@ export default function SafetyCenterScreen() {
         </Text>
 
         <LinearGradient
-          colors={activeSosCount > 0 ? ["#713A3F", "#A84750"] : [colors.heroTop, colors.heroBottom]}
+          colors={activeSosCount > 0 ? ["#8F1C13", "#B42318"] : scheme === "dark" ? [theme.forest, theme.forestRaised] : ["#15803D", "#178A43"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.pulseHero}
@@ -115,7 +116,7 @@ export default function SafetyCenterScreen() {
               <Ionicons
                 name={activeSosCount > 0 ? "warning" : "shield-checkmark"}
                 size={27}
-                color={activeSosCount > 0 ? colors.dangerDark : colors.primaryDeep}
+                color={activeSosCount > 0 ? "#B42318" : "#0D2A1E"}
               />
             </View>
 
@@ -134,7 +135,7 @@ export default function SafetyCenterScreen() {
               <Ionicons
                 name={trackingSource === "mobile" ? "phone-portrait-outline" : "watch-outline"}
                 size={14}
-                color={colors.white}
+                color="#FFFFFF"
               />
               <Text style={styles.pulseSourceText}>{trackingCopy(trackingSource)}</Text>
             </View>
@@ -144,7 +145,7 @@ export default function SafetyCenterScreen() {
               style={({ pressed }) => [styles.reviewButton, pressed && styles.pressed]}
             >
               <Text style={styles.reviewButtonText}>Review SOS</Text>
-              <Ionicons name="arrow-forward" size={15} color={colors.primaryDeep} />
+              <Ionicons name="arrow-forward" size={15} color="#0D2A1E" />
             </Pressable>
           </View>
         </LinearGradient>
@@ -314,10 +315,10 @@ const useStyles = makeStyles((__c) => {
     borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.mintGlow,
+    backgroundColor: "#E7F6EC",
   },
   pulseIconDanger: {
-    backgroundColor: "#FFE4E7",
+    backgroundColor: "#FDECEA",
   },
   pulseCopy: {
     flex: 1,
@@ -331,7 +332,7 @@ const useStyles = makeStyles((__c) => {
   },
   pulseTitle: {
     marginTop: 4,
-    color: colors.white,
+    color: "#FFFFFF",
     fontSize: 18,
     lineHeight: 22,
     fontWeight: "900",
@@ -359,7 +360,7 @@ const useStyles = makeStyles((__c) => {
   },
   pulseSourceText: {
     marginLeft: 6,
-    color: colors.white,
+    color: "#FFFFFF",
     fontSize: 9.5,
     fontWeight: "800",
   },
@@ -369,11 +370,11 @@ const useStyles = makeStyles((__c) => {
     borderRadius: radius.pill,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.white,
+    backgroundColor: "#FFFFFF",
   },
   reviewButtonText: {
     marginRight: 5,
-    color: colors.primaryDeep,
+    color: "#0D2A1E",
     fontSize: 10,
     fontWeight: "900",
   },
@@ -439,7 +440,7 @@ const useStyles = makeStyles((__c) => {
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#EAF1FF",
+    backgroundColor: __c.infoTint,
   },
   rowIconDanger: {
     width: 47,

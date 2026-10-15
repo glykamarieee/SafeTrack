@@ -85,7 +85,7 @@ export default function NotificationSettingsScreen() {
           <Text style={styles.title}>SOS alerts and re-alerts</Text>
           <Text style={styles.text}>Always on. Emergency alerts cannot be turned off.</Text>
         </View>
-        <Switch value disabled trackColor={{ true: "#F4B4B0", false: "#D5DDD9" }} thumbColor={colors.danger} />
+        <Switch value disabled trackColor={{ true: colors.dangerSoft, false: colors.borderStrong }} thumbColor={colors.danger} />
       </View>
 
       {loading ? (
@@ -103,8 +103,8 @@ export default function NotificationSettingsScreen() {
               value={prefs[option.key]}
               disabled={saving !== null}
               onValueChange={(value) => void toggle(option.key, value)}
-              trackColor={{ true: "#7FCBA8", false: "#D5DDD9" }}
-              thumbColor={prefs[option.key] ? colors.primaryDark : "#FFFFFF"}
+              trackColor={{ true: colors.primary, false: colors.borderStrong }}
+              thumbColor="#FFFFFF"
             />
           </View>
         ))

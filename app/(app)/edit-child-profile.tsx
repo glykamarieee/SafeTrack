@@ -969,7 +969,7 @@ const useStyles = makeStyles((__c) => {
     overflow: "hidden",
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.primaryDeep,
+    backgroundColor: __c.forest,
     ...shadow.card,
   },
   heroAccentOne: {
@@ -1003,7 +1003,7 @@ const useStyles = makeStyles((__c) => {
   },
   profileHeroName: {
     marginTop: 4,
-    color: colors.white,
+    color: "#FFFFFF",
     fontSize: 20,
     fontWeight: "900",
   },

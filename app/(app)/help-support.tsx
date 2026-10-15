@@ -6,6 +6,9 @@ import {
   Linking,
 } from "react-native";
 import { Text } from "../../components/ui/NativeText";
+import { useRouter } from "expo-router";
+
+import { Button } from "../../components/ui/Button";
 
 import {
   SafeAreaView,
@@ -29,6 +32,7 @@ import { guardianPalette } from "../../theme/legacy";
 
 export default function HelpSupportScreen() {
   const styles = useStyles();
+  const router = useRouter();
   const colors = guardianPalette(useTheme().colors);
 
 
@@ -164,6 +168,14 @@ export default function HelpSupportScreen() {
 
         </Pressable>
 
+        <Button
+          label="Replay the tour"
+          variant="secondary"
+          icon="play-circle-outline"
+          onPress={() => router.push({ pathname: "/onboarding", params: { audience: "guardian", next: "/(app)/help-support", replay: "1" } })}
+          style={styles.replay}
+        />
+
 
 
       </ScrollView>
@@ -249,6 +261,7 @@ return (
 const useStyles = makeStyles((__c) => {
   const colors = guardianPalette(__c);
   return StyleSheet.create({
+  replay: { marginTop: 12 },
 
 safe:{
 flex:1,
