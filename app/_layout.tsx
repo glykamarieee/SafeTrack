@@ -5,15 +5,21 @@ import { Stack } from "expo-router";
 import "../services/childBackgroundLocation";
 import { StatusBar } from "expo-status-bar";
 
-export default function RootLayout() {
+import { FontsReadyContext, useLoadAppFonts } from "../theme/fonts";
+import { ThemeProvider, useTheme } from "../theme/ThemeProvider";
+
+function ThemedStack() {
+  const { scheme, colors } = useTheme();
+
   return (
     <>
-      <StatusBar style="dark" />
+      <StatusBar style={scheme === "dark" ? "light" : "dark"} />
 
       <Stack
         screenOptions={{
           headerShown: false,
           animation: "fade",
+          contentStyle: { backgroundColor: colors.paper },
         }}
       >
         <Stack.Screen name="index" />
@@ -40,5 +46,19 @@ export default function RootLayout() {
         />
       </Stack>
     </>
+  );
+}
+
+export default function RootLayout() {
+  // Headings fall back to the platform serif until Fraunces is ready, so the
+  // app never waits on the font.
+  const { ready } = useLoadAppFonts();
+
+  return (
+    <ThemeProvider>
+      <FontsReadyContext.Provider value={ready}>
+        <ThemedStack />
+      </FontsReadyContext.Provider>
+    </ThemeProvider>
   );
 }

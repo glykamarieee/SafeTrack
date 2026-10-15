@@ -173,3 +173,21 @@ After every stage:
 - confirm every button still does the same thing
 
 Never claim device behaviour that was not run on a device.
+
+## Progress
+- **Stage 1 done.**
+  - `theme/tokens.ts`: palettes, type, space, radius, motion.
+  - `theme/ThemeProvider.tsx`: `useTheme`, `makeStyles`, the Light / Dark /
+    Match phone preference, Reduce Motion.
+  - `theme/motion.ts`: press feedback, entrance, pulse.
+  - `theme/fonts.ts`: Fraunces, never blocking start-up.
+  - Primitives in `components/ui/`: `Text`, `Button`, `Surface`, `Rule`,
+    `Screen`, `Segmented`, `StateRing`, `Contour`, `Entrance`.
+  - Dev-only gallery at `/design-preview`.
+  - `app.json` `userInterfaceStyle` is `automatic`, so Match phone works in
+    builds.
+  - The old token files (`guardianDesign`, `safeTrackDesign`, `adminDesign`,
+    `childDesign`, `theme`) stay until the last screen using them is migrated,
+    then they are deleted.
+  - The Appearance setting appears in Profile in stage 4, once guardian
+    screens follow the theme.
