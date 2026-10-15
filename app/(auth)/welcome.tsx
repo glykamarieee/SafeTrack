@@ -1,74 +1,54 @@
-import {
-  Image,
-  Pressable,
-  StyleSheet,
-  View,
-} from "react-native";
-import { Text } from "../../components/ui/NativeText";
+import { Animated, Image, StyleSheet, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { router } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { Button } from "../../components/ui/Button";
+import { Text } from "../../components/ui/Text";
+import { useEntrance } from "../../theme/motion";
+import { space } from "../../theme/tokens";
+
 export default function WelcomeScreen() {
-  const player = useVideoPlayer(
-    require("../../assets/videos/safetrack-intro.mp4"),
-    (videoPlayer) => {
-      videoPlayer.loop = true;
-      videoPlayer.muted = true;
-      videoPlayer.play();
-    }
-  );
+  const player = useVideoPlayer(require("../../assets/videos/safetrack-intro.mp4"), (videoPlayer) => {
+    videoPlayer.loop = true;
+    videoPlayer.muted = true;
+    videoPlayer.play();
+  });
+
+  const logo = useEntrance(0, 0, 600);
+  const copy = useEntrance(3, 24, 500);
+  const actions = useEntrance(5, 24, 500);
 
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      <VideoView
-        player={player}
-        style={styles.backgroundVideo}
-        nativeControls={false}
-        contentFit="cover"
-      />
+      <VideoView player={player} style={StyleSheet.absoluteFill} nativeControls={false} contentFit="cover" />
 
-      <View pointerEvents="none" style={styles.fullScreenOverlay} />
+      {/* A forest tint, deeper at the bottom where the text sits. */}
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.tint]} />
+      <View pointerEvents="none" style={styles.bottomShade} />
 
       <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
-        <View style={styles.logoArea}>
-          <Image
-            source={require("../../assets/images/logo.png")}
-            resizeMode="contain"
-            style={styles.logo}
-            accessibilityLabel="SafeTrack logo"
-          />
-        </View>
+        <Animated.View style={[styles.logoArea, logo]}>
+          <Image source={require("../../assets/images/logo.png")} resizeMode="contain" style={styles.logo} accessibilityLabel="SafeTrack logo" />
+        </Animated.View>
 
         <View style={styles.bottomContent}>
-          <Text style={styles.headline}>
-            Know where they are.{"\n"}
-            Be there when it matters.
-          </Text>
-
-          <Pressable
-            accessibilityRole="button"
-            style={({ pressed }) => [
-              styles.getStartedButton,
-              pressed && styles.getStartedButtonPressed,
-            ]}
-            onPress={() => router.push("/(auth)/register")}
-          >
-            <Text style={styles.getStartedText}>Get Started</Text>
-          </Pressable>
-
-          <Text style={styles.signInText}>
-            Already have an account?{" "}
-            <Text
-              style={styles.signInLink}
-              onPress={() => router.push("/(auth)/login")}
-            >
-              Sign in
+          <Animated.View style={[styles.copy, copy]}>
+            <Text variant="legend" style={styles.eyebrow}>
+              Child safety, made calm
             </Text>
-          </Text>
+            <Text variant="display" style={styles.headline} accessibilityRole="header">
+              Know where they are.{"\n"}Be there when it matters.
+            </Text>
+          </Animated.View>
+
+          <Animated.View style={[styles.actions, actions]}>
+            <Button label="Get started" size="lg" iconRight="arrow-forward" onPress={() => router.push("/(auth)/register")} />
+            <Button label="I already have an account" variant="glass" onPress={() => router.push("/(auth)/login")} style={styles.signIn} />
+          </Animated.View>
         </View>
       </SafeAreaView>
     </View>
@@ -76,103 +56,23 @@ export default function WelcomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#24573A",
-  },
-
-  backgroundVideo: {
+  container: { flex: 1, backgroundColor: "#0D2A1E" },
+  tint: { backgroundColor: "rgba(13, 42, 30, 0.42)" },
+  bottomShade: {
     position: "absolute",
-    top: 0,
+    left: 0,
     right: 0,
     bottom: 0,
-    left: 0,
+    height: "55%",
+    backgroundColor: "rgba(13, 42, 30, 0.55)",
   },
-
-  /*
-   * One full-screen overlay only.
-   * This removes the visible middle line caused by the old bottom overlay.
-   */
-  fullScreenOverlay: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    backgroundColor: "rgba(6, 49, 28, 0.46)",
-  },
-
-  safeArea: {
-    flex: 1,
-    justifyContent: "space-between",
-    paddingHorizontal: 22,
-    paddingBottom: 34,
-  },
-
-  logoArea: {
-    alignItems: "center",
-    marginTop: 18,
-  },
-
-  logo: {
-    width: 225,
-    height: 135,
-  },
-
-  bottomContent: {
-    gap: 18,
-  },
-
-  headline: {
-    color: "#FFFFFF",
-    fontSize: 27,
-    lineHeight: 34,
-    fontWeight: "900",
-    textAlign: "center",
-    textShadowColor: "rgba(0, 0, 0, 0.38)",
-    textShadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    textShadowRadius: 8,
-  },
-
-  getStartedButton: {
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#22BE73",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#061F11",
-    shadowOffset: {
-      width: 0,
-      height: 8,
-    },
-    shadowOpacity: 0.28,
-    shadowRadius: 13,
-    elevation: 7,
-  },
-
-  getStartedButtonPressed: {
-    opacity: 0.84,
-    transform: [{ scale: 0.985 }],
-  },
-
-  getStartedText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "900",
-  },
-
-  signInText: {
-    color: "rgba(255, 255, 255, 0.90)",
-    textAlign: "center",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-
-  signInLink: {
-    color: "#FFFFFF",
-    fontWeight: "900",
-  },
+  safeArea: { flex: 1, justifyContent: "space-between", paddingHorizontal: space.xl, paddingBottom: space.xl },
+  logoArea: { alignItems: "center", marginTop: space.lg },
+  logo: { width: 220, height: 132 },
+  bottomContent: { gap: space.xl, width: "100%", maxWidth: 520, alignSelf: "center" },
+  copy: { gap: space.sm },
+  eyebrow: { color: "#3DDC84" },
+  headline: { color: "#FFFFFF" },
+  actions: { gap: space.sm },
+  signIn: { alignSelf: "stretch" },
 });

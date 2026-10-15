@@ -42,14 +42,14 @@ export function usePressFeedback() {
  * First-load entrance: fade plus an 8-px rise, staggered by `index`. Runs
  * once per mount. With Reduce Motion it is a plain short fade.
  */
-export function useEntrance(index = 0) {
+export function useEntrance(index = 0, rise: number = motion.enterRise, duration: number = motion.enter) {
   const { reduceMotion } = useTheme();
   const value = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const animation = Animated.timing(value, {
       toValue: 1,
-      duration: reduceMotion ? 120 : motion.enter,
+      duration: reduceMotion ? 120 : duration,
       delay: reduceMotion ? 0 : index * motion.stagger,
       easing: easeOut,
       useNativeDriver: nativeDriver,
@@ -64,8 +64,34 @@ export function useEntrance(index = 0) {
     opacity: value,
     transform: reduceMotion
       ? []
-      : [{ translateY: value.interpolate({ inputRange: [0, 1], outputRange: [motion.enterRise, 0] }) }],
+      : [{ translateY: value.interpolate({ inputRange: [0, 1], outputRange: [rise, 0] }) }],
   };
+}
+
+/**
+ * A slow endless drift (0 → 1 → 0) for decorative backgrounds such as the
+ * map lines behind a green header. Still with Reduce Motion.
+ */
+export function useDrift(period = 14000) {
+  const { reduceMotion } = useTheme();
+  const value = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (reduceMotion) {
+      value.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(value, { toValue: 1, duration: period / 2, easing: Easing.inOut(Easing.sin), useNativeDriver: nativeDriver }),
+        Animated.timing(value, { toValue: 0, duration: period / 2, easing: Easing.inOut(Easing.sin), useNativeDriver: nativeDriver }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [period, reduceMotion, value]);
+
+  return value;
 }
 
 /**

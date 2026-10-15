@@ -1,21 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
-import { Text } from "../../components/ui/NativeText";
+import { ActivityIndicator, Platform, StyleSheet, View } from "react-native";
 import { Link, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 
-import { Logo } from "../../components/common/Logo";
-import { Button } from "../../components/common/Button";
-import { AuthInput } from "../../components/auth/AuthInput";
+import { AuthShell } from "../../components/auth/AuthShell";
+import { Button } from "../../components/ui/Button";
+import { Field } from "../../components/ui/Field";
+import { Notice } from "../../components/ui/Notice";
+import { Text } from "../../components/ui/Text";
+import { useTheme } from "../../theme/ThemeProvider";
 import {
   MIN_PASSWORD_LENGTH,
   passwordProblem,
@@ -33,6 +26,7 @@ type Stage = "checking" | "ready" | "invalid" | "saving";
  */
 export default function ResetPasswordScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
   const linkedUrl = Linking.useURL();
   const [stage, setStage] = useState<Stage>("checking");
   const [problem, setProblem] = useState<string | null>(null);
@@ -92,80 +86,60 @@ export default function ResetPasswordScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <View style={styles.brandArea}>
-            <Logo size={80} />
-          </View>
-          <Text style={styles.title}>Choose a new password</Text>
-          <Text style={styles.subtitle}>For your SafeTrack account.</Text>
-
-          <View style={styles.formCard}>
-            {stage === "checking" ? (
-              <View style={styles.center}>
-                <ActivityIndicator color="#168A52" />
-                <Text style={styles.muted}>Checking your reset link…</Text>
-              </View>
-            ) : stage === "invalid" ? (
-              <View style={styles.center}>
-                <Ionicons name="alert-circle-outline" size={28} color="#B3261E" />
-                <Text style={styles.errorText}>{problem}</Text>
-                <Link href="/(auth)/forgot-password" style={styles.link}>
-                  Request a new reset link
-                </Link>
-              </View>
-            ) : (
-              <>
-                <AuthInput
-                  label="New password"
-                  icon="lock-closed-outline"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
-                />
-                <AuthInput
-                  label="Confirm new password"
-                  icon="shield-checkmark-outline"
-                  value={confirm}
-                  onChangeText={setConfirm}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  errorText={problem ?? undefined}
-                />
-                <Button label="Save new password" onPress={save} loading={stage === "saving"} />
-              </>
-            )}
-          </View>
-
-          <Link href="/(auth)/login" style={styles.link}>
-            Back to Login
-          </Link>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+    <AuthShell
+      compact
+      eyebrow="Account recovery"
+      title="Choose a new password"
+      subtitle="For your SafeTrack account."
+      footer={
+        <Link href="/(auth)/login" accessibilityRole="link">
+          <Text variant="label" tone="primary" weight="800">
+            Back to login
+          </Text>
+        </Link>
+      }
+    >
+      {stage === "checking" ? (
+        <View style={styles.center}>
+          <ActivityIndicator color={colors.primary} />
+          <Text variant="label" tone="muted">Checking your reset link…</Text>
+        </View>
+      ) : stage === "invalid" ? (
+        <>
+          <Notice tone="error" title="This reset link can't be used">
+            {problem ?? "Request a new reset link."}
+          </Notice>
+          <Button label="Request a new reset link" variant="secondary" icon="refresh" onPress={() => router.replace("/(auth)/forgot-password")} />
+        </>
+      ) : (
+        <>
+          <Field
+            label="New password"
+            icon="lock-closed-outline"
+            value={password}
+            onChangeText={setPassword}
+            secure
+            autoCapitalize="none"
+            autoComplete="new-password"
+            placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+          />
+          <Field
+            label="Confirm new password"
+            icon="shield-checkmark-outline"
+            value={confirm}
+            onChangeText={setConfirm}
+            secure
+            autoCapitalize="none"
+            autoComplete="new-password"
+            error={problem}
+          />
+          <Button label="Save new password" icon="checkmark" size="lg" onPress={() => void save()} loading={stage === "saving"} />
+        </>
+      )}
+    </AuthShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F5FBF7" },
-  flex: { flex: 1 },
-  content: { flexGrow: 1, paddingHorizontal: 22, paddingTop: 18, paddingBottom: 38, width: "100%", maxWidth: 480, alignSelf: "center" },
-  brandArea: { alignItems: "center" },
-  title: { marginTop: 20, color: "#0C2518", fontSize: 26, fontWeight: "900", textAlign: "center" },
-  subtitle: { marginTop: 6, color: "#738179", fontSize: 14, textAlign: "center" },
-  formCard: {
-    marginTop: 22,
-    padding: 18,
-    borderRadius: 27,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#DCECE2",
-  },
-  center: { alignItems: "center", gap: 10, paddingVertical: 10 },
-  muted: { color: "#7A8A82", fontSize: 13 },
-  errorText: { color: "#B3261E", fontSize: 13, lineHeight: 18, textAlign: "center" },
-  link: { marginTop: 22, color: "#168A52", fontSize: 14, fontWeight: "900", textAlign: "center" },
+  center: { alignItems: "center", gap: 10, paddingVertical: 16 },
 });

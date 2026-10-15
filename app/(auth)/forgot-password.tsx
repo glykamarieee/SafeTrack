@@ -1,26 +1,22 @@
 import { useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
-import { Text } from "../../components/ui/NativeText";
+import { StyleSheet, View } from "react-native";
 import { Link } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
-import { Logo } from "../../components/common/Logo";
-import { Button } from "../../components/common/Button";
-import { AuthInput } from "../../components/auth/AuthInput";
+import { AuthShell } from "../../components/auth/AuthShell";
+import { Button } from "../../components/ui/Button";
+import { Field } from "../../components/ui/Field";
+import { Notice } from "../../components/ui/Notice";
+import { Text } from "../../components/ui/Text";
 import { sendPasswordReset } from "../../services/supabaseAuthService";
+import { useTheme } from "../../theme/ThemeProvider";
 
 function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 export default function ForgotPasswordScreen() {
+  const { colors } = useTheme();
   const [email, setEmail] = useState("");
   const [errorText, setErrorText] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(false);
@@ -40,262 +36,56 @@ export default function ForgotPasswordScreen() {
     try {
       await sendPasswordReset(email.trim());
 
-      setSuccessMessage(
-        "If an account exists for that email, a reset link has been sent."
-      );
+      setSuccessMessage("If an account exists for that email, a reset link has been sent.");
     } catch (error) {
-      setErrorText(
-        error instanceof Error
-          ? error.message
-          : "Could not send reset email."
-      );
+      setErrorText(error instanceof Error ? error.message : "Could not send reset email.");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.keyboardView}
-      >
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.brandArea}>
-            <Logo size={90} />
-          </View>
-
-          <View style={styles.headerArea}>
-          
-
-            <Text style={styles.title}>Reset your password</Text>
-
-            <Text style={styles.subtitle}>
-              Enter your email and we&apos;ll send you a link to reset{"\n"}
-              your password.
+    <AuthShell
+      back
+      compact
+      eyebrow="Account recovery"
+      title="Reset your password"
+      subtitle="Enter the email linked to your SafeTrack account and we'll send you a link to set a new password."
+      footer={
+        <>
+          <Link href="/(auth)/login" accessibilityRole="link">
+            <Text variant="label" tone="primary" weight="800">
+              Back to login
             </Text>
-          </View>
-
-          <View style={styles.formCard}>
-            <View style={styles.formHeader}>
-              <View>
-                <Text style={styles.formTitle}>Email verification</Text>
-                <Text style={styles.formSubtitle}>
-                  Use the email linked to your SafeTrack account.
-                </Text>
-              </View>
-
-              <View style={styles.securePill}>
-                <Ionicons name="lock-closed-outline" size={13} color="#168A52" />
-                <Text style={styles.secureText}>Secure</Text>
-              </View>
-            </View>
-
-            <AuthInput
-              label="Email"
-              icon="mail-outline"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              errorText={errorText}
-              placeholder="you@example.com"
-            />
-
-            {successMessage ? (
-              <View style={styles.successBanner}>
-                <Ionicons
-                  name="checkmark-circle-outline"
-                  size={18}
-                  color="#168A52"
-                />
-                <Text style={styles.successText}>{successMessage}</Text>
-              </View>
-            ) : null}
-
-            <Button
-              label="Send Reset Link"
-              onPress={handleSubmit}
-              loading={isLoading}
-              style={styles.submitButton}
-            />
-          </View>
-
-          <Link href="/(auth)/login" style={styles.backLink}>
-            Back to Login
           </Link>
-
-          <View style={styles.privacyNote}>
-            <Ionicons name="lock-closed-outline" size={13} color="#7A8A82" />
-            <Text style={styles.privacyText}>
-              Your reset request is handled securely.
-            </Text>
+          <View style={styles.note}>
+            <Ionicons name="lock-closed-outline" size={13} color={colors.muted} />
+            <Text variant="caption">Your reset request is handled securely.</Text>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        </>
+      }
+    >
+      <Field
+        label="Email"
+        icon="mail-outline"
+        value={email}
+        onChangeText={setEmail}
+        autoCapitalize="none"
+        keyboardType="email-address"
+        autoComplete="email"
+        error={errorText}
+        placeholder="you@example.com"
+        onSubmitEditing={() => void handleSubmit()}
+        returnKeyType="send"
+      />
+
+      {successMessage ? <Notice tone="success">{successMessage}</Notice> : null}
+
+      <Button label="Send reset link" icon="paper-plane-outline" size="lg" onPress={() => void handleSubmit()} loading={isLoading} />
+    </AuthShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F5FBF7",
-  },
-
-  keyboardView: {
-    flex: 1,
-  },
-
-  content: {
-    flexGrow: 1,
-    paddingHorizontal: 22,
-    paddingTop: 18,
-    paddingBottom: 38,
-  },
-
-  brandArea: {
-    alignItems: "center",
-  },
-
-  headerArea: {
-    marginTop: 25,
-    alignItems: "center",
-  },
-
-  iconWrap: {
-    width: 60,
-    height: 60,
-    borderRadius: 19,
-    backgroundColor: "#E5F8EC",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  kicker: {
-    marginTop: 18,
-    color: "#168A52",
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-  },
-
-  title: {
-    marginTop: 9,
-    color: "#0C2518",
-    fontSize: 29,
-    fontWeight: "900",
-    textAlign: "center",
-  },
-
-  subtitle: {
-    marginTop: 8,
-    color: "#738179",
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: "center",
-  },
-
-  formCard: {
-    marginTop: 25,
-    padding: 18,
-    borderRadius: 27,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#DCECE2",
-    shadowColor: "#0C5A35",
-    shadowOffset: {
-      width: 0,
-      height: 8,
-    },
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    elevation: 5,
-  },
-
-  formHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 12,
-    marginBottom: 8,
-  },
-
-  formTitle: {
-    color: "#10291C",
-    fontSize: 16,
-    fontWeight: "900",
-  },
-
-  formSubtitle: {
-    marginTop: 3,
-    color: "#7A8A82",
-    fontSize: 11,
-    lineHeight: 16,
-    maxWidth: 190,
-  },
-
-  securePill: {
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: "#EAF8F0",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-
-  secureText: {
-    color: "#168A52",
-    fontSize: 10,
-    fontWeight: "800",
-  },
-
-  successBanner: {
-    marginTop: 4,
-    marginBottom: 13,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 14,
-    backgroundColor: "#E9F8EF",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  successText: {
-    flex: 1,
-    color: "#168A52",
-    fontSize: 12,
-    lineHeight: 17,
-  },
-
-  submitButton: {
-    marginTop: 2,
-  },
-
-  backLink: {
-    marginTop: 24,
-    color: "#168A52",
-    fontSize: 14,
-    fontWeight: "900",
-    textAlign: "center",
-  },
-
-  privacyNote: {
-    marginTop: 18,
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 6,
-  },
-
-  privacyText: {
-    color: "#7A8A82",
-    fontSize: 11,
-  },
+  note: { flexDirection: "row", alignItems: "center", gap: 6 },
 });

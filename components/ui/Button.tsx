@@ -10,9 +10,10 @@ import { Text, type TextTone } from "./Text";
 /**
  * primary: green, the main action. forest: the one strong dark action.
  * secondary: green outline. soft: mint wash. danger: SOS and destructive.
- * ghost: text only.
+ * ghost: text only. glass: white text on frosted white, for dark or photo
+ * backgrounds.
  */
-export type ButtonVariant = "primary" | "forest" | "secondary" | "soft" | "ghost" | "danger";
+export type ButtonVariant = "primary" | "forest" | "secondary" | "soft" | "ghost" | "danger" | "glass";
 
 type Props = {
   label: string;
@@ -38,6 +39,7 @@ const TONE: Record<ButtonVariant, TextTone> = {
   soft: "primary",
   ghost: "primary",
   danger: "onDanger",
+  glass: "onForest",
 };
 
 function fill(colors: Palette, variant: ButtonVariant) {
@@ -52,6 +54,8 @@ function fill(colors: Palette, variant: ButtonVariant) {
       return { backgroundColor: colors.surface, borderColor: colors.primary };
     case "soft":
       return { backgroundColor: colors.primaryTint, borderColor: colors.primaryTint };
+    case "glass":
+      return { backgroundColor: "rgba(255,255,255,0.14)", borderColor: "rgba(255,255,255,0.35)" };
     default:
       return { backgroundColor: "transparent", borderColor: "transparent" };
   }
