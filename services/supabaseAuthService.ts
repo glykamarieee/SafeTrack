@@ -395,7 +395,10 @@ export async function signOut(): Promise<void> {
   const { error } = await supabase.auth.signOut();
 
   if (error) {
-    throw new Error(error.message);
+    // supabase-js keeps the saved session when the server call fails (e.g.
+    // offline), so the old account would be restored on the next launch.
+    // Always clear this device's session; the server one simply expires.
+    await supabase.auth.signOut({ scope: "local" });
   }
 }
 

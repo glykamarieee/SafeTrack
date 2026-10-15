@@ -10,6 +10,7 @@ import { Redirect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 
 import { useAuthStore } from "../store/authStore";
+import { hasChildPhoneCredentials } from "../services/childMobileService";
 import { StartSplash } from "../components/StartSplash";
 
 
@@ -44,6 +45,21 @@ export default function SplashScreen() {
 
   const [minimumSplashFinished, setMinimumSplashFinished] =
     useState(false);
+
+  // A linked child phone has no account session; its link is saved on the
+  // device. Without this check it reopened on the welcome screen every time.
+  const [childPhoneLinked, setChildPhoneLinked] =
+    useState<boolean | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    hasChildPhoneCredentials()
+      .then((linked) => active && setChildPhoneLinked(linked))
+      .catch(() => active && setChildPhoneLinked(false));
+    return () => {
+      active = false;
+    };
+  }, []);
 
 
 
@@ -171,7 +187,8 @@ export default function SplashScreen() {
 
   if(
     !isBootstrapped ||
-    !minimumSplashFinished
+    !minimumSplashFinished ||
+    childPhoneLinked === null
   ){
 
     return <StartSplash />;
@@ -193,6 +210,12 @@ export default function SplashScreen() {
    * Get Started -> Register
    * Sign In -> Login
    */
+
+  if(!session && childPhoneLinked){
+
+    return <Redirect href="/(child)/child-home" />;
+
+  }
 
   if(!session){
 

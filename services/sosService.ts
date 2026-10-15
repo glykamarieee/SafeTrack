@@ -68,8 +68,12 @@ export async function acknowledgeSosAlert(alertId: string): Promise<void> {
  * Returns an unsubscribe function.
  */
 export function subscribeToGuardianSos(guardianId: string, onRow: (row: Record<string, unknown>) => void) {
+  // A unique topic per subscription: supabase.channel() returns an existing
+  // channel with the same topic, and removeChannel() is async, so a quick
+  // remount would add callbacks to an already-subscribed channel and throw
+  // "cannot add postgres_changes callbacks ... after subscribe()".
   const channel = supabase
-    .channel(`guardian-sos-${guardianId}`)
+    .channel(`guardian-sos-${guardianId}-${uniqueSuffix()}`)
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "sos_alerts", filter: `guardian_id=eq.${guardianId}` },
@@ -82,4 +86,8 @@ export function subscribeToGuardianSos(guardianId: string, onRow: (row: Record<s
   return () => {
     void supabase.removeChannel(channel);
   };
+}
+
+function uniqueSuffix() {
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 }

@@ -152,6 +152,9 @@ const useStyles = makeStyles((__c) => {
   },
 
   fallback: {
+    // Fill the whole avatar: in a centred parent, flex alone shrinks it to the
+    // width of the initials (a green bar inside a mint frame).
+    alignSelf: "stretch",
     flex: 1,
     alignItems: "center",
     justifyContent: "center",

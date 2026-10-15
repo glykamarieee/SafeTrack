@@ -13,6 +13,7 @@ import {
 import { Button } from "../../components/ui/Button";
 import { Entrance } from "../../components/ui/Entrance";
 import { MapPattern } from "../../components/ui/MapPattern";
+import { StatusScrim } from "../../components/ui/StatusScrim";
 import { Segmented } from "../../components/ui/Segmented";
 import { Text } from "../../components/ui/Text";
 import { usePressFeedback } from "../../theme/motion";
@@ -144,6 +145,8 @@ export default function ProfileScreen(){
     useAuthStore(
       s=>s.logout
     );
+
+  const [signingOut, setSigningOut] = useState(false);
 
 
 
@@ -624,16 +627,26 @@ export default function ProfileScreen(){
           </Entrance>
 
           <Button
-            label="Sign out"
+            label={signingOut ? "Signing out…" : "Sign out"}
             variant="secondary"
             icon="log-out-outline"
+            loading={signingOut}
+            disabled={signingOut}
             onPress={async () => {
-              await logout();
-              router.replace("/(auth)/welcome");
+              setSigningOut(true);
+              try {
+                await logout();
+              } finally {
+                setSigningOut(false);
+                // Drop the signed-in screens so Back cannot return to them.
+                if (router.canDismiss()) router.dismissAll();
+                router.replace("/(auth)/welcome");
+              }
             }}
           />
         </View>
       </ScrollView>
+      <StatusScrim color={scheme === "dark" ? theme.forest : "#15803D"} />
     </View>
   );
 }

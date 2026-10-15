@@ -16,6 +16,7 @@ import { childRing, toZoneCircles } from "../location/zoneCircles";
 import { freshness } from "../location/mapTypes";
 import { Button } from "../ui/Button";
 import { Entrance } from "../ui/Entrance";
+import { StatusScrim } from "../ui/StatusScrim";
 import { MapPattern } from "../ui/MapPattern";
 import { StateRing } from "../ui/StateRing";
 import { Text } from "../ui/Text";
@@ -62,7 +63,7 @@ export function GuardianHome() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const wide = width >= 1040;
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
   const styles = useStyles();
 
   const guardian = useAuthStore((state) => state.guardian);
@@ -147,6 +148,7 @@ export function GuardianHome() {
         : "Watch not recently connected";
 
   return (
+    <View style={styles.root}>
     <MapAwareScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
       {activeSOS ? <SosBand childName={child?.fullName ?? "Your child"} onOpen={() => router.push("/(app)/sos-alerts")} /> : null}
 
@@ -310,6 +312,8 @@ export function GuardianHome() {
         ) : null}
       </View>
     </MapAwareScrollView>
+    <StatusScrim color={activeSOS ? colors.danger : scheme === "dark" ? colors.forest : "#15803D"} />
+    </View>
   );
 }
 
@@ -432,6 +436,7 @@ const useStyles = makeStyles((c, scheme) =>
     flex: { flex: 1 },
     white: { color: "#FFFFFF" },
     pressed: { opacity: 0.8 },
+    root: { flex: 1, backgroundColor: c.paper },
     header: {
       backgroundColor: scheme === "dark" ? c.forest : "#15803D",
       paddingHorizontal: space.gutter + 4,

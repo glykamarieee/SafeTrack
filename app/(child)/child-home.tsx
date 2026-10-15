@@ -59,16 +59,16 @@ function statusDetails(status: string | undefined, colors: ReturnType<typeof chi
   }
   if (status === "no_safe_zone") {
     return {
-      title: "No safe zone configured",
-      helper: "Your Guardian has not configured an active safe zone.",
+      title: "No safe zone yet",
+      helper: "Your guardian hasn't set up a safe zone yet.",
       icon: "shield-outline" as const,
       color: colors.muted,
       background: colors.quiet,
     };
   }
   return {
-    title: "Status unavailable",
-    helper: "Share a location update to check your current safe-zone status.",
+    title: "Share your location",
+    helper: "Tap Share latest location to check if you're in a safe zone.",
     icon: "location-outline" as const,
     color: colors.muted,
     background: colors.quiet,
@@ -177,7 +177,11 @@ export default function ChildHomeScreen() {
             <View style={styles.locationMetaItem}>
               <Text style={styles.metaLabel}>SOURCE</Text>
               <Text style={styles.metaValue} numberOfLines={1}>
-                {latestLocation?.source ?? "No record"}
+                {latestLocation?.source === "mobile"
+                  ? "Phone"
+                  : latestLocation?.source === "smartwatch"
+                    ? "Watch"
+                    : "No record"}
               </Text>
             </View>
           </View>
@@ -213,9 +217,7 @@ export default function ChildHomeScreen() {
           <View style={styles.flex}>
             <Text style={styles.safetyTitle}>{safety.title}</Text>
             <Text style={styles.safetyText} numberOfLines={2}>
-              {safeZoneStatus?.zoneName
-                ? `${safeZoneStatus.zoneName} · ${safeZoneStatus.message}`
-                : safeZoneStatus?.message ?? safety.helper}
+              {safeZoneStatus?.zoneName ? `${safeZoneStatus.zoneName} · ${safety.helper}` : safety.helper}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.muted} />

@@ -519,7 +519,9 @@ const channel =
 supabase
 
 .channel(
-`child-location-${childId}`
+// Unique per subscription: a fixed topic is reused by supabase.channel()
+// and throws on remount.
+`child-location-${childId}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
 )
 
 

@@ -1,6 +1,6 @@
 import type { ColorValue } from "react-native";
 import { Platform, StyleSheet, View, useWindowDimensions } from "react-native";
-import { Tabs } from "expo-router";
+import { Redirect, Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -59,6 +59,11 @@ export default function AppLayout() {
 
   useGuardianPushRegistration(isGuardian);
   useGuardianSosRealtime(isGuardian ? guardianId : null);
+
+  // Signed out (or the session expired): never show these screens, even when
+  // Back returns to one that is still in the stack with the old account's data.
+  const signedOut = useAuthStore((state) => state.isBootstrapped && !state.isLoading && !state.session);
+  if (signedOut) return <Redirect href="/(auth)/welcome" />;
 
   return (
     <Tabs

@@ -214,7 +214,7 @@ export function LocationMapCard({
               ? "The map will focus automatically after the registered smartwatch sends a location record."
               : trackingSource === "both"
                 ? "The map will focus automatically after a registered child device sends a location record."
-                : "The map will focus automatically after the registered mobile device sends a location record."}
+                : "The map will show your child here once their watch or phone sends its first location."}
           </Text>
 
           {onRefresh ? (

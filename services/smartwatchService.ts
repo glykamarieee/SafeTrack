@@ -422,7 +422,8 @@ export function subscribeToSmartwatch(
  supabase
 
  .channel(
-   `watch-${childId}`
+   // Unique per subscription (see subscribeToGuardianSos).
+   `watch-${childId}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
  )
 
 

@@ -17,6 +17,7 @@ import {
 
 import { makeStyles, useTheme } from "../../theme/ThemeProvider";
 import { childPalette } from "../../theme/legacy";
+import { StatusScrim } from "../../components/ui/StatusScrim";
 
 function createTabIcon(
   iconName: keyof typeof Ionicons.glyphMap,
@@ -53,7 +54,8 @@ function createTabIcon(
 export default function ChildLayout() {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
-  const colors = childPalette(useTheme().colors);
+  const theme = useTheme();
+  const colors = childPalette(theme.colors);
 
   const bootstrap = useChildMobileStore((state) => state.bootstrap);
   const isBootstrapped = useChildMobileStore((state) => state.isBootstrapped);
@@ -79,6 +81,7 @@ export default function ChildLayout() {
   }
 
   return (
+    <View style={{ flex: 1 }}>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -136,6 +139,9 @@ export default function ChildLayout() {
       />
       <Tabs.Screen name="index" options={{ href: null }} />
     </Tabs>
+    {/* Keeps scrolled content from sliding under the clock and battery icons. */}
+    <StatusScrim color={theme.colors.paper} barStyle={theme.scheme === "dark" ? "light" : "dark"} />
+    </View>
   );
 }
 

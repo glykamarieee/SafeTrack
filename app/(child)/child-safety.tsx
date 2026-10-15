@@ -25,6 +25,7 @@ function displayForStatus(status: string | undefined, colors: ReturnType<typeof 
       icon: "shield-checkmark" as const,
       title: "Inside safe zone",
       kicker: "SAFE ZONE CONFIRMED",
+      helper: "Your latest shared location is inside a safe zone.",
       color: colors.brandDeep,
       background: colors.brandSoft,
     };
@@ -34,6 +35,7 @@ function displayForStatus(status: string | undefined, colors: ReturnType<typeof 
       icon: "navigate" as const,
       title: "Outside safe zone",
       kicker: "OUTSIDE ACTIVE ZONE",
+      helper: "Your latest shared location is outside your safe zones.",
       color: colors.warning,
       background: colors.warningSoft,
     };
@@ -41,16 +43,18 @@ function displayForStatus(status: string | undefined, colors: ReturnType<typeof 
   if (status === "no_safe_zone") {
     return {
       icon: "shield-outline" as const,
-      title: "No safe zone configured",
+      title: "No safe zone yet",
       kicker: "NO ACTIVE ZONE",
+      helper: "Your guardian hasn't set up a safe zone yet. Only your guardian can add one.",
       color: colors.muted,
       background: colors.quiet,
     };
   }
   return {
     icon: "location-outline" as const,
-    title: "Status unavailable",
+    title: "Share your location",
     kicker: "LOCATION NEEDED",
+    helper: "Tap Share location and check status to see if you're in a safe zone.",
     color: colors.muted,
     background: colors.quiet,
   };
@@ -116,7 +120,7 @@ export default function ChildSafetyScreen() {
           </View>
           <Text style={styles.statusTitle}>{display.title}</Text>
           <Text style={styles.statusMessage}>
-            {safeZoneStatus?.message ?? "Share a location update to check your safe-zone status."}
+            {display.helper}
           </Text>
           {safeZoneStatus?.zoneName ? (
             <View style={styles.zoneLine}>

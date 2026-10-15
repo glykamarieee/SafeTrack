@@ -183,6 +183,10 @@ function MapCore(props: CoreProps) {
   const [loaded, setLoaded] = useState(false);
   const [engineError, setEngineError] = useState<string | null>(null);
   const [layersOpen, setLayersOpen] = useState(false);
+  // Small map cards (Home) cannot fit both control stacks: measure the map and
+  // drop the zoom buttons, then My location, rather than let them overlap the
+  // top-right stack. Pinch still zooms.
+  const [mapHeight, setMapHeight] = useState(0);
   const [selectedMarker, setSelectedMarker] = useState<string | null>(null);
   const [selectedZones, setSelectedZones] = useState<string[]>([]);
   // Whole zoom levels only: markers are re-spread when the zoom level changes.
@@ -331,8 +335,13 @@ function MapCore(props: CoreProps) {
     return <KeyMissing />;
   }
 
+  const topStack = 12 + controlsTopInset + 44 * ((showMapStyleControl ? 1 : 0) + 1 + (allowExpand && onToggleExpand ? 1 : 0));
+  const roomBelow = mapHeight - topStack - (26 + (mapPadding?.bottom ?? 0)) - 10;
+  const showLocate = showMyLocation && (mapHeight === 0 || roomBelow >= 44);
+  const showZoom = mapHeight === 0 || roomBelow >= 88 + (showLocate ? 54 : 0);
+
   return (
-    <View style={styles.fill} {...touch}>
+    <View style={styles.fill} {...touch} onLayout={(event) => setMapHeight(Math.round(event.nativeEvent.layout.height))}>
       <MapRenderer
         ref={engine}
         markers={engineMarkers}
@@ -384,8 +393,8 @@ function MapCore(props: CoreProps) {
 
       {/* Bottom-right: my location and zoom. */}
       <View pointerEvents="box-none" style={[styles.bottomRight, { bottom: 26 + (mapPadding?.bottom ?? 0) }]}>
-        {showMyLocation ? (
-          <View style={[styles.group, styles.groupGap]}>
+        {showLocate ? (
+          <View style={[styles.group, showZoom && styles.groupGap]}>
             <ControlButton
               icon="navigate-outline"
               label="Show my location"
@@ -401,11 +410,13 @@ function MapCore(props: CoreProps) {
             />
           </View>
         ) : null}
-        <View style={styles.group}>
-          <ControlButton icon="add" label="Zoom in" onPress={() => engine.current?.zoomBy(1)} />
-          <View style={styles.divider} />
-          <ControlButton icon="remove" label="Zoom out" onPress={() => engine.current?.zoomBy(-1)} />
-        </View>
+        {showZoom ? (
+          <View style={styles.group}>
+            <ControlButton icon="add" label="Zoom in" onPress={() => engine.current?.zoomBy(1)} />
+            <View style={styles.divider} />
+            <ControlButton icon="remove" label="Zoom out" onPress={() => engine.current?.zoomBy(-1)} />
+          </View>
+        ) : null}
       </View>
 
       <LayersSheet
