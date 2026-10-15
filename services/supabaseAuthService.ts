@@ -41,7 +41,7 @@ type PersonRow = {
 /** A deleted (or administrator-deactivated) account trying to sign in. */
 export class InactiveAccountError extends Error {
   constructor() {
-    super("This SafeTrack account has been deleted or deactivated.");
+    super("This account was deleted or turned off, so it can't sign in. Create a new account to use SafeTrack again.");
     this.name = "InactiveAccountError";
   }
 }
@@ -57,11 +57,31 @@ type PersonRoleRow = {
     | null;
 };
 
-function getSafeErrorMessage(message: string) {
-  const normalized = message.toLowerCase();
+const DELETED_ACCOUNT_MESSAGE =
+  "This account was deleted or turned off, so it can't sign in. Create a new account to use SafeTrack again.";
 
+function getSafeErrorMessage(message: string, status?: number) {
+  const normalized = (message ?? "").toLowerCase();
+
+  // Supabase answers the same way for an unknown email and a wrong password.
   if (normalized.includes("invalid login credentials")) {
-    return "Invalid email or password.";
+    return "No account matches this email and password. Check them, or create a new account.";
+  }
+
+  // Deleted accounts are banned by delete_my_account().
+  if (normalized.includes("banned")) {
+    return DELETED_ACCOUNT_MESSAGE;
+  }
+
+  if (normalized.includes("fetch failed") || normalized.includes("network request failed") || normalized.includes("connection reset")) {
+    return "SafeTrack can't reach its server. Check your internet connection (some mobile networks block it; try Wi-Fi or another network) and try again.";
+  }
+
+  // Server errors arrive as raw JSON or "Database error ..." text; never show
+  // those. A 500 at sign-in comes from an account that was deleted before the
+  // 20261016b fix.
+  if ((status ?? 0) >= 500 || normalized.startsWith("{") || normalized.includes("database error") || normalized.includes("unexpected_failure")) {
+    return "SafeTrack couldn't sign in to this account. If it was deleted, create a new account; otherwise try again in a moment.";
   }
 
   if (normalized.includes("email not confirmed")) {
@@ -193,7 +213,7 @@ export async function signInWithPassword(
     });
 
   if (authError) {
-    throw new Error(getSafeErrorMessage(authError.message));
+    throw new Error(getSafeErrorMessage(authError.message, authError.status));
   }
 
   if (!authData.user) {

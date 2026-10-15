@@ -613,6 +613,9 @@ and safety events for a date range, 50 per page, through
   `20261014_child_activity_days.sql`, `20261015_accounts_notifications_fixes.sql`,
   `20261016_activity_reports_export_fix.sql` (the live `activity_reports` check
   constraints rejected `export_format = 'PDF'`, so admin PDF/Excel export failed).
+  `20261016b_deleted_account_signin_fix.sql` (`delete_my_account` set
+  `banned_until = 'infinity'`, which Supabase Auth cannot parse: signing in to
+  a deleted account returned HTTP 500; now 2999-12-31, and old rows repaired).
 
 ## Known open issues
 
