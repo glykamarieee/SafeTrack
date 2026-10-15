@@ -584,6 +584,14 @@ and safety events for a date range, 50 per page, through
   (~15 minutes the first time). Needed after any native change: Mapbox, push
   notifications, background location, a new Expo module or `google-services.json`.
   JavaScript-only changes can be tested with `npx expo start -c`.
+  - **Outputs:** phone APK `android/app/build/outputs/apk/release/app-release.apk`;
+    watch APK `safe-track-wear-os/app/build/outputs/apk/release/app-release.apk`
+    (`gradlew.bat assembleRelease`); admin web `npx expo export --platform web`
+    → `dist/` (static files, host anywhere; admin signs in at `/login`).
+  - Both apps sign release builds with the debug keystore: fine for installing
+    the APK directly, not for the Play Store (create an upload keystore first).
+  - Don't start Metro with `CI=1` while developing: it disables file watching,
+    so code changes are not picked up until Metro restarts.
 - **Wear OS app** (`C:\SAFETRACK-FINAL\safe-track-wear-os`): build and unit-test
   with `gradlew.bat assembleDebug testDebugUnitTest` (3 unit tests, passing on
   2026-10-15). Its RPC contract is under "Devices and pairing"; don't rename `p_*`
