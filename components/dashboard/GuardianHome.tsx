@@ -19,6 +19,8 @@ import { Entrance } from "../ui/Entrance";
 import { StatusScrim } from "../ui/StatusScrim";
 import { MapPattern } from "../ui/MapPattern";
 import { StateRing } from "../ui/StateRing";
+import { useAvatarUrl } from "../location/useAvatarUrl";
+import { Image } from "expo-image";
 import { Text } from "../ui/Text";
 import { usePressFeedback, usePulse } from "../../theme/motion";
 import { makeStyles, useTheme } from "../../theme/ThemeProvider";
@@ -68,6 +70,9 @@ export function GuardianHome() {
 
   const guardian = useAuthStore((state) => state.guardian);
   const child = useAuthStore((state) => state.linkedChildren?.[0] ?? null);
+  // Signed photo links expire; useAvatarUrl re-signs them from the stored path.
+  const guardianPhoto = useAvatarUrl(guardian?.avatarPath, guardian?.avatarUrl);
+  const childPhoto = useAvatarUrl(child?.avatarPath, child?.avatarUrl);
 
   const latestLocation = useLocationStore((state) => state.latest);
   const locationLoading = useLocationStore((state) => state.isLoading);
@@ -158,9 +163,18 @@ export function GuardianHome() {
         <View style={styles.headerRow}>
           <View style={styles.guardianRow}>
             <View style={styles.guardianAvatar}>
-              <Text variant="label" tone="primary" weight="800" style={styles.guardianInitials}>
-                {initials(guardian?.fullName)}
-              </Text>
+              {guardianPhoto ? (
+                <Image
+                  source={{ uri: guardianPhoto }}
+                  style={styles.guardianPhoto}
+                  contentFit="cover"
+                  accessibilityLabel={`${guardian?.fullName ?? "Guardian"} profile picture`}
+                />
+              ) : (
+                <Text variant="label" tone="primary" weight="800" style={styles.guardianInitials}>
+                  {initials(guardian?.fullName)}
+                </Text>
+              )}
             </View>
             <View>
               <Text variant="label" weight="500" style={styles.headerSoft}>
@@ -195,7 +209,7 @@ export function GuardianHome() {
               >
                 <StateRing
                   name={child.fullName}
-                  photoUrl={child.avatarUrl}
+                  photoUrl={childPhoto}
                   state={state}
                   size={60}
                   live={state === "inside" || state === "outside"}
@@ -463,6 +477,7 @@ const useStyles = makeStyles((c, scheme) =>
     guardianRow: { flexDirection: "row", alignItems: "center", gap: space.md },
     guardianAvatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },
     guardianInitials: { color: "#15803D" },
+    guardianPhoto: { width: 46, height: 46, borderRadius: 23 },
     headerSoft: { color: "#D5F0DE" },
     headerName: { color: "#FFFFFF", fontSize: 20, lineHeight: 26 },
     bell: { width: 46, height: 46, borderRadius: 23, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.16)" },
