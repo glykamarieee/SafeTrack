@@ -41,7 +41,7 @@ function meters(a: LatLng, b: LatLng) {
 }
 
 /** Drops stationary wobble and splits at long gaps. */
-function segments(points: Point[]) {
+export function segments(points: Point[]) {
   const result: Point[][] = [];
   let current: Point[] = [];
   for (const point of points) {
@@ -106,60 +106,162 @@ async function matchChunk(chunk: Point[]): Promise<LatLng[] | null> {
   }
 }
 
-/** Road route through the records in order (Mapbox Directions, driving). */
-async function routeChunk(chunk: Point[]): Promise<LatLng[] | null> {
+type Routed = { line: LatLng[]; legs: number[] };
+
+/** Road route through the waypoints in order (Mapbox Directions, walking). */
+async function routeChunk(chunk: Point[]): Promise<Routed | null> {
   if (chunk.length < 2) return null;
   const coordinates = chunk.map((point) => `${point.longitude.toFixed(6)},${point.latitude.toFixed(6)}`).join(";");
-  // Allow each record to snap to the nearest road within its GPS accuracy.
+  // Snap each record to the nearest road within its GPS accuracy.
   const radiuses = chunk.map((point) => Math.round(Math.min(80, Math.max(25, (point.accuracy ?? 30) * 2)))).join(";");
+  // Walking: follows every street in both directions, so one-way rules
+  // never add loops around a block.
   const url =
-    `https://api.mapbox.com/directions/v5/mapbox/driving/${coordinates}` +
-    `?geometries=geojson&overview=full&continue_straight=true&radiuses=${radiuses}&access_token=${TOKEN}`;
+    `https://api.mapbox.com/directions/v5/mapbox/walking/${coordinates}` +
+    `?geometries=geojson&overview=full&radiuses=${radiuses}&access_token=${TOKEN}`;
   try {
     const response = await fetch(url);
     if (!response.ok) return null;
-    const body = (await response.json()) as { code?: string; routes?: { geometry?: { coordinates?: [number, number][] } }[] };
-    const coords = body.code === "Ok" ? body.routes?.[0]?.geometry?.coordinates : undefined;
+    const body = (await response.json()) as {
+      code?: string;
+      routes?: { geometry?: { coordinates?: [number, number][] }; legs?: { distance?: number }[] }[];
+    };
+    const route = body.code === "Ok" ? body.routes?.[0] : undefined;
+    const coords = route?.geometry?.coordinates;
     if (!coords || coords.length < 2) return null;
-    return coords.map(([longitude, latitude]) => ({ latitude, longitude }));
+    return {
+      line: coords.map(([longitude, latitude]) => ({ latitude, longitude })),
+      legs: (route?.legs ?? []).map((leg) => leg.distance ?? 0),
+    };
   } catch {
     return null;
   }
 }
 
+/**
+ * Removes GPS noise before routing:
+ * - a stay in one place becomes a single waypoint (see STAY_RADIUS_M);
+ * - "spikes": a record that goes off to the side and comes back, i.e. going
+ *   A -> B -> C is much longer than A -> C. Forcing the route through such a
+ *   record is what drew triangles and loops off the real path.
+ */
+const STAY_RADIUS_M = 150;
+const TRIM_M = 150;
+export function cleanWaypoints(chunk: Point[]) {
+  // Staying in one place (school, home): the watch keeps recording small GPS
+  // wobbles around the building. All records within STAY_RADIUS_M of where
+  // the stay began become one waypoint at their centre, so the route arrives
+  // there once instead of looping between the wobbles.
+  const kept: Point[] = [];
+  let group: Point[] = [];
+  const flush = () => {
+    if (!group.length) return;
+    const latitude = group.reduce((sum, point) => sum + point.latitude, 0) / group.length;
+    const longitude = group.reduce((sum, point) => sum + point.longitude, 0) / group.length;
+    kept.push({ ...group[0]!, latitude, longitude, accuracy: Math.min(...group.map((point) => point.accuracy ?? 30)) });
+    group = [];
+  };
+  for (const point of chunk) {
+    if (group.length && meters(group[0]!, point) <= STAY_RADIUS_M) {
+      group.push(point);
+    } else {
+      flush();
+      group = [point];
+    }
+  }
+  flush();
+
+  let changed = true;
+  while (changed && kept.length > 2) {
+    changed = false;
+    for (let index = 1; index < kept.length - 1; index += 1) {
+      const a = kept[index - 1]!;
+      const b = kept[index]!;
+      const c = kept[index + 1]!;
+      const via = meters(a, b) + meters(b, c);
+      const direct = meters(a, c);
+      if (via > direct * 1.6 + 150) {
+        kept.splice(index, 1);
+        changed = true;
+        break;
+      }
+    }
+  }
+  return kept;
+}
+
+/**
+ * Routes the waypoints, then removes any waypoint whose leg is a detour (the
+ * road route there is far longer than the straight distance, a sign of a
+ * misplaced GPS fix) and routes again, up to 3 times.
+ */
+async function routeClean(waypoints: Point[]): Promise<LatLng[] | null> {
+  let current = waypoints;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const routed = await routeChunk(current);
+    if (!routed) return null;
+    if (attempt === 3 || current.length <= 2) return routed.line;
+    let worst = -1;
+    let worstRatio = 0;
+    for (let leg = 0; leg < routed.legs.length; leg += 1) {
+      const straight = meters(current[leg]!, current[leg + 1]!);
+      const ratio = routed.legs[leg]! / (straight + 200);
+      if (ratio > 2 && ratio > worstRatio) {
+        worstRatio = ratio;
+        worst = leg;
+      }
+    }
+    if (worst < 0) return routed.line;
+    // Drop the misplaced end of that leg (never the first or last record).
+    const drop = worst + 1 < current.length - 1 ? worst + 1 : worst;
+    if (drop <= 0 || drop >= current.length - 1) return routed.line;
+    current = current.filter((_, index) => index !== drop);
+  }
+  return null;
+}
+
 /** Map matching for dense stretches, road routing for sparse ones. */
 async function snapChunk(chunk: Point[]): Promise<LatLng[] | null> {
+  const waypoints = cleanWaypoints(chunk);
+  if (waypoints.length < 2) return null;
   let dense = true;
-  for (let index = 1; index < chunk.length; index += 1) {
-    if (meters(chunk[index - 1], chunk[index]) > MATCH_MAX_STEP_M) {
+  for (let index = 1; index < waypoints.length; index += 1) {
+    if (meters(waypoints[index - 1]!, waypoints[index]!) > MATCH_MAX_STEP_M) {
       dense = false;
       break;
     }
   }
   if (dense) {
-    const matched = await matchChunk(chunk);
+    const matched = await matchChunk(waypoints);
     if (matched) return matched;
   }
-  // Directions accepts 25 waypoints per request; chunks overlap by one.
+  // Each leg between waypoints is routed on its own and trimmed near both
+  // ends: Mapbox otherwise routes to a footpath inside a campus or estate,
+  // drawing loops past the gate and back. The road line stops where it first
+  // comes within TRIM_M of the stay, then a short connector reaches it.
   const line: LatLng[] = [];
-  for (let start = 0; start < chunk.length - 1; start += MAX_WAYPOINTS - 1) {
-    const part = chunk.slice(start, start + MAX_WAYPOINTS);
-    const routed = await routeChunk(part);
-    if (routed) {
-      line.push(...routed);
+  const at = (point: Point) => ({ latitude: point.latitude, longitude: point.longitude });
+  for (let index = 1; index < waypoints.length; index += 1) {
+    const from = waypoints[index - 1]!;
+    const to = waypoints[index]!;
+    const routed = await routeClean([from, to]);
+    if (!routed || routed.length < 2) {
+      line.push(at(from), at(to));
       continue;
     }
-    // One record Mapbox can't place on a road (e.g. a GPS fix over water)
-    // fails the whole request: route record by record instead, so only the
-    // hop touching that record stays straight.
-    for (let index = 1; index < part.length; index += 1) {
-      const pair = await routeChunk([part[index - 1], part[index]]);
-      if (pair) line.push(...pair);
-      else line.push(
-        { latitude: part[index - 1].latitude, longitude: part[index - 1].longitude },
-        { latitude: part[index].latitude, longitude: part[index].longitude },
-      );
+    let first = 0;
+    for (let k = 0; k < routed.length; k += 1) {
+      if (meters(from, routed[k]!) <= TRIM_M) first = k;
+      else if (k > 0 && meters(from, routed[k]!) > TRIM_M * 2) break;
     }
+    let last = routed.length - 1;
+    for (let k = first; k < routed.length; k += 1) {
+      if (meters(to, routed[k]!) <= TRIM_M) {
+        last = k;
+        break;
+      }
+    }
+    line.push(at(from), ...routed.slice(first, last + 1), at(to));
   }
   return line.length >= 2 ? line : null;
 }
