@@ -71,7 +71,13 @@ export async function reviewAnomaly(args: {
     return;
   }
 
-  if (!history || history.length < 100) return;
+  // Enough history to know what is normal for this child. Both limits can be
+  // lowered for a demo with the AI_MIN_HISTORY_POINTS / AI_MIN_BASELINE_DAYS
+  // secrets (defaults 100 points over 14 days).
+  const minPoints = Number(Deno.env.get("AI_MIN_HISTORY_POINTS") ?? "100");
+  const minDays = Number(Deno.env.get("AI_MIN_BASELINE_DAYS") ?? "14");
+
+  if (!history || history.length < minPoints) return;
 
   const sorted = [...history].sort(
     (a, b) =>
@@ -79,12 +85,22 @@ export async function reviewAnomaly(args: {
       new Date(b.recorded_at).getTime(),
   );
 
+  // How long this child has been tracked, from their oldest record. (The 500
+  // newest records cover only about a day once the watch records every few
+  // minutes, so they can't be used for this: the check never passed.)
+  const { data: oldest } = await supabase
+    .from("location_logs")
+    .select("recorded_at")
+    .eq("child_id", childId)
+    .order("recorded_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
   const baselineDays =
-    (new Date(sorted.at(-1)!.recorded_at).getTime() -
-      new Date(sorted[0].recorded_at).getTime()) /
+    (new Date(recordedAt).getTime() - new Date(oldest?.recorded_at ?? sorted[0].recorded_at).getTime()) /
     86_400_000;
 
-  if (baselineDays < 14) return;
+  if (baselineDays < minDays) return;
 
   const response = await fetch(`${aiUrl.replace(/\/$/, "")}/score`, {
     method: "POST",
