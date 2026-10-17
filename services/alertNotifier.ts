@@ -14,12 +14,15 @@ import Constants, { ExecutionEnvironment } from "expo-constants";
 
 /** Android channels. Ids are fixed: send_guardian_push() uses them too. */
 export const ALERT_CHANNELS = {
-  sos: "safetrack-sos",
+  // v2: new SOS sound (bells instead of the siren). The old channel is deleted.
+  sos: "safetrack-sos-v2",
   zones: "safetrack-zones",
   general: "safetrack-alerts",
 } as const;
 
 export type AlertKind = keyof typeof ALERT_CHANNELS;
+
+const RETIRED_CHANNELS = ["safetrack-sos"];
 
 function notificationsAvailable() {
   return Platform.OS !== "web" && Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
@@ -43,11 +46,14 @@ export function ensureAlertChannels(): Promise<void> {
     const Notifications = await load();
     if (!Notifications) return;
 
+    // Channels whose sound was replaced (Android never changes a channel's sound).
+    for (const old of RETIRED_CHANNELS) await Notifications.deleteNotificationChannelAsync(old).catch(() => undefined);
+
     await Notifications.setNotificationChannelAsync(ALERT_CHANNELS.sos, {
       name: "SOS emergencies",
-      description: "A child pressed SOS. Plays a siren.",
+      description: "A child pressed SOS. Plays the SafeTrack SOS alert.",
       importance: Notifications.AndroidImportance.MAX,
-      sound: "sos_alarm.wav",
+      sound: "sos_alert.wav",
       vibrationPattern: [0, 600, 250, 600, 250, 600],
       enableVibrate: true,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,

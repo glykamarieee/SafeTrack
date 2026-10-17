@@ -427,7 +427,8 @@ rest.
     `send_guardian_push`.
   - `send_guardian_push` posts to Expo's push API through `pg_net`. Since
     migration 20261017 the Android channel depends on the type: `sos` and
-    `sos_realert` → **`safetrack-sos`** (siren), `entry`/`exit` →
+    `sos_realert` → **`safetrack-sos-v2`** (SOS bells; `safetrack-sos` was the
+    old siren, deleted by the app), `entry`/`exit` →
     **`safetrack-zones`** (chime), anything else → **`safetrack-alerts`**.
   - It skips categories the guardian turned off in
     `guardian_notification_preferences` (`safe_zone`, `anomaly`, `device`). **SOS

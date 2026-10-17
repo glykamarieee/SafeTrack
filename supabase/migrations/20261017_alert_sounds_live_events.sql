@@ -3,7 +3,7 @@
 -- 1. send_guardian_push() sends each alert on its own Android channel, so a
 --    push received while SafeTrack is closed plays the same sound as in the
 --    app (the app creates these channels):
---      sos, sos_realert                -> safetrack-sos    (siren)
+--      sos, sos_realert                -> safetrack-sos-v2 (SOS bells)
 --      entry, exit                     -> safetrack-zones  (chime)
 --      everything else                 -> safetrack-alerts (phone's default)
 --    Same signature, preference check and behaviour as 20261015 otherwise.
@@ -68,7 +68,7 @@ begin
   end if;
 
   v_channel := case
-    when v_type in ('sos', 'sos_realert') then 'safetrack-sos'
+    when v_type in ('sos', 'sos_realert') then 'safetrack-sos-v2'
     when v_type in ('entry', 'exit') then 'safetrack-zones'
     else 'safetrack-alerts'
   end;

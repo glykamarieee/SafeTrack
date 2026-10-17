@@ -16,7 +16,7 @@ const SOURCES = {
   tick: require("../assets/sounds/tick.wav"),
   cancel: require("../assets/sounds/cancel.wav"),
   error: require("../assets/sounds/error.wav"),
-  alarm: require("../assets/sounds/sos_alarm.wav"),
+  alarm: require("../assets/sounds/sos_alert.wav"),
   chime: require("../assets/sounds/zone_chime.wav"),
 } as const;
 

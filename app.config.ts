@@ -10,7 +10,7 @@ import type { ConfigContext, ExpoConfig } from "expo/config";
 //   public `pk.` token) in .env, read at bundle time by
 //   components/location/mapSupport.ts.
 // - Push notifications (expo-notifications). The Android channel ids must stay
-//   `safetrack-sos`, `safetrack-zones` and `safetrack-alerts`: the database's
+//   `safetrack-sos-v2`, `safetrack-zones` and `safetrack-alerts`: the database's
 //   send_guardian_push() uses them.
 // - Firebase (google-services.json): Android needs it for push tokens. It is
 //   added only when the file exists in the project root, so builds without it
@@ -37,7 +37,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
           defaultChannel: "safetrack-alerts",
           // Notification sounds (copied to res/raw). The channels that use
           // them are created in services/alertNotifier.ts.
-          sounds: ["./assets/sounds/sos_alarm.wav", "./assets/sounds/zone_chime.wav"],
+          sounds: ["./assets/sounds/sos_alert.wav", "./assets/sounds/zone_chime.wav"],
         },
       ],
     ],

@@ -40,7 +40,7 @@ const PUSH_STATUS_TEXT: Record<PushStatus, string> = {
 };
 
 const PREVIEWS: { sound: SoundName; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { sound: "alarm", label: "SOS siren", icon: "warning-outline" },
+  { sound: "alarm", label: "SOS alert", icon: "warning-outline" },
   { sound: "chime", label: "Safe-zone chime", icon: "shield-checkmark-outline" },
   { sound: "success", label: "Done", icon: "checkmark-circle-outline" },
 ];
