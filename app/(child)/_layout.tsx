@@ -10,6 +10,7 @@ import { Redirect, Tabs, type Href } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useChildMobileStore } from "../../store/childMobileStore";
+import { refreshBackgroundSharing } from "../../services/childBackgroundLocation";
 import {
   childColors as colors,
   childShadow as shadow,
@@ -63,6 +64,8 @@ export default function ChildLayout() {
 
   useEffect(() => {
     void bootstrap();
+    // Auto-share started by an older version: apply the current settings.
+    void refreshBackgroundSharing();
   }, [bootstrap]);
 
   if (!isBootstrapped) {

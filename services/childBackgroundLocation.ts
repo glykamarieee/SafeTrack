@@ -20,8 +20,12 @@ import { ChildPhoneUnlinkedError, recordChildPhoneLocation } from "./childMobile
 export const CHILD_LOCATION_TASK = "safetrack-child-background-location";
 
 const LAST_SENT_KEY = "safetrack.childPhone.lastBackgroundSend";
-const MIN_INTERVAL_MS = 5 * 60 * 1000;
-const MIN_DISTANCE_M = 100;
+// Location checks every CHECK_INTERVAL_MS; moving, a record every
+// MOVE_SAVE_M (so trips are drawn along the real streets); staying still,
+// one record every STILL_SAVE_MS. Same rules as the watch.
+const CHECK_INTERVAL_MS = 20 * 1000;
+const MOVE_SAVE_M = 25;
+const STILL_SAVE_MS = 3 * 60 * 1000;
 
 type LastSent = { at: number; latitude: number; longitude: number };
 
@@ -58,8 +62,8 @@ if (Platform.OS !== "web" && !TaskManager.isTaskDefined(CHILD_LOCATION_TASK)) {
     const last = await readLastSent();
     const due =
       !last ||
-      latest.timestamp - last.at >= MIN_INTERVAL_MS ||
-      metersBetween(last, point) >= MIN_DISTANCE_M;
+      latest.timestamp - last.at >= STILL_SAVE_MS ||
+      metersBetween(last, point) >= Math.max(MOVE_SAVE_M, Math.min(latest.coords.accuracy ?? 0, 100));
 
     // Skips duplicates and bursts of nearby fixes.
     if (!due) return;
@@ -107,11 +111,18 @@ export async function startBackgroundSharing(): Promise<StartResult> {
   const background = await Location.requestBackgroundPermissionsAsync();
   if (background.status !== "granted") return "background-denied";
 
+  await startTask();
+  return "started";
+}
+
+/** Starts (or restarts with the current settings) the background task. */
+async function startTask() {
   await Location.startLocationUpdatesAsync(CHILD_LOCATION_TASK, {
-    accuracy: Location.Accuracy.Balanced,
-    timeInterval: MIN_INTERVAL_MS,
-    distanceInterval: MIN_DISTANCE_M,
-    deferredUpdatesInterval: MIN_INTERVAL_MS,
+    // GPS: network-based fixes can be 100+ m off the road.
+    accuracy: Location.Accuracy.High,
+    timeInterval: CHECK_INTERVAL_MS,
+    distanceInterval: 0,
+    deferredUpdatesInterval: CHECK_INTERVAL_MS,
     pausesUpdatesAutomatically: false,
     showsBackgroundLocationIndicator: true,
     activityType: Location.LocationActivityType.Other,
@@ -122,8 +133,19 @@ export async function startBackgroundSharing(): Promise<StartResult> {
       killServiceOnDestroy: false,
     },
   });
+}
 
-  return "started";
+/**
+ * Sharing that was started by an older version keeps its old settings (every
+ * 5 minutes, network accuracy); restart it with the current ones. Call when
+ * the child dashboard opens. Never throws.
+ */
+export async function refreshBackgroundSharing(): Promise<void> {
+  try {
+    if (await isBackgroundSharingOn()) await startTask();
+  } catch (reason) {
+    console.warn("[background location] refresh failed", reason);
+  }
 }
 
 export async function stopBackgroundSharing(): Promise<void> {

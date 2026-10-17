@@ -178,6 +178,7 @@ async function routeOnce(chunk: Point[], profile: Profile, anyDistance: boolean)
  *   record is what drew triangles and loops off the real path.
  */
 const STAY_RADIUS_M = 150;
+const SPIKE_MAX_M = 500;
 const TRIM_M = 150;
 export function cleanWaypoints(chunk: Point[]) {
   // Staying in one place (school, home): the watch keeps recording small GPS
@@ -212,7 +213,11 @@ export function cleanWaypoints(chunk: Point[]) {
       const c = kept[index + 1]!;
       const via = meters(a, b) + meters(b, c);
       const direct = meters(a, c);
-      if (via > direct * 1.6 + 150) {
+      // Only small side-steps are GPS spikes. A far point is a real place the
+      // child went (home -> school -> home with one record at school looks
+      // like "out and straight back" too, and was wrongly removed).
+      const small = meters(a, b) <= SPIKE_MAX_M && meters(b, c) <= SPIKE_MAX_M;
+      if (small && via > direct * 1.6 + 150) {
         kept.splice(index, 1);
         changed = true;
         break;
