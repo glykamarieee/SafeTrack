@@ -211,7 +211,6 @@ export default function HistoryScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
 
-  const [recenterSignal, setRecenterSignal] = useState(0);
   const [focus, setFocus] = useState<SafeTrackMapFocus | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [statOpen, setStatOpen] = useState<StatId | null>(null);
@@ -506,14 +505,6 @@ export default function HistoryScreen() {
               {childName}'s available records
             </Text>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Fit the whole day"
-            onPress={() => setRecenterSignal((value) => value + 1)}
-            style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
-          >
-            <Ionicons name="scan-outline" size={19} color={colors.primaryDeep} />
-          </Pressable>
         </View>
 
         {children.length > 1 ? (
@@ -586,7 +577,6 @@ export default function HistoryScreen() {
             circles={zoneCircles}
             path={path}
             height={wide ? 520 : 380}
-            recenterSignal={recenterSignal}
             focus={focus}
             showMyLocation={false}
             onMarkerPress={onMarkerPress}
