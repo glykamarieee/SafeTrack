@@ -17,6 +17,15 @@ Watch/phone location ──► Supabase (location_logs)
           geofence_events (event_type = possible_anomaly) ──► guardian push trigger
 ```
 
+## Live demo (presentations)
+
+`python demo_ai.py` (or `--local` for http://127.0.0.1:8000) sends a built-in
+two-week home <-> school routine to `/score` and asks about four new
+locations: at home in the evening and at school in the morning (normal), a
+40 km jump and 2:40 AM 6 km away (unusual, with reasons). It wakes the hosted
+service first and reads `AI_SERVICE_KEY` from `.env` without printing it.
+Standard library only; no Supabase access and no real child's data.
+
 ## Endpoints
 
 All except `/` require the header `X-SafeTrack-AI-Key: <AI_SERVICE_KEY>`.
