@@ -45,6 +45,7 @@ import { colorFor, directionsUrl, initialsOf } from "../../components/location/m
 import { ReplaySlider } from "../../components/history/ReplaySlider";
 import { HistoryCalendar } from "../../components/history/HistoryCalendar";
 import { EventSheet } from "../../components/history/EventSheet";
+import { DaySummary } from "../../components/history/DaySummary";
 import { EVENT_FILTERS, eventCategory, eventLook, type EventFilter } from "../../components/history/eventLook";
 import {
   dateLabel,
@@ -677,25 +678,18 @@ export default function HistoryScreen() {
         ) : null}
 
         {/* Stats. */}
-        {initialLoad ? (
-          <View style={styles.statsCard}>
-            {Array.from({ length: 5 }, (_, index) => (
-              <View key={index} style={styles.stat}>
-                <View style={[styles.skeleton, styles.skeletonOnForest, { width: 44, height: 16 }]} />
-                <View style={[styles.skeleton, styles.skeletonOnForest, { width: 56, height: 10, marginTop: 6 }]} />
-              </View>
-            ))}
-          </View>
-        ) : (
-          <View style={styles.statsCard}>
-            <Stat id="records" value={String(points.length)} label="Records" onPress={setStatOpen} />
-            <Stat id="distance" value={distanceLabel(distance.meters)} label="Distance" onPress={setStatOpen} />
-            <Stat id="span" value={durationLabel(spanMinutes, true)} label="Span" onPress={setStatOpen} />
-            <Stat id="zones" value={durationLabel(zoneMinutes, true)} label="In zones" onPress={setStatOpen} />
-            <Stat id="sos" value={String(sosEvents.length)} label="SOS" danger={activeSos > 0} onPress={setStatOpen} />
-          </View>
-        )}
-        <Text style={styles.statHint}>Tap a number to see how it is worked out.</Text>
+        <DaySummary
+          loading={initialLoad}
+          records={points.length}
+          distance={distanceLabel(distance.meters)}
+          span={durationLabel(spanMinutes, true)}
+          inZones={durationLabel(zoneMinutes, true)}
+          zoneShare={spanMinutes > 0 ? Math.min(1, zoneMinutes / spanMinutes) : null}
+          sos={sosEvents.length}
+          sosActive={activeSos > 0}
+          onPress={setStatOpen}
+        />
+        <Text style={styles.statHint}>Tap the ring or any tile to see how it is worked out.</Text>
 
         {/* Stops. */}
         <View style={styles.sectionHeader}>
@@ -865,38 +859,6 @@ const STAT_TITLES: Record<StatId, string> = {
   zones: "Time in Safe Zones",
   sos: "SOS alerts",
 };
-
-function Stat({
-  id,
-  value,
-  label,
-  danger = false,
-  onPress,
-}: {
-  id: StatId;
-  value: string;
-  label: string;
-  danger?: boolean;
-  onPress(id: StatId): void;
-}) {
-  const styles = useStyles();
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${label}: ${value}. How is this calculated?`}
-      onPress={() => onPress(id)}
-      style={({ pressed }) => [styles.stat, pressed && styles.pressed]}
-    >
-      <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.statValue, danger && styles.statDanger]}>
-        {value}
-      </Text>
-      <Text numberOfLines={1} style={styles.statLabel}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
 
 const StopList = memo(function StopList({ stops, onFocus }: { stops: ActivityStop[]; onFocus(stop: ActivityStop): void }) {
   const styles = useStyles();
@@ -1128,23 +1090,8 @@ const useStyles = makeStyles((__c) => {
     backgroundColor: colors.dangerSoft,
   },
   problemsText: { flex: 1, marginLeft: 8, color: colors.dangerDark, fontSize: 11.5, lineHeight: 16 },
-  // The day's summary is the screen's one strong forest card.
-  statsCard: {
-    marginTop: 12,
-    minHeight: 84,
-    borderRadius: 24,
-    flexDirection: "row",
-    alignItems: "stretch",
-    paddingHorizontal: 6,
-    backgroundColor: __c.forest,
-  },
-  stat: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 3, paddingVertical: 14 },
-  statValue: { color: "#FFFFFF", fontSize: 18, fontWeight: "800" },
-  statDanger: { color: "#FF6B5C" },
-  statLabel: { marginTop: 4, color: "#9FC3AE", fontSize: 9.5, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6 },
   statHint: { marginTop: 6, color: colors.muted, fontSize: 10.5, textAlign: "center" },
   skeleton: { borderRadius: 6, backgroundColor: colors.surfaceMuted },
-  skeletonOnForest: { backgroundColor: "rgba(255,255,255,0.14)" },
   skeletonCard: { height: 70, borderRadius: 18 },
   sectionHeader: { marginTop: 26, marginBottom: 12, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
   sectionEyebrow: { color: colors.primaryDark, fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },

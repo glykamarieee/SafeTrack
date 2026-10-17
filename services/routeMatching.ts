@@ -108,16 +108,48 @@ async function matchChunk(chunk: Point[]): Promise<LatLng[] | null> {
 
 type Routed = { line: LatLng[]; legs: number[] };
 
-/** Road route through the waypoints in order (Mapbox Directions, walking). */
+type Profile = "walking" | "driving";
+
+/** Moving faster than walking between the first and last record: a vehicle. */
+function travelProfile(chunk: Point[]): Profile {
+  const first = chunk[0]!;
+  const last = chunk[chunk.length - 1]!;
+  const seconds = (Date.parse(last.recordedAt) - Date.parse(first.recordedAt)) / 1000;
+  let distance = 0;
+  for (let index = 1; index < chunk.length; index += 1) distance += meters(chunk[index - 1]!, chunk[index]!);
+  return seconds > 0 && distance / seconds > DRIVING_SPEED_MPS ? "driving" : "walking";
+}
+
+/**
+ * Road route through the waypoints in order (Mapbox Directions). Tries the
+ * likely way of travelling first, then the other one, then the same without
+ * the snapping limit: walking routes can't use highways, and a record taken
+ * on a highway is often more than 80 m from any walkable road, which made
+ * Mapbox find no route and the History line fall back to straight lines.
+ */
 async function routeChunk(chunk: Point[]): Promise<Routed | null> {
   if (chunk.length < 2) return null;
+  const first = travelProfile(chunk);
+  const second: Profile = first === "walking" ? "driving" : "walking";
+  return (
+    (await routeOnce(chunk, first, false)) ??
+    (await routeOnce(chunk, second, false)) ??
+    (await routeOnce(chunk, first, true)) ??
+    (await routeOnce(chunk, second, true))
+  );
+}
+
+async function routeOnce(chunk: Point[], profile: Profile, anyDistance: boolean): Promise<Routed | null> {
   const coordinates = chunk.map((point) => `${point.longitude.toFixed(6)},${point.latitude.toFixed(6)}`).join(";");
-  // Snap each record to the nearest road within its GPS accuracy.
-  const radiuses = chunk.map((point) => Math.round(Math.min(80, Math.max(25, (point.accuracy ?? 30) * 2)))).join(";");
-  // Walking: follows every street in both directions, so one-way rules
-  // never add loops around a block.
+  // Snap each record to the nearest road within its GPS accuracy (or to the
+  // nearest road at any distance, as a last resort).
+  const radiuses = chunk
+    .map((point) => (anyDistance ? "unlimited" : Math.round(Math.min(80, Math.max(25, (point.accuracy ?? 30) * 2)))))
+    .join(";");
+  // Walking follows every street in both directions, so one-way rules never
+  // add loops around a block; driving is needed on highways.
   const url =
-    `https://api.mapbox.com/directions/v5/mapbox/walking/${coordinates}` +
+    `https://api.mapbox.com/directions/v5/mapbox/${profile}/${coordinates}` +
     `?geometries=geojson&overview=full&radiuses=${radiuses}&access_token=${TOKEN}`;
   try {
     const response = await fetch(url);
@@ -266,11 +298,39 @@ async function snapChunk(chunk: Point[]): Promise<LatLng[] | null> {
   return line.length >= 2 ? line : null;
 }
 
+// A rough fix (Wi-Fi or cell estimate) can be kilometres off.
+const ROUGH_ACCURACY_M = 150;
+// Faster than any car in the city: the record is a GPS jump.
+const JUMP_SPEED_MPS = 150 / 3.6;
+
+/**
+ * Leaves out of the drawn line (never out of the records):
+ * - rough fixes, when there are precise ones to draw instead;
+ * - jumps: a record reached impossibly fast from the previous one and left
+ *   impossibly fast for the next, i.e. out and straight back.
+ * Each of these drew a long straight spike across the map.
+ */
+export function plausiblePoints(points: Point[]) {
+  const precise = points.filter((point) => (point.accuracy ?? 0) <= ROUGH_ACCURACY_M);
+  const list = precise.length >= 2 ? precise : points;
+  const speed = (a: Point, b: Point) =>
+    meters(a, b) / Math.max(1, (Date.parse(b.recordedAt) - Date.parse(a.recordedAt)) / 1000);
+  const kept: Point[] = [];
+  for (let index = 0; index < list.length; index += 1) {
+    const point = list[index]!;
+    const before = kept[kept.length - 1];
+    const after = list[index + 1];
+    if (before && after && speed(before, point) > JUMP_SPEED_MPS && speed(point, after) > JUMP_SPEED_MPS) continue;
+    kept.push(point);
+  }
+  return kept;
+}
+
 async function matchAll(points: Point[]): Promise<LatLng[] | null> {
   const line: LatLng[] = [];
   let snappedAny = false;
 
-  for (const segment of segments(points)) {
+  for (const segment of segments(plausiblePoints(points))) {
     for (let start = 0; start < segment.length; start += MAX_COORDS - 1) {
       const chunk = segment.slice(start, start + MAX_COORDS);
       if (chunk.length < 2) {
