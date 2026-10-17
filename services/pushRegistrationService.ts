@@ -246,7 +246,7 @@ export async function unregisterGuardianPushToken(): Promise<void> {
 export function routeForNotification(data: Record<string, unknown> | undefined): string | null {
   const type = typeof data?.type === "string" ? data.type : "";
 
-  if (type === "sos" || type === "sos_realert") return "/(app)/sos-alerts";
+  if (type === "sos" || type === "sos_realert" || type === "sos_cancelled") return "/(app)/sos-alerts";
   if (["entry", "exit", "possible_anomaly", "watch_disconnected", "prolonged_inactivity"].includes(type)) {
     return "/(app)/history";
   }

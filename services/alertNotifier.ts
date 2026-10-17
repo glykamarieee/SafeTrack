@@ -129,6 +129,13 @@ async function trayHasServerPush(type: string) {
   }
 }
 
+/** Removes a shown alert (e.g. the SOS the child just cancelled). Never throws. */
+export async function dismissAlert(key: string): Promise<void> {
+  const Notifications = await load();
+  if (!Notifications) return;
+  await Notifications.dismissNotificationAsync(key).catch(() => undefined);
+}
+
 export type AlertNotice = {
   /** Unique per alert (e.g. `sos:<id>`); the same key never shows twice. */
   key: string;

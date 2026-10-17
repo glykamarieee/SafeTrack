@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 
 import { subscribeToChildSafetyEvents, subscribeToGuardianSos } from "../services/sosService";
-import { notifyAlert } from "../services/alertNotifier";
+import { dismissAlert, notifyAlert } from "../services/alertNotifier";
 import { DEFAULT_NOTIFICATION_PREFERENCES, fetchNotificationPreferences } from "../services/accountService";
 import { useAuthStore } from "../store/authStore";
 import { useSosStore } from "../store/sosStore";
@@ -57,9 +57,23 @@ export function useGuardianSosRealtime(guardianId: string | null | undefined) {
     return subscribeToGuardianSos(guardianId, (row, change) => {
       useSosStore.getState().applyLiveRow(row);
 
-      if (row.status !== "active" || row.is_test === true) return;
       const name = childName(row.child_id);
       const id = String(row.id ?? "");
+
+      // The child cancelled it from the watch ("sent by mistake").
+      if (change.event === "UPDATE" && row.status === "cancelled" && row.is_test !== true) {
+        void dismissAlert(`sos:${id}`);
+        void notifyAlert({
+          key: `sos:${id}:cancelled`,
+          type: "sos_cancelled",
+          title: `${name} cancelled the SOS`,
+          body: `${name} says the SOS was sent by mistake. Check in when you can.`,
+          data: { sos_alert_id: id, child_id: row.child_id },
+        });
+        return;
+      }
+
+      if (row.status !== "active" || row.is_test === true) return;
 
       if (change.event === "INSERT") {
         void notifyAlert({
