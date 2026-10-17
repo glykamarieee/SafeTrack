@@ -8,7 +8,8 @@
  * - Uses the public map token (EXPO_PUBLIC_MAPBOX_TOKEN). Without it, or for
  *   any part Mapbox cannot match, that part stays a straight line.
  * - Points within GPS wobble of the previous one are skipped (standing still).
- * - The day is split where records are more than GAP_MS apart; the gaps stay
+ * - Long gaps without records (watch off, no battery) are drawn along the most
+ *   likely road route between the last record before and the first after.
  *   straight because the path in between is unknown.
  * - At most 100 coordinates per request (the API limit), chunks overlap by
  *   one point so the line is continuous.
@@ -25,7 +26,9 @@ const MAX_WAYPOINTS = 25;
 // Records further apart than this cannot be map-matched (the watch saves
 // about every 3 minutes); those stretches are routed along roads instead.
 const MATCH_MAX_STEP_M = 400;
-const GAP_MS = 6 * 60 * 60 * 1000;
+// Never split the day: even after hours without records, the line continues
+// along the roads from where the child was to where they were next seen.
+const GAP_MS = Number.POSITIVE_INFINITY;
 const MIN_MOVE_M = 20;
 const DRIVING_SPEED_MPS = 25 / 3.6;
 
@@ -363,8 +366,6 @@ async function matchAll(points: Point[]): Promise<LatLng[] | null> {
   let snappedAny = false;
 
   for (const segment of segments(plausiblePoints(points))) {
-    // Records more than GAP_MS apart: the path in between is unknown.
-    if (line.length) line[line.length - 1] = { ...line[line.length - 1]!, gapAfter: true };
     for (let start = 0; start < segment.length; start += MAX_COORDS - 1) {
       const chunk = segment.slice(start, start + MAX_COORDS);
       if (chunk.length < 2) {
