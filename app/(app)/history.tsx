@@ -676,6 +676,8 @@ export default function HistoryScreen() {
 
         {/* Stats. */}
         <DaySummary
+          childName={childName.split(" ")[0] || childName}
+          dayLabel={selectedLabel}
           loading={initialLoad}
           records={points.length}
           distance={distanceLabel(distance.meters)}
@@ -683,10 +685,10 @@ export default function HistoryScreen() {
           inZones={durationLabel(zoneMinutes, true)}
           zoneShare={spanMinutes > 0 ? Math.min(1, zoneMinutes / spanMinutes) : null}
           sos={sosEvents.length}
-          sosActive={activeSos > 0}
+          sosActive={activeSos}
           onPress={setStatOpen}
         />
-        <Text style={styles.statHint}>Tap the ring or any tile to see how it is worked out.</Text>
+        <Text style={styles.statHint}>Tap the bar or any figure to see how it is worked out.</Text>
 
         {/* Stops. */}
         <View style={styles.sectionHeader}>
