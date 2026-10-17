@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useChildMobileStore } from "../../store/childMobileStore";
+import { playSound } from "../../lib/sounds";
 import {
   childColors as colors,
   childRadius as radius,
@@ -60,6 +61,7 @@ export default function ChildSosScreen() {
     (showAlert = true) => {
       if (countdownRef.current === null || sending) return;
       setCountdown(null);
+      playSound("cancel");
       if (showAlert) {
         Alert.alert("SOS Cancelled", "The SOS request was cancelled.");
       }
@@ -72,8 +74,10 @@ export default function ChildSosScreen() {
     try {
       setSending(true);
       await triggerSos();
+      playSound("sosSent");
       Alert.alert("SOS Sent", "Your Guardian has received the emergency alert.");
     } catch (error) {
+      playSound("error");
       Alert.alert(
         "SOS Failed",
         error instanceof Error ? error.message : "Unable to send SOS."
@@ -82,6 +86,19 @@ export default function ChildSosScreen() {
       setSending(false);
     }
   }, [sending, triggerSos]);
+
+  // A tick for each second of the countdown.
+  useEffect(() => {
+    if (countdown !== null && countdown > 0) playSound("tick");
+  }, [countdown]);
+
+  // The SOS stopped being active (the guardian acknowledged it): a cheerful
+  // "done" sound on the child's phone. refreshActiveSos keeps only active ones.
+  const lastStatus = useRef(activeSos?.status);
+  useEffect(() => {
+    if (lastStatus.current === "active" && activeSos?.status !== "active") playSound("success");
+    lastStatus.current = activeSos?.status;
+  }, [activeSos?.status]);
 
   useEffect(() => {
     if (countdown === null) return;

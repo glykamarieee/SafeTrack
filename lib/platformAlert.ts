@@ -1,4 +1,5 @@
 import { Alert, Platform } from "react-native";
+import { playSound } from "./sounds";
 
 export interface AlertButton {
   text: string;
@@ -6,7 +7,19 @@ export interface AlertButton {
   onPress?: () => void;
 }
 
+// A result message gets a matching sound; questions ("Delete…?") get none.
+const ERROR_TITLE = /unable|failed|fail|could ?n[o']t|can't|cannot|unavailable|error|incorrect|invalid|not saved/i;
+const SUCCESS_TITLE = /saved|created|updated|acknowledged|linked|connected|deleted|removed|added|sent|copied|downloaded|exported|changed|unlinked|done|ready/i;
+
+function soundFor(title: string) {
+  if (title.trim().endsWith("?")) return;
+  if (ERROR_TITLE.test(title)) playSound("error");
+  else if (SUCCESS_TITLE.test(title)) playSound("success");
+}
+
 export function showAlert(title: string, message?: string, buttons?: AlertButton[]) {
+  soundFor(title);
+
   if (Platform.OS !== "web") {
     Alert.alert(title, message, buttons);
     return;

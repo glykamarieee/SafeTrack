@@ -422,20 +422,35 @@ rest.
   - `sos_alerts_notify_guardian` (insert, and `realert_count` increase while
     active) and `geofence_events_notify_guardian` (every insert) call
     `send_guardian_push`.
-  - `send_guardian_push` posts to Expo's push API through `pg_net`, using Android
-    channel **`safetrack-alerts`**.
+  - `send_guardian_push` posts to Expo's push API through `pg_net`. Since
+    migration 20261017 the Android channel depends on the type: `sos` and
+    `sos_realert` → **`safetrack-sos`** (siren), `entry`/`exit` →
+    **`safetrack-zones`** (chime), anything else → **`safetrack-alerts`**.
   - It skips categories the guardian turned off in
     `guardian_notification_preferences` (`safe_zone`, `anomaly`, `device`). **SOS
     and re-alerts are always sent.**
 - **App:**
   - `useGuardianPushRegistration` (in `app/(app)/_layout.tsx`) asks for
-    permission, creates the `safetrack-alerts` channel, gets an Expo token and
+    permission, creates the three channels (`services/alertNotifier.ts`
+    `ensureAlertChannels`), gets an Expo token and
     calls `register_my_push_token`. Tapping a notification opens SOS Alerts,
     History or AI notices.
   - Logout switches the token off (`unregisterGuardianPushToken`).
   - While the app is open, `useGuardianSosRealtime` keeps SOS alerts live
     (Supabase Realtime on `sos_alerts`; needs `sos_alerts` in the
     `supabase_realtime` publication, added by migration 20261015).
+  - The same hook shows new SOS, re-alerts and `geofence_events` (needs
+    migration 20261017 for the publication) as **local** notifications on those
+    channels while the app runs, including in the background. `notifyAlert`
+    skips the local copy when the server push for it already arrived. Android
+    pauses JS timers in the background, so once SafeTrack is closed or idle for
+    a while only the server push arrives.
+  - Channel sounds live in `assets/sounds` and reach `res/raw` through the
+    expo-notifications plugin `sounds` option (needs prebuild). Android fixes a
+    channel's sound at creation: a new sound needs a new channel id.
+  - In-app sound effects: `lib/sounds.ts` `playSound()` (played with expo-video,
+    no extra native module); `showAlert` plays success/error by title. On/off
+    switch and test notification: Profile → Notifications.
 - **Required configuration** (without it registration stops quietly and nothing
   is delivered):
   1. **Expo project ID:** run `npx eas init`, which writes

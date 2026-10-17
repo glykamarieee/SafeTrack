@@ -2,9 +2,32 @@ import { Platform } from "react-native";
 import * as Device from "expo-device";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { supabase } from "../lib/supabase";
+import { ensureAlertChannels, noteServerPush, setServerPushRegistered } from "./alertNotifier";
 
 // The token this device registered, so it can be switched off on logout.
 let registeredToken: string | null = null;
+
+/** Why this phone can or can't get notifications while SafeTrack is closed. */
+export type PushStatus = "registered" | "no-permission" | "unavailable" | "failed" | "unknown";
+let pushStatus: { status: PushStatus; detail?: string } = { status: "unknown" };
+const pushStatusListeners = new Set<() => void>();
+
+function setPushStatus(status: PushStatus, detail?: string) {
+  pushStatus = { status, detail };
+  setServerPushRegistered(status === "registered");
+  pushStatusListeners.forEach((listener) => listener());
+}
+
+export function getPushStatus() {
+  return pushStatus;
+}
+
+export function subscribePushStatus(listener: () => void) {
+  pushStatusListeners.add(listener);
+  return () => {
+    pushStatusListeners.delete(listener);
+  };
+}
 
 /**
  * Expo Go no longer supports Android remote push notifications
@@ -53,12 +76,19 @@ export async function configureSafeTrackNotificationHandler(): Promise<void> {
   }
 
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
+    handleNotification: async (notification) => {
+      // A server push while SafeTrack is open: remember it, so the same alert
+      // from the live updates is not shown twice.
+      const data = notification.request.content.data as Record<string, unknown> | undefined;
+      if (data?.local !== true && typeof data?.type === "string") noteServerPush(data.type);
+
+      return {
       shouldShowBanner: true,
       shouldShowList: true,
       shouldPlaySound: true,
       shouldSetBadge: false,
-    }),
+      };
+    },
   });
 }
 
@@ -77,6 +107,7 @@ export async function registerGuardianPushToken(): Promise<string | null> {
         "Use the SafeTrack development build/APK to test notifications."
     );
 
+    setPushStatus("unavailable", "Expo Go");
     return null;
   }
 
@@ -86,6 +117,7 @@ export async function registerGuardianPushToken(): Promise<string | null> {
       "[SafeTrack] Push registration skipped because this is not a physical device."
     );
 
+    setPushStatus("unavailable", "emulator");
     return null;
   }
 
@@ -95,17 +127,8 @@ export async function registerGuardianPushToken(): Promise<string | null> {
     return null;
   }
 
-  /**
-   * Android notification channel.
-   */
-  if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync("safetrack-alerts", {
-      name: "SafeTrack Safety Alerts",
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 180, 250],
-      sound: "default",
-    });
-  }
+  // Android channels (SOS siren, safe-zone chime, other alerts).
+  await ensureAlertChannels();
 
   /**
    * Request notification permission if it has not already been granted.
@@ -127,6 +150,7 @@ export async function registerGuardianPushToken(): Promise<string | null> {
       "[SafeTrack] Guardian did not grant notification permission."
     );
 
+    setPushStatus("no-permission");
     return null;
   }
 
@@ -146,16 +170,21 @@ export async function registerGuardianPushToken(): Promise<string | null> {
         "EAS project configuration is completed."
     );
 
+    setPushStatus("unavailable", "no EAS project");
     return null;
   }
 
   /**
    * Generate the Guardian device's Expo push token.
    */
-  const expoPushToken =
-    await Notifications.getExpoPushTokenAsync({
-      projectId,
-    });
+  let expoPushToken: { data: string };
+  try {
+    expoPushToken = await Notifications.getExpoPushTokenAsync({ projectId });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    setPushStatus("failed", detail);
+    throw error;
+  }
 
   const pushToken = expoPushToken.data;
 
@@ -178,6 +207,7 @@ export async function registerGuardianPushToken(): Promise<string | null> {
   );
 
   if (error) {
+    setPushStatus("failed", error.message);
     throw new Error(
       error.message ||
         "SafeTrack could not register this device for notifications."
@@ -185,6 +215,7 @@ export async function registerGuardianPushToken(): Promise<string | null> {
   }
 
   registeredToken = pushToken;
+  setPushStatus("registered");
 
   return pushToken;
 }
@@ -199,6 +230,7 @@ export async function unregisterGuardianPushToken(): Promise<void> {
 
   const token = registeredToken;
   registeredToken = null;
+  setPushStatus("unknown");
 
   const { error } = await supabase
     .from("guardian_push_tokens")

@@ -1,3 +1,4 @@
+import { playSound } from "../../lib/sounds";
 import {
   useCallback,
   useEffect,
@@ -415,6 +416,8 @@ export default function SosAlertsScreen(){
 
 
 
+      playSound("success");
+
       Alert.alert(
         "SOS acknowledged",
         response?.message ||
@@ -427,6 +430,8 @@ export default function SosAlertsScreen(){
 
     catch(error){
 
+
+      playSound("error");
 
       Alert.alert(
         "Unable to acknowledge SOS",

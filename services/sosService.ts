@@ -67,7 +67,10 @@ export async function acknowledgeSosAlert(alertId: string): Promise<void> {
  * acknowledgements. RLS limits the stream to the guardian's own alerts.
  * Returns an unsubscribe function.
  */
-export function subscribeToGuardianSos(guardianId: string, onRow: (row: Record<string, unknown>) => void) {
+export function subscribeToGuardianSos(
+  guardianId: string,
+  onRow: (row: Record<string, unknown>, change: { event: string; old: Record<string, unknown> }) => void,
+) {
   // A unique topic per subscription: supabase.channel() returns an existing
   // channel with the same topic, and removeChannel() is async, so a quick
   // remount would add callbacks to an already-subscribed channel and throw
@@ -77,6 +80,37 @@ export function subscribeToGuardianSos(guardianId: string, onRow: (row: Record<s
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "sos_alerts", filter: `guardian_id=eq.${guardianId}` },
+      (payload) => {
+        if (payload.new && typeof payload.new === "object") {
+          onRow(payload.new as Record<string, unknown>, {
+            event: payload.eventType,
+            old: (payload.old ?? {}) as Record<string, unknown>,
+          });
+        }
+      },
+    )
+    .subscribe();
+
+  return () => {
+    void supabase.removeChannel(channel);
+  };
+}
+
+/**
+ * New safety events (safe-zone entry/exit, possible anomaly, watch
+ * disconnected, inactivity) for the given children, live. RLS limits the
+ * stream to the guardian's own children. Needs geofence_events in the
+ * supabase_realtime publication (migration 20261017). Returns an unsubscribe
+ * function.
+ */
+export function subscribeToChildSafetyEvents(childIds: string[], onRow: (row: Record<string, unknown>) => void) {
+  if (childIds.length === 0) return () => undefined;
+
+  const channel = supabase
+    .channel(`guardian-events-${uniqueSuffix()}`)
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "geofence_events", filter: `child_id=in.(${childIds.join(",")})` },
       (payload) => {
         if (payload.new && typeof payload.new === "object") onRow(payload.new as Record<string, unknown>);
       },
