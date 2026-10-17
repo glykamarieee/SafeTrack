@@ -261,9 +261,14 @@ export const MapboxRenderer = forwardRef<MapEngineHandle, MapEngineProps>(functi
             style={{ lineColor: "#22B35E", lineWidth: 5, lineCap: "round", lineJoin: "round" }}
           />
           <LineLayer
+            id="st-route-gap-casing"
+            filter={["==", ["get", "gap"], true]}
+            style={{ lineColor: "#FFFFFF", lineWidth: 8, lineCap: "round", lineJoin: "round", lineOpacity: 0.9 }}
+          />
+          <LineLayer
             id="st-route-gap"
             filter={["==", ["get", "gap"], true]}
-            style={{ lineColor: "#8A97A0", lineWidth: 3, lineDasharray: [2, 2], lineOpacity: 0.9 }}
+            style={{ lineColor: "#22B35E", lineWidth: 5, lineDasharray: [1.6, 1.2], lineJoin: "round" }}
           />
         </ShapeSource>
       ) : null}

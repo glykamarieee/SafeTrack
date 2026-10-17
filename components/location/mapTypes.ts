@@ -74,7 +74,7 @@ export type MapPoint = {
   latitude: number;
   longitude: number;
   /** Route only: the stretch from this point to the next is an unknown path
-   * (no road could be matched); it is drawn dashed grey, not as the route. */
+   * (no road could be matched); it is drawn dashed, not as a solid road line. */
   gapAfter?: boolean;
 };
 

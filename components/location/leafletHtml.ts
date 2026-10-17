@@ -244,7 +244,8 @@ function renderPath(path){
   if(cur.length>1)pieces.push(cur);
   pieces.forEach(function(pts){L.polyline(pts,{pane:"route",color:"#FFFFFF",weight:9,opacity:.95,lineCap:"round",lineJoin:"round",interactive:false}).addTo(routeGroup);});
   pieces.forEach(function(pts){L.polyline(pts,{pane:"route",color:"#22B35E",weight:5,opacity:1,lineCap:"round",lineJoin:"round",interactive:false}).addTo(routeGroup);});
-  gaps.forEach(function(pts){L.polyline(pts,{pane:"route",color:"#8A97A0",weight:3,opacity:.9,dashArray:"6 6",interactive:false}).addTo(routeGroup);});
+  gaps.forEach(function(pts){L.polyline(pts,{pane:"route",color:"#FFFFFF",weight:8,opacity:.9,interactive:false}).addTo(routeGroup);});
+  gaps.forEach(function(pts){L.polyline(pts,{pane:"route",color:"#22B35E",weight:5,opacity:1,dashArray:"10 8",interactive:false}).addTo(routeGroup);});
 }
 
 function setData(d){

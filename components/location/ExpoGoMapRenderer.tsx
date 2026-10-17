@@ -233,7 +233,10 @@ export const ExpoGoMapRenderer = forwardRef<MapEngineHandle, MapEngineProps>(fun
                     <Polyline key={`l${index}`} coordinates={piece} strokeColor="#22B35E" strokeWidth={5} lineCap="round" lineJoin="round" zIndex={3} />
                   ))}
                   {gaps.map((gap, index) => (
-                    <Polyline key={`g${index}`} coordinates={gap} strokeColor="#8A97A0" strokeWidth={3} lineDashPattern={[8, 8]} zIndex={2} />
+                    <Polyline key={`gc${index}`} coordinates={gap} strokeColor="#FFFFFF" strokeWidth={8} zIndex={2} />
+                  ))}
+                  {gaps.map((gap, index) => (
+                    <Polyline key={`g${index}`} coordinates={gap} strokeColor="#22B35E" strokeWidth={5} lineDashPattern={[10, 7]} zIndex={3} />
                   ))}
                 </>
               );

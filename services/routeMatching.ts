@@ -180,6 +180,7 @@ async function routeOnce(chunk: Point[], profile: Profile, cap: number | null): 
 const STAY_RADIUS_M = 150;
 const SPIKE_MAX_M = 500;
 const CONNECTOR_MAX_M = 200;
+const LEG_CONCURRENCY = 4;
 const TRIM_M = 150;
 export function cleanWaypoints(chunk: Point[]) {
   // Staying in one place (school, home): the watch keeps recording small GPS
@@ -279,10 +280,20 @@ async function snapChunk(chunk: Point[]): Promise<LatLng[] | null> {
   // comes within TRIM_M of the stay, then a short connector reaches it.
   const line: LatLng[] = [];
   const at = (point: Point) => ({ latitude: point.latitude, longitude: point.longitude });
+  // Legs are fetched a few at a time (much faster than one by one).
+  const legs: (LatLng[] | null)[] = new Array(waypoints.length - 1).fill(null);
+  let nextLeg = 0;
+  const worker = async () => {
+    while (nextLeg < legs.length) {
+      const leg = nextLeg++;
+      legs[leg] = await routeClean([waypoints[leg]!, waypoints[leg + 1]!]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(LEG_CONCURRENCY, legs.length) }, worker));
   for (let index = 1; index < waypoints.length; index += 1) {
     const from = waypoints[index - 1]!;
     const to = waypoints[index]!;
-    const routed = await routeClean([from, to]);
+    const routed = legs[index - 1];
     if (!routed || routed.length < 2) {
       // No road found even after every fallback: an unknown stretch.
       line.push({ ...at(from), gapAfter: true }, at(to));
@@ -361,6 +372,12 @@ async function matchAll(points: Point[]): Promise<LatLng[] | null> {
         continue;
       }
       const snapped = await snapChunk(chunk);
+      const stay = cleanWaypoints(chunk);
+      if (!snapped && stay.length < 2) {
+        // Staying in one place: one point, no line (wobble is not a path).
+        line.push({ latitude: stay[0]!.latitude, longitude: stay[0]!.longitude });
+        continue;
+      }
       if (snapped) {
         snappedAny = true;
         line.push(...snapped);
