@@ -108,6 +108,9 @@ Key RPCs:
   - `pair_watch`
   - `record_watch_heartbeat`, `record_watch_location`
   - `trigger_watch_sos`
+  - `cancel_watch_sos` (migration 20261017b): the child's "Sent by mistake";
+    cancels only that child's *active* SOS and pushes the guardian
+    (`type: sos_cancelled`)
 - **Admin:**
   - `get_admin_summary_metrics`
   - `get_admin_guardian_accounts`, `get_admin_guardian_detail`, `update_admin_guardian_account_status`
