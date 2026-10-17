@@ -3,6 +3,8 @@ import { Stack } from "expo-router";
 // Registers the child phone's background location task at startup: Android
 // can start the app's JS without any screen to deliver a location.
 import "../services/childBackgroundLocation";
+// Catch password-reset links from app start (see lib/deepLinks.ts).
+import "../lib/deepLinks";
 import { StatusBar } from "expo-status-bar";
 
 import { FontsReadyContext, useLoadAppFonts } from "../theme/fonts";

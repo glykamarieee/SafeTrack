@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Platform, StyleSheet, View } from "react-native";
 import { Link, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
+import { latestAuthLink, onAppLink } from "../../lib/deepLinks";
 
 import { AuthShell } from "../../components/auth/AuthShell";
 import { Button } from "../../components/ui/Button";
@@ -28,6 +29,9 @@ export default function ResetPasswordScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const linkedUrl = Linking.useURL();
+  // Links that arrived before this screen opened (SafeTrack already running).
+  const [appLink, setAppLink] = useState<string | null>(() => latestAuthLink());
+  useEffect(() => onAppLink(() => setAppLink(latestAuthLink())), []);
   const [stage, setStage] = useState<Stage>("checking");
   const [problem, setProblem] = useState<string | null>(null);
   const [password, setPassword] = useState("");
@@ -35,7 +39,8 @@ export default function ResetPasswordScreen() {
   const handled = useRef<string | null>(null);
 
   useEffect(() => {
-    const url = Platform.OS === "web" && typeof window !== "undefined" ? window.location.href : linkedUrl;
+    const fromLink = linkedUrl && /access_token=|[?&#]code=|error(_description)?=/.test(linkedUrl) ? linkedUrl : null;
+    const url = Platform.OS === "web" && typeof window !== "undefined" ? window.location.href : fromLink ?? appLink;
     if (!url || handled.current === url) return;
     handled.current = url;
 
@@ -51,7 +56,7 @@ export default function ResetPasswordScreen() {
         setProblem(reason.message);
         setStage("invalid");
       });
-  }, [linkedUrl]);
+  }, [linkedUrl, appLink]);
 
   // No link at all (screen opened directly): stop waiting after a moment.
   useEffect(() => {
