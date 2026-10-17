@@ -16,7 +16,8 @@
  */
 
 type Point = { latitude: number; longitude: number; accuracy?: number | null; recordedAt: string };
-export type LatLng = { latitude: number; longitude: number };
+/** `gapAfter`: no road could be found from here to the next point (drawn dashed grey). */
+export type LatLng = { latitude: number; longitude: number; gapAfter?: boolean };
 
 const TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? "";
 const MAX_COORDS = 100;
@@ -59,16 +60,14 @@ export function segments(points: Point[]) {
   return result;
 }
 
+/** Map Matching with the likely profile, then the other one (highways aren't walkable). */
 async function matchChunk(chunk: Point[]): Promise<LatLng[] | null> {
   if (chunk.length < 2) return null;
+  const first = travelProfile(chunk);
+  return (await matchOnce(chunk, first)) ?? (await matchOnce(chunk, first === "walking" ? "driving" : "walking"));
+}
 
-  const first = chunk[0];
-  const last = chunk[chunk.length - 1];
-  const seconds = Math.max(1, (Date.parse(last.recordedAt) - Date.parse(first.recordedAt)) / 1000);
-  let distance = 0;
-  for (let index = 1; index < chunk.length; index += 1) distance += meters(chunk[index - 1], chunk[index]);
-  const profile = distance / seconds > DRIVING_SPEED_MPS ? "driving" : "walking";
-
+async function matchOnce(chunk: Point[], profile: Profile): Promise<LatLng[] | null> {
   const coordinates = chunk.map((point) => `${point.longitude.toFixed(6)},${point.latitude.toFixed(6)}`).join(";");
   const radiuses = chunk.map((point) => Math.round(Math.min(50, Math.max(15, (point.accuracy ?? 25) * 1.5)))).join(";");
   let previous = 0;
@@ -131,20 +130,21 @@ async function routeChunk(chunk: Point[]): Promise<Routed | null> {
   if (chunk.length < 2) return null;
   const first = travelProfile(chunk);
   const second: Profile = first === "walking" ? "driving" : "walking";
-  return (
-    (await routeOnce(chunk, first, false)) ??
-    (await routeOnce(chunk, second, false)) ??
-    (await routeOnce(chunk, first, true)) ??
-    (await routeOnce(chunk, second, true))
-  );
+  // Widen the snapping step by step, so the route ends on the road nearest
+  // the record instead of one far away.
+  for (const cap of [80, 250, 500, null]) {
+    const routed = (await routeOnce(chunk, first, cap)) ?? (await routeOnce(chunk, second, cap));
+    if (routed) return routed;
+  }
+  return null;
 }
 
-async function routeOnce(chunk: Point[], profile: Profile, anyDistance: boolean): Promise<Routed | null> {
+async function routeOnce(chunk: Point[], profile: Profile, cap: number | null): Promise<Routed | null> {
   const coordinates = chunk.map((point) => `${point.longitude.toFixed(6)},${point.latitude.toFixed(6)}`).join(";");
   // Snap each record to the nearest road within its GPS accuracy (or to the
   // nearest road at any distance, as a last resort).
   const radiuses = chunk
-    .map((point) => (anyDistance ? "unlimited" : Math.round(Math.min(80, Math.max(25, (point.accuracy ?? 30) * 2)))))
+    .map((point) => (cap === null ? "unlimited" : Math.round(Math.min(cap, Math.max(25, (point.accuracy ?? 30) * 2, cap === 80 ? 0 : cap)))))
     .join(";");
   // Walking follows every street in both directions, so one-way rules never
   // add loops around a block; driving is needed on highways.
@@ -179,6 +179,7 @@ async function routeOnce(chunk: Point[], profile: Profile, anyDistance: boolean)
  */
 const STAY_RADIUS_M = 150;
 const SPIKE_MAX_M = 500;
+const CONNECTOR_MAX_M = 200;
 const TRIM_M = 150;
 export function cleanWaypoints(chunk: Point[]) {
   // Staying in one place (school, home): the watch keeps recording small GPS
@@ -283,7 +284,8 @@ async function snapChunk(chunk: Point[]): Promise<LatLng[] | null> {
     const to = waypoints[index]!;
     const routed = await routeClean([from, to]);
     if (!routed || routed.length < 2) {
-      line.push(at(from), at(to));
+      // No road found even after every fallback: an unknown stretch.
+      line.push({ ...at(from), gapAfter: true }, at(to));
       continue;
     }
     let first = 0;
@@ -298,7 +300,13 @@ async function snapChunk(chunk: Point[]): Promise<LatLng[] | null> {
         break;
       }
     }
-    line.push(at(from), ...routed.slice(first, last + 1), at(to));
+    // Short connectors from the road to the record (a stop inside a campus or
+    // estate) stay solid; a long one is an unknown stretch.
+    const road = routed.slice(first, last + 1);
+    const start = { ...at(from), gapAfter: meters(from, road[0]!) > CONNECTOR_MAX_M };
+    const end = road[road.length - 1]!;
+    road[road.length - 1] = { ...end, gapAfter: meters(end, to) > CONNECTOR_MAX_M };
+    line.push(start, ...road, at(to));
   }
   return line.length >= 2 ? line : null;
 }
@@ -331,11 +339,21 @@ export function plausiblePoints(points: Point[]) {
   return kept;
 }
 
+/** Records left out of the drawn line, and why (for the explanation sheet). */
+export function lineExclusions(points: Point[]): { rough: number; jumps: number } {
+  const precise = points.filter((point) => (point.accuracy ?? 0) <= ROUGH_ACCURACY_M);
+  const rough = precise.length >= 2 ? points.length - precise.length : 0;
+  const jumps = (precise.length >= 2 ? precise.length : points.length) - plausiblePoints(points).length;
+  return { rough, jumps };
+}
+
 async function matchAll(points: Point[]): Promise<LatLng[] | null> {
   const line: LatLng[] = [];
   let snappedAny = false;
 
   for (const segment of segments(plausiblePoints(points))) {
+    // Records more than GAP_MS apart: the path in between is unknown.
+    if (line.length) line[line.length - 1] = { ...line[line.length - 1]!, gapAfter: true };
     for (let start = 0; start < segment.length; start += MAX_COORDS - 1) {
       const chunk = segment.slice(start, start + MAX_COORDS);
       if (chunk.length < 2) {
@@ -347,8 +365,8 @@ async function matchAll(points: Point[]): Promise<LatLng[] | null> {
         snappedAny = true;
         line.push(...snapped);
       } else {
-        // Not matched: keep the recorded points, joined by straight lines.
-        line.push(...chunk.map(({ latitude, longitude }) => ({ latitude, longitude })));
+        // Not matched: the recorded points, joined by unknown (dashed) stretches.
+        line.push(...chunk.map(({ latitude, longitude }, index) => ({ latitude, longitude, gapAfter: index < chunk.length - 1 })));
       }
     }
   }

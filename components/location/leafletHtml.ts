@@ -232,12 +232,19 @@ function renderCircles(list){
 }
 
 function renderPath(path){
-  var pts=path.map(function(p){return [p.latitude,p.longitude];});
-  if(pts.length<2){routeGroup.clearLayers();state.routeOuter=state.routeInner=null;return;}
-  if(!state.routeOuter){
-    state.routeOuter=L.polyline(pts,{pane:"route",color:"#FFFFFF",weight:9,opacity:.95,lineCap:"round",lineJoin:"round",interactive:false}).addTo(routeGroup);
-    state.routeInner=L.polyline(pts,{pane:"route",color:"#22B35E",weight:5,opacity:1,lineCap:"round",lineJoin:"round",interactive:false}).addTo(routeGroup);
-  }else{state.routeOuter.setLatLngs(pts);state.routeInner.setLatLngs(pts);}
+  // Road pieces solid green; unknown stretches (gapAfter) dashed grey.
+  routeGroup.clearLayers();
+  if(path.length<2)return;
+  var pieces=[],gaps=[],cur=[];
+  path.forEach(function(p,i){
+    cur.push([p.latitude,p.longitude]);
+    var n=path[i+1];
+    if(p.gapAfter&&n){if(cur.length>1)pieces.push(cur);gaps.push([[p.latitude,p.longitude],[n.latitude,n.longitude]]);cur=[];}
+  });
+  if(cur.length>1)pieces.push(cur);
+  pieces.forEach(function(pts){L.polyline(pts,{pane:"route",color:"#FFFFFF",weight:9,opacity:.95,lineCap:"round",lineJoin:"round",interactive:false}).addTo(routeGroup);});
+  pieces.forEach(function(pts){L.polyline(pts,{pane:"route",color:"#22B35E",weight:5,opacity:1,lineCap:"round",lineJoin:"round",interactive:false}).addTo(routeGroup);});
+  gaps.forEach(function(pts){L.polyline(pts,{pane:"route",color:"#8A97A0",weight:3,opacity:.9,dashArray:"6 6",interactive:false}).addTo(routeGroup);});
 }
 
 function setData(d){

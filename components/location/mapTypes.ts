@@ -70,7 +70,13 @@ export type MapCircle = {
   lastEventAt?: string | null;
 };
 
-export type MapPoint = { latitude: number; longitude: number };
+export type MapPoint = {
+  latitude: number;
+  longitude: number;
+  /** Route only: the stretch from this point to the next is an unknown path
+   * (no road could be matched); it is drawn dashed grey, not as the route. */
+  gapAfter?: boolean;
+};
 
 export type MapView = { latitude: number; longitude: number; zoom: number };
 
@@ -180,6 +186,28 @@ export function circleRing(circle: { latitude: number; longitude: number; radius
   }
 
   return ring;
+}
+
+/**
+ * Splits a route into road pieces (solid green) and unknown stretches
+ * (dashed grey), using each point's `gapAfter`.
+ */
+export function splitRoute(path: MapPoint[]): { pieces: MapPoint[][]; gaps: MapPoint[][] } {
+  const pieces: MapPoint[][] = [];
+  const gaps: MapPoint[][] = [];
+  let current: MapPoint[] = [];
+  for (let index = 0; index < path.length; index += 1) {
+    const point = path[index]!;
+    current.push(point);
+    const next = path[index + 1];
+    if (point.gapAfter && next) {
+      if (current.length > 1) pieces.push(current);
+      gaps.push([point, next]);
+      current = [];
+    }
+  }
+  if (current.length > 1) pieces.push(current);
+  return { pieces, gaps };
 }
 
 /** Everything the camera should show when fitting: markers, zones and the route. */

@@ -11,6 +11,7 @@ import {
   clampZoom,
   contentPoints,
   distanceMeters,
+  splitRoute,
   zoomFromRegion,
   type MapCircle,
   type MapEngineHandle,
@@ -220,12 +221,24 @@ export const ExpoGoMapRenderer = forwardRef<MapEngineHandle, MapEngineProps>(fun
           <ZoneCircle key={circle.id} circle={circle} />
         ))}
 
-        {path.length > 1 ? (
-          <>
-            <Polyline coordinates={path} strokeColor="#FFFFFF" strokeWidth={9} lineCap="round" lineJoin="round" zIndex={2} />
-            <Polyline coordinates={path} strokeColor="#22B35E" strokeWidth={5} lineCap="round" lineJoin="round" zIndex={3} />
-          </>
-        ) : null}
+        {path.length > 1
+          ? (() => {
+              const { pieces, gaps } = splitRoute(path);
+              return (
+                <>
+                  {pieces.map((piece, index) => (
+                    <Polyline key={`c${index}`} coordinates={piece} strokeColor="#FFFFFF" strokeWidth={9} lineCap="round" lineJoin="round" zIndex={2} />
+                  ))}
+                  {pieces.map((piece, index) => (
+                    <Polyline key={`l${index}`} coordinates={piece} strokeColor="#22B35E" strokeWidth={5} lineCap="round" lineJoin="round" zIndex={3} />
+                  ))}
+                  {gaps.map((gap, index) => (
+                    <Polyline key={`g${index}`} coordinates={gap} strokeColor="#8A97A0" strokeWidth={3} lineDashPattern={[8, 8]} zIndex={2} />
+                  ))}
+                </>
+              );
+            })()
+          : null}
 
         {markers.map((marker) => (
           <NativeMarker key={marker.id} marker={marker} onPress={onMarkerPress} />

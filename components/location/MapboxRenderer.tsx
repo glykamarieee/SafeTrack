@@ -23,6 +23,7 @@ import {
   clampZoom,
   contentPoints,
   distanceMeters,
+  splitRoute,
   type MapCircle,
   type MapEngineHandle,
   type MapEngineProps,
@@ -150,17 +151,20 @@ export const MapboxRenderer = forwardRef<MapEngineHandle, MapEngineProps>(functi
     [circles],
   );
 
-  const routeShape = useMemo(
-    () =>
-      path.length > 1
-        ? {
-            type: "Feature" as const,
-            properties: {},
-            geometry: { type: "LineString" as const, coordinates: path.map((point) => [point.longitude, point.latitude]) },
-          }
-        : null,
-    [path],
-  );
+  // Road pieces (solid green) and unknown stretches (dashed grey).
+  const routeShape = useMemo(() => {
+    if (path.length < 2) return null;
+    const { pieces, gaps } = splitRoute(path);
+    const feature = (points: MapPoint[], gap: boolean) => ({
+      type: "Feature" as const,
+      properties: { gap },
+      geometry: { type: "LineString" as const, coordinates: points.map((point) => [point.longitude, point.latitude]) },
+    });
+    return {
+      type: "FeatureCollection" as const,
+      features: [...pieces.map((piece) => feature(piece, false)), ...gaps.map((gap) => feature(gap, true))],
+    };
+  }, [path]);
 
   const start = initialView ?? DEFAULT_VIEW;
   const ornamentBottom = 8 + mapPadding.bottom;
@@ -246,8 +250,21 @@ export const MapboxRenderer = forwardRef<MapEngineHandle, MapEngineProps>(functi
 
       {routeShape ? (
         <ShapeSource id="st-route" shape={routeShape}>
-          <LineLayer id="st-route-casing" style={{ lineColor: "#FFFFFF", lineWidth: 9, lineCap: "round", lineJoin: "round" }} />
-          <LineLayer id="st-route-line" style={{ lineColor: "#22B35E", lineWidth: 5, lineCap: "round", lineJoin: "round" }} />
+          <LineLayer
+            id="st-route-casing"
+            filter={["==", ["get", "gap"], false]}
+            style={{ lineColor: "#FFFFFF", lineWidth: 9, lineCap: "round", lineJoin: "round" }}
+          />
+          <LineLayer
+            id="st-route-line"
+            filter={["==", ["get", "gap"], false]}
+            style={{ lineColor: "#22B35E", lineWidth: 5, lineCap: "round", lineJoin: "round" }}
+          />
+          <LineLayer
+            id="st-route-gap"
+            filter={["==", ["get", "gap"], true]}
+            style={{ lineColor: "#8A97A0", lineWidth: 3, lineDasharray: [2, 2], lineOpacity: 0.9 }}
+          />
         </ShapeSource>
       ) : null}
 

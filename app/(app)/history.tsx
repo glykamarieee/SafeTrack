@@ -14,7 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 
 import { useAuthStore } from "../../store/authStore";
-import { matchRouteToRoads } from "../../services/routeMatching";
+import { lineExclusions, matchRouteToRoads } from "../../services/routeMatching";
 import {
   estimateStops,
   loadDailyActivity,
@@ -328,7 +328,14 @@ export default function HistoryScreen() {
   const sources = Array.from(new Set(points.map((point) => (point.source === "mobile" ? "phone" : "smartwatch"))));
 
   // ---- Map content (memoized so unrelated renders never reach the map).
-  const straightPath = useMemo(() => points.map(({ latitude, longitude }) => ({ latitude, longitude })), [points]);
+  // Until the road route arrives (or when it can't: offline, no map token),
+  // the records are joined by dashed grey "unknown path" stretches, never by
+  // the solid green route colour.
+  const straightPath = useMemo(
+    () => points.map(({ latitude, longitude }, index) => ({ latitude, longitude, gapAfter: index < points.length - 1 })),
+    [points],
+  );
+  const excluded = useMemo(() => lineExclusions(points), [points]);
   // The same route snapped to roads (Mapbox Map Matching); straight lines
   // until it arrives, and wherever no road could be matched.
   const [roadPath, setRoadPath] = useState<{ latitude: number; longitude: number }[] | null>(null);
@@ -833,7 +840,7 @@ export default function HistoryScreen() {
       >
         <Text style={styles.explain}>
           {statOpen === "records"
-            ? `${points.length} location record${points.length === 1 ? "" : "s"} were stored for ${childName} on ${selectedLabel.toLowerCase() === "today" ? "today" : selectedLabel}${sources.length ? `, from the ${sources.join(" and ")}` : ""}. Only records that reached SafeTrack's server are counted; nothing is estimated.`
+            ? `${points.length} location record${points.length === 1 ? "" : "s"} were stored for ${childName} on ${selectedLabel.toLowerCase() === "today" ? "today" : selectedLabel}${sources.length ? `, from the ${sources.join(" and ")}` : ""}. Only records that reached SafeTrack's server are counted; nothing is estimated.${excluded.rough || excluded.jumps ? ` Left out of the green line (still counted here): ${[excluded.rough ? `${excluded.rough} rough fix${excluded.rough === 1 ? "" : "es"} (GPS accuracy worse than 150 m)` : "", excluded.jumps ? `${excluded.jumps} impossible jump${excluded.jumps === 1 ? "" : "s"} (out and straight back faster than 150 km/h)` : ""].filter(Boolean).join(" and ")}.` : ""} The green line follows the roads between records; a dashed grey stretch means no road could be found there.`
             : statOpen === "distance"
               ? `Straight lines between records, added up: ${distance.counted} move${distance.counted === 1 ? "" : "s"} counted. ${distance.ignoredSmall} small move${distance.ignoredSmall === 1 ? " was" : "s were"} left out because they were within the GPS accuracy of the two records (at least ${MIN_MOVE_METERS} m), which is the position wobbling while ${childName} stays still.${distance.ignoredJumps ? ` ${distance.ignoredJumps} impossible jump${distance.ignoredJumps === 1 ? " was" : "s were"} skipped (faster than ${Math.round(MAX_SPEED_MPS * 3.6)} km/h).` : ""} Travel along roads is usually a little longer. The green line on the map is drawn along the roads between records where they could be matched.`
               : statOpen === "span"
