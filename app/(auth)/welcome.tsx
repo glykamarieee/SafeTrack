@@ -1,4 +1,4 @@
-import { Animated, Image, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Animated, Image, Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
@@ -178,35 +178,112 @@ function WelcomeWide() {
       </LinearGradient>
 
       <View style={wide.side}>
-        <Animated.View style={[wide.card, { backgroundColor: colors.surface, borderColor: colors.rule }, card]}>
-          <View style={[wide.badge, { backgroundColor: colors.primaryTint }]}>
-            <Ionicons name="shield-checkmark" size={22} color={colors.primary} />
-          </View>
-          <Text variant="title" style={wide.cardTitle}>
+        <Animated.View style={[wide.sideInner, card]}>
+          <Text variant="legend" style={{ color: colors.primary }}>
+            Get started
+          </Text>
+          <Text variant="display" style={wide.sideTitle} accessibilityRole="header">
             Welcome to SafeTrack
           </Text>
-          <Text tone="muted" style={wide.cardText}>
-            Create a guardian account to link your child&apos;s watch or phone, or sign in to continue.
+          <Text tone="muted" style={wide.sideLead}>
+            Set up in minutes: create your guardian account, then link your child&apos;s smartwatch or phone with a 6-digit code.
           </Text>
 
-          <View style={wide.buttons}>
-            <Button label="Get started" size="lg" iconRight="arrow-forward" onPress={() => router.push("/(auth)/register")} />
-            <Button label="I already have an account" variant="secondary" size="lg" onPress={() => router.push("/(auth)/login")} />
+          <View style={wide.choices}>
+            <Choice
+              primary
+              icon="person-add-outline"
+              title="Create a guardian account"
+              text="New to SafeTrack? Start here."
+              onPress={() => router.push("/(auth)/register")}
+            />
+            <Choice
+              icon="log-in-outline"
+              title="I already have an account"
+              text="Sign in as a guardian or administrator."
+              onPress={() => router.push("/(auth)/login")}
+            />
           </View>
 
-          <View style={[wide.note, { backgroundColor: colors.sunken }]}>
-            <Ionicons name="lock-closed-outline" size={15} color={colors.muted} />
-            <Text variant="label" tone="muted" style={wide.noteText}>
-              Administrators sign in with their admin account to open the dashboard.
+          <View style={[wide.facts, { borderTopColor: colors.rule }]}>
+            {[
+              { icon: "watch-outline" as const, text: "Smartwatch or phone" },
+              { icon: "shield-checkmark-outline" as const, text: "Safe zones and SOS" },
+              { icon: "time-outline" as const, text: "Philippine time records" },
+            ].map((fact) => (
+              <View key={fact.text} style={wide.fact}>
+                <Ionicons name={fact.icon} size={16} color={colors.primary} />
+                <Text variant="label" tone="ink2">
+                  {fact.text}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          <View style={wide.adminRow}>
+            <Ionicons name="lock-closed-outline" size={14} color={colors.muted} />
+            <Text variant="label" tone="muted" style={wide.flex}>
+              Administrators use the same sign-in to open the dashboard.
             </Text>
           </View>
         </Animated.View>
 
         <Text variant="label" tone="muted" style={wide.footer}>
-          Latest location, not real-time. SafeTrack never contacts emergency services.
+          Latest location, not real-time · SafeTrack never contacts emergency services.
         </Text>
       </View>
     </View>
+  );
+}
+
+/** A large choice tile: icon, title, short line and an arrow; lifts on hover (web). */
+function Choice({
+  icon,
+  title,
+  text,
+  primary = false,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  text: string;
+  primary?: boolean;
+  onPress: () => void;
+}) {
+  const { colors } = useTheme();
+  const fg = primary ? "#FFFFFF" : colors.ink;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      onPress={onPress}
+      style={(state) => {
+        const hovered = (state as { hovered?: boolean }).hovered;
+        return [
+          wide.choice,
+          primary
+            ? { backgroundColor: colors.primary, borderColor: colors.primary }
+            : { backgroundColor: colors.surface, borderColor: hovered ? colors.primary : colors.rule },
+          hovered && wide.choiceHover,
+          state.pressed && { opacity: 0.85 },
+        ];
+      }}
+    >
+      <View style={[wide.choiceIcon, { backgroundColor: primary ? "rgba(255,255,255,0.16)" : colors.primaryTint }]}>
+        <Ionicons name={icon} size={22} color={primary ? "#FFFFFF" : colors.primary} />
+      </View>
+      <View style={wide.flex}>
+        <Text weight="800" style={[wide.choiceTitle, { color: fg }]}>
+          {title}
+        </Text>
+        <Text variant="label" style={{ color: primary ? "rgba(255,255,255,0.82)" : colors.muted }}>
+          {text}
+        </Text>
+      </View>
+      <View style={[wide.choiceArrow, { backgroundColor: primary ? "rgba(255,255,255,0.16)" : colors.sunken }]}>
+        <Ionicons name="arrow-forward" size={18} color={primary ? "#FFFFFF" : colors.primary} />
+      </View>
+    </Pressable>
   );
 }
 
@@ -269,13 +346,27 @@ const wide = StyleSheet.create({
   featureCopy: { flex: 1 },
   featureTitle: { color: "#FFFFFF", fontSize: 13.5 },
   featureText: { color: "rgba(255,255,255,0.7)", fontSize: 12, lineHeight: 17, marginTop: 1 },
-  side: { flex: 1, alignItems: "center", justifyContent: "center", padding: 40, gap: 18 },
-  card: { width: "100%", maxWidth: 440, padding: 36, borderRadius: 28, borderWidth: 1, gap: 14 },
-  badge: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center" },
-  cardTitle: { marginTop: 4 },
-  cardText: { lineHeight: 21 },
-  buttons: { gap: 10, marginTop: 10 },
-  note: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 14, marginTop: 6 },
-  noteText: { flex: 1 },
-  footer: { textAlign: "center", maxWidth: 440 },
+  side: { flex: 1, justifyContent: "center", paddingHorizontal: 56, paddingVertical: 40 },
+  sideInner: { width: "100%", maxWidth: 480, alignSelf: "center", gap: 12 },
+  sideTitle: { fontSize: 38, lineHeight: 44 },
+  sideLead: { fontSize: 15, lineHeight: 23, marginBottom: 14 },
+  choices: { gap: 12 },
+  choice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 18,
+    borderRadius: 22,
+    borderWidth: 1.5,
+  },
+  choiceHover: { transform: [{ translateY: -2 }], shadowColor: "#0D2A1E", shadowOpacity: 0.12, shadowRadius: 18, shadowOffset: { width: 0, height: 10 } },
+  choiceIcon: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  choiceTitle: { fontSize: 16.5 },
+  choiceArrow: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
+  facts: { flexDirection: "row", flexWrap: "wrap", gap: 18, marginTop: 18, paddingTop: 18, borderTopWidth: 1 },
+  fact: { flexDirection: "row", alignItems: "center", gap: 7 },
+  adminRow: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 4 },
+  flex: { flex: 1 },
+  footer: { position: "absolute", bottom: 28, left: 56, right: 56, textAlign: "center" },
 });
