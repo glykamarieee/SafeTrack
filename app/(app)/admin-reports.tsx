@@ -38,7 +38,10 @@ import {
 
 } from "../../services/adminServerReportService";
 
-import { AdminPageHeader } from "../../components/admin/AdminPageHeader";
+import { TopBar, showToast } from "../../components/admin/kit";
+import { ReportHistory, ReportProgress, ReportReady } from "../../components/admin/ReportExtras";
+import { fetchAllReports } from "../../services/reportsService";
+import type { ActivityReport } from "../../types/safetrack";
 
 import {
 
@@ -116,6 +119,17 @@ export default function AdminReportsScreen() {
   const [exporting, setExporting] = useState<ServerReportFormat | null>(null);
 
   const [error, setError] = useState<string | null>(null);
+  const [lastReport, setLastReport] = useState<Awaited<ReturnType<typeof generateServerActivityReport>> | null>(null);
+  const [redownloading, setRedownloading] = useState(false);
+  const [history, setHistory] = useState<ActivityReport[] | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+
+  const loadHistory = useCallback(() => {
+    fetchAllReports()
+      .then(setHistory)
+      .catch(() => setHistory([]));
+  }, []);
+  useEffect(() => loadHistory(), [loadHistory]);
 
 
 
@@ -134,6 +148,7 @@ export default function AdminReportsScreen() {
       try {
 
         setSummary(await fetchAdminReportSummary(range.start, range.end));
+        setUpdatedAt(new Date().toISOString());
 
       } catch (reason) {
 
@@ -268,12 +283,9 @@ export default function AdminReportsScreen() {
         range.end,
       );
 
-      showAlert(
-        format === "pdf" ? "PDF report ready" : "Excel report ready",
-        format === "pdf"
-          ? "The SafeTrack PDF report was generated successfully."
-          : "The SafeTrack Excel workbook was generated successfully.",
-      );
+      setLastReport(result);
+      loadHistory();
+      showToast(format === "pdf" ? "PDF report ready and downloaded." : "Excel report ready and downloaded.");
     } catch (reason) {
       showAlert(
         format === "pdf" ? "PDF export error" : "Excel export error",
@@ -307,15 +319,37 @@ export default function AdminReportsScreen() {
 
         <View style={styles.page}>
 
-          <AdminPageHeader
-
-            eyebrow="SYSTEM REPORTING"
-
+          <TopBar
+            crumb="Reports"
             title="Reports"
-
-            description="Choose an authorized date range, review the stored SafeTrack records, then download the activity report as a real PDF or Excel workbook."
-
+            subtitle="Pick a period, check the stored records, then download a designed PDF or Excel report. Dates are Philippine time."
+            updatedAt={updatedAt}
           />
+
+          <View style={styles.presetRow}>
+            {[
+              { label: "Today", days: 1 },
+              { label: "Last 7 days", days: 7 },
+              { label: "Last 30 days", days: 30 },
+            ].map((preset) => (
+              <Pressable
+                key={preset.label}
+                accessibilityRole="button"
+                onPress={() => {
+                  const end = new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10);
+                  const startDay = new Date(`${end}T00:00:00Z`);
+                  startDay.setUTCDate(startDay.getUTCDate() - (preset.days - 1));
+                  const start = startDay.toISOString().slice(0, 10);
+                  setStartDate(start);
+                  setEndDate(end);
+                  setRange({ start, end });
+                }}
+                style={({ pressed }) => [styles.presetChip, pressed && styles.pressed]}
+              >
+                <Text style={styles.presetText}>{preset.label}</Text>
+              </Pressable>
+            ))}
+          </View>
 
 
 
@@ -507,6 +541,26 @@ export default function AdminReportsScreen() {
 
 
 
+                {exporting ? <ReportProgress format={exporting} /> : null}
+                {!exporting && lastReport ? (
+                  <ReportReady
+                    format={lastReport.format}
+                    recordCount={lastReport.recordCount}
+                    generatedAt={lastReport.generatedAt}
+                    downloading={redownloading}
+                    onDownload={async () => {
+                      setRedownloading(true);
+                      try {
+                        await downloadGeneratedServerActivityReport(lastReport, range.start, range.end);
+                      } catch (reason) {
+                        showToast(reason instanceof Error ? reason.message : "The download failed. Generate the report again.", "error");
+                      } finally {
+                        setRedownloading(false);
+                      }
+                    }}
+                  />
+                ) : null}
+
                 {noExportableActivity ? (
                   <View style={styles.exportUnavailable}>
                     <Ionicons
@@ -534,6 +588,7 @@ export default function AdminReportsScreen() {
 
           ) : null}
 
+          <ReportHistory reports={history} />
         </View>
 
       </ScrollView>
@@ -645,6 +700,9 @@ function SummaryRow({
 const useStyles = makeStyles((__c) => {
   const colors = adminPalette(__c);
   return StyleSheet.create({
+  presetRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 18 },
+  presetChip: { height: 34, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, justifyContent: "center" },
+  presetText: { color: colors.primaryDark, fontSize: 12.5, fontWeight: "800" },
   safe: { flex: 1, backgroundColor: colors.background },
   scrollContent: { paddingBottom: 118 },
   page: {
