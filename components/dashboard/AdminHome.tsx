@@ -131,6 +131,11 @@ export function AdminHome() {
   };
 
   const data = metrics ?? EMPTY_METRICS;
+  // "Active devices" is the number of watches linked to a child. The database
+  // count is every enabled watch row, including registered watches that no
+  // child uses yet (12 of 13 on 18 Oct), so it overstated how many are in use.
+  const linkedDevices = devices.length ? devices.filter((device) => device.isActive && device.childId).length : data.activeDevices;
+  const registeredDevices = devices.length || data.activeDevices;
 
   const recentDevices = useMemo(
     () =>
@@ -144,7 +149,7 @@ export function AdminHome() {
   const bars = [
     { label: "Guardians", value: data.guardianAccounts },
     { label: "Children", value: data.registeredChildren },
-    { label: "Active devices", value: data.activeDevices },
+    { label: "Active devices", value: linkedDevices },
     { label: "Safe zones", value: data.activeSafeZones },
     { label: "Reports", value: data.generatedReports },
     { label: "Active SOS", value: data.activeSosAlerts, danger: true },
@@ -217,7 +222,7 @@ export function AdminHome() {
       ) : null}
 
       <View style={[styles.stats, !tablet && styles.statsStacked]}>
-        <StatCard index={2} strong icon="watch-outline" label="Active devices" value={formatNumber(data.activeDevices)} detail="Watches linked and active" onPress={() => router.push("/(app)/admin-devices")} />
+        <StatCard index={2} strong icon="watch-outline" label="Active devices" value={formatNumber(linkedDevices)} detail={`Linked to a child · ${formatNumber(registeredDevices)} registered`} onPress={() => router.push("/(app)/admin-devices")} />
         <StatCard index={3} icon="people-outline" label="Guardians" value={formatNumber(data.guardianAccounts)} detail="Guardian accounts" onPress={() => router.push("/(app)/admin-guardians")} />
         <StatCard index={4} icon="happy-outline" label="Children" value={formatNumber(data.registeredChildren)} detail="Registered children" onPress={() => router.push("/(app)/admin-guardians")} />
         <StatCard

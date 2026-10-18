@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase";
+import { philippineDayRange } from "./activityHistoryService";
 import type { AdminSummaryMetrics } from "../types/safetrack";
 
 export type AccountStatus = "active" | "inactive";
@@ -120,6 +121,21 @@ function toArray(value: unknown) {
   return Array.isArray(value) ? value : [];
 }
 
+/**
+ * Administrators who also hold the Guardian role (the admin account was given
+ * it when it first signed in to the app). They are not guardians of any
+ * child, so the Guardians list and count leave them out.
+ */
+async function adminPersonIds(): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from("person_roles")
+    .select("person_id, roles!inner(role_code)")
+    .eq("is_active", true)
+    .eq("roles.role_code", "ADMIN");
+  if (error) return new Set();
+  return new Set((data ?? []).map((row) => String((row as { person_id: unknown }).person_id)));
+}
+
 export async function fetchAdminSummaryMetrics(): Promise<AdminSummaryMetrics> {
   const { data, error } = await supabase
     .rpc("get_admin_summary_metrics")
@@ -134,9 +150,11 @@ export async function fetchAdminSummaryMetrics(): Promise<AdminSummaryMetrics> {
   }
 
   const row = data as UnknownRecord;
+  const guardians = await fetchAdminGuardianAccounts().catch(() => null);
 
   return {
-    guardianAccounts: toCount(row.guardian_accounts),
+    // The function's count includes the admin account (see adminPersonIds).
+    guardianAccounts: guardians ? guardians.length : toCount(row.guardian_accounts),
     administratorAccounts: toCount(row.administrator_accounts),
     registeredChildren: toCount(row.registered_children),
     activeDevices: toCount(row.active_devices),
@@ -161,7 +179,11 @@ export async function fetchAdminGuardianAccounts(
     throw new Error(error.message);
   }
 
-  return toArray(data).map((item) => {
+  const admins = await adminPersonIds();
+
+  return toArray(data)
+    .filter((item) => !admins.has(String((item as UnknownRecord).guardian_id)))
+    .map((item) => {
     const row = item as UnknownRecord;
 
     return {
@@ -358,12 +380,21 @@ export async function fetchAdminReportSummary(
 
   const row = data as UnknownRecord;
 
+  // The database function counts these events by UTC dates, while locations,
+  // SOS and the PDF/Excel export use Philippine dates; it left out events
+  // between 12:00 and 8:00 AM on the first day. Count them the same way here.
+  const { count: events } = await supabase
+    .from("geofence_events")
+    .select("id", { count: "exact", head: true })
+    .gte("occurred_at", philippineDayRange(startDate).start)
+    .lt("occurred_at", philippineDayRange(endDate).end);
+
   return {
     guardianAccounts: toCount(row.guardian_accounts),
     registeredChildren: toCount(row.registered_children),
     smartwatchDevices: toCount(row.smartwatch_devices),
     locationRecords: toCount(row.location_records),
-    safeZoneEvents: toCount(row.safe_zone_events),
+    safeZoneEvents: typeof events === "number" ? events : toCount(row.safe_zone_events),
     sosRecords: toCount(row.sos_records),
   };
 }

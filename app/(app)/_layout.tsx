@@ -1,4 +1,5 @@
 import type { ColorValue } from "react-native";
+import { useEffect } from "react";
 import { Platform, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Redirect, Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -56,6 +57,14 @@ export default function AppLayout() {
     : guardianName
       ? { name: guardianName, detail: guardianEmail ?? "Guardian" }
       : null;
+
+  // Opened directly by its address (web refresh, a link): restore the saved
+  // account here, since app/index.tsx, which normally does it, was skipped.
+  const isBootstrapped = useAuthStore((state) => state.isBootstrapped);
+  const bootstrap = useAuthStore((state) => state.bootstrap);
+  useEffect(() => {
+    if (!isBootstrapped) void bootstrap();
+  }, [isBootstrapped, bootstrap]);
 
   useGuardianPushRegistration(isGuardian);
   useGuardianSosRealtime(isGuardian ? guardianId : null);

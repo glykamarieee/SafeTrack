@@ -394,8 +394,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       throw error;
     } finally {
+      // A login is itself a finished start-up: on the web the admin signs in
+      // at /login directly, so bootstrap() (run by app/index.tsx) never ran
+      // and Home waited for isBootstrapped forever.
       set({
         isLoading: false,
+        isBootstrapped: true,
       });
     }
   },
