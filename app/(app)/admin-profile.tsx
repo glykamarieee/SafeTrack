@@ -20,7 +20,8 @@ import {
   adminSpacing as spacing,
 } from "../../constants/adminDesign";
 
-import { makeStyles, useTheme } from "../../theme/ThemeProvider";
+import { makeStyles, useTheme, type AppearancePreference } from "../../theme/ThemeProvider";
+import { Segmented } from "../../components/ui/Segmented";
 import { adminPalette } from "../../theme/legacy";
 
 export default function AdminProfileScreen() {
@@ -33,6 +34,7 @@ export default function AdminProfileScreen() {
 
   const administrator = useAuthStore((state) => state.administrator);
   const logout = useAuthStore((state) => state.logout);
+  const { preference, setPreference } = useTheme();
 
   const initials =
     administrator?.fullName
@@ -268,6 +270,20 @@ export default function AdminProfileScreen() {
                       Administrator access active
                     </Text>
                   </View>
+                </View>
+
+                <View style={styles.appearance}>
+                  <Text style={styles.sessionStatusLabel}>APPEARANCE</Text>
+                  <Segmented<AppearancePreference>
+                    accessibilityLabel="Appearance"
+                    value={preference}
+                    onChange={setPreference}
+                    options={[
+                      { value: "light", label: "Light" },
+                      { value: "dark", label: "Dark" },
+                      { value: "system", label: "System" },
+                    ]}
+                  />
                 </View>
 
                 <Pressable
@@ -792,6 +808,7 @@ const useStyles = makeStyles((__c) => {
     fontWeight: "800",
   },
 
+  appearance: { gap: 8, marginBottom: 12, minWidth: 260, flexGrow: 1 },
   logoutButton: {
     minHeight: 46,
     flexDirection: "row",
