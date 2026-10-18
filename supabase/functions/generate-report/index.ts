@@ -309,7 +309,7 @@ Deno.serve(async (request: Request) => {
     createdReportId = reportRow.id;
 
     // 6. Build the file here; no external report service is needed.
-    const bytes = format === "pdf" ? await buildPdfReport(data) : buildExcelReport(data);
+    const bytes = format === "pdf" ? await buildPdfReport(data) : await buildExcelReport(data);
 
     const filePath = `${adminId}/${reportRow.id}.${format}`;
 
