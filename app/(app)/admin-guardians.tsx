@@ -1,458 +1,435 @@
-import { useCallback, useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  View,
-  useWindowDimensions,
-} from "react-native";
-import { Text } from "../../components/ui/NativeText";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { showAlert } from "../../lib/platformAlert";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
+import { showAlert } from "../../lib/platformAlert";
 import {
   fetchAdminGuardianAccounts,
-  updateAdminGuardianAccountStatus,
+  fetchAdminGuardianDetail,
   subscribeAdminUpdates,
+  updateAdminGuardianAccountStatus,
   type AdminGuardianAccount,
+  type AdminGuardianDetail,
 } from "../../services/adminService";
-import { AdminPageHeader } from "../../components/admin/AdminPageHeader";
 import { AdminSearchField } from "../../components/admin/AdminSearchField";
-import { AdminStatusPill } from "../../components/admin/AdminStatusPill";
-import {
-  adminColors as colors,
-  adminLayout,
-  adminRadius as radius,
-  adminShadow as shadow,
-  adminSpacing as spacing,
-} from "../../constants/adminDesign";
-
+import { Rise, Skeleton, SlideOver, TonePill, TopBar, initials, phTime, showToast, timeAgo } from "../../components/admin/kit";
+import { Button } from "../../components/ui/Button";
+import { Text } from "../../components/ui/Text";
 import { makeStyles, useTheme } from "../../theme/ThemeProvider";
-import { adminPalette } from "../../theme/legacy";
+import { radius } from "../../theme/tokens";
 
-function getInitial(value: string) {
-  return value.trim().charAt(0).toUpperCase() || "G";
+type Sort = "name" | "newest" | "sos";
+const SORTS: { id: Sort; label: string }[] = [
+  { id: "name", label: "Name" },
+  { id: "newest", label: "Newest" },
+  { id: "sos", label: "Active SOS" },
+];
+
+const SOURCE: Record<string, string> = { smartwatch: "Smartwatch", mobile: "Phone", both: "Watch + phone" };
+
+function dateOnly(value: string | null) {
+  if (!value) return "—";
+  return new Date(value).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Manila" });
 }
 
-function formatDate(value: string | null) {
-  if (!value) return "No date";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "No date";
-  return date.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
-}
-
+/** Guardian accounts: searchable, sortable table with a detail slide-over. */
 export default function AdminGuardiansScreen() {
   const styles = useStyles();
-  const colors = adminPalette(useTheme().colors);
-
+  const { colors } = useTheme();
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const desktop = width >= 980;
+  const table = width >= 900;
 
   const [search, setSearch] = useState("");
-  const [accounts, setAccounts] = useState<AdminGuardianAccount[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [statusSavingId, setStatusSavingId] = useState<string | null>(null);
+  const [sort, setSort] = useState<Sort>("name");
+  const [accounts, setAccounts] = useState<AdminGuardianAccount[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<AdminGuardianDetail | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
-  const loadAccounts = useCallback(
-    // silent: a realtime reload that keeps the current list on screen.
-    async (isRefresh = false, silent = false) => {
-      if (isRefresh) setRefreshing(true);
-      else if (!silent) setLoading(true);
+  const load = useCallback(
+    async (silent = false) => {
       if (!silent) setError(null);
-
       try {
-        const data = await fetchAdminGuardianAccounts(search);
-        setAccounts(data);
+        setAccounts(await fetchAdminGuardianAccounts(search));
+        setUpdatedAt(new Date().toISOString());
       } catch (reason) {
-        if (!silent) setError(reason instanceof Error ? reason.message : "Unable to load Guardian accounts.");
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
+        if (!silent) setError(reason instanceof Error ? reason.message : "Unable to load guardian accounts.");
       }
     },
     [search],
   );
 
   useEffect(() => {
-    const timer = setTimeout(() => void loadAccounts(), 300);
-    const unsubscribe = subscribeAdminUpdates(() => void loadAccounts(false, true));
+    const timer = setTimeout(() => void load(), 250);
+    const unsubscribe = subscribeAdminUpdates(() => void load(true));
     return () => {
       clearTimeout(timer);
       unsubscribe();
     };
-  }, [loadAccounts]);
+  }, [load]);
 
-  const changeStatus = (account: AdminGuardianAccount) => {
-    const nextStatus = account.accountStatus === "active" ? "inactive" : "active";
+  useEffect(() => {
+    setDetail(null);
+    setDetailError(null);
+    if (!openId) return;
+    let live = true;
+    fetchAdminGuardianDetail(openId)
+      .then((value) => live && setDetail(value))
+      .catch((reason: Error) => live && setDetailError(reason.message));
+    return () => {
+      live = false;
+    };
+  }, [openId]);
 
-    showAlert(
-      `${nextStatus === "active" ? "Activate" : "Deactivate"} Guardian account?`,
-      `${account.fullName} will be marked as ${nextStatus}.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: nextStatus === "active" ? "Activate" : "Deactivate",
-          style: nextStatus === "inactive" ? "destructive" : "default",
-          onPress: async () => {
-            setStatusSavingId(account.guardianId);
-            try {
-              await updateAdminGuardianAccountStatus(account.guardianId, nextStatus);
-              setAccounts((current) =>
-                current.map((item) =>
-                  item.guardianId === account.guardianId ? { ...item, accountStatus: nextStatus } : item,
-                ),
-              );
-              showAlert("Account status saved", `${account.fullName} is now ${nextStatus}.`);
-            } catch (reason) {
-              showAlert(
-                "Guardian account update error",
-                reason instanceof Error ? reason.message : "SafeTrack could not save the Guardian account status.",
-              );
-            } finally {
-              setStatusSavingId(null);
-            }
-          },
+  const sorted = useMemo(() => {
+    const list = [...(accounts ?? [])];
+    if (sort === "name") list.sort((a, b) => a.fullName.localeCompare(b.fullName));
+    if (sort === "newest") list.sort((a, b) => (Date.parse(b.createdAt ?? "") || 0) - (Date.parse(a.createdAt ?? "") || 0));
+    if (sort === "sos") list.sort((a, b) => b.activeSosAlerts - a.activeSosAlerts || a.fullName.localeCompare(b.fullName));
+    return list;
+  }, [accounts, sort]);
+
+  const changeStatus = (account: { guardianId: string; fullName: string; accountStatus: "active" | "inactive" }) => {
+    const next = account.accountStatus === "active" ? "inactive" : "active";
+    showAlert(`${next === "active" ? "Turn on" : "Turn off"} this guardian account?`, `${account.fullName} will be marked as ${next}.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: next === "active" ? "Turn on" : "Turn off",
+        style: next === "inactive" ? "destructive" : "default",
+        onPress: async () => {
+          setSavingId(account.guardianId);
+          try {
+            await updateAdminGuardianAccountStatus(account.guardianId, next);
+            setAccounts((list) => (list ?? []).map((item) => (item.guardianId === account.guardianId ? { ...item, accountStatus: next } : item)));
+            setDetail((value) => (value && value.guardianId === account.guardianId ? { ...value, accountStatus: next } : value));
+            showToast(`${account.fullName} is now ${next}.`);
+          } catch (reason) {
+            showToast(reason instanceof Error ? reason.message : "SafeTrack could not save the account status.", "error");
+          } finally {
+            setSavingId(null);
+          }
         },
-      ],
-    );
+      },
+    ]);
   };
 
-  const openDetail = (guardianId: string) =>
-    router.push({ pathname: "/(app)/admin-guardian-details", params: { guardianId } });
+  const totalSos = (accounts ?? []).reduce((sum, account) => sum + account.activeSosAlerts, 0);
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.paper }]} edges={["top", "left", "right"]}>
       <ScrollView
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void loadAccounts(true)} tintColor={colors.primary} />
-        }
-        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} tintColor={colors.primary} />}
+        contentContainerStyle={styles.content}
       >
-        <View style={styles.page}>
-          <AdminPageHeader
-            eyebrow="ACCOUNT ADMINISTRATION"
+        <Rise index={0}>
+          <TopBar
+            crumb="Guardians"
             title="Guardian accounts"
-            description="Search the existing Guardian directory, review linked monitoring context, and use the account-status action already supported by SafeTrack."
+            subtitle="Every guardian, their children, linked watches and active SOS alerts. Open one to see the full picture."
+            updatedAt={updatedAt}
           />
+        </Rise>
 
-          <View style={styles.toolbar}>
-            <View style={styles.searchWrap}>
-              <AdminSearchField value={search} onChangeText={setSearch} placeholder="Search Guardian name or email" />
-            </View>
-            <Text style={styles.resultText}>
-              {accounts.length} account{accounts.length === 1 ? "" : "s"}
-            </Text>
+        <Rise index={1} style={styles.toolbar}>
+          <View style={styles.search}>
+            <AdminSearchField value={search} onChangeText={setSearch} placeholder="Search name or email" />
           </View>
+          <View style={[styles.sortBox, { backgroundColor: colors.sunken }]}>
+            {SORTS.map((item) => {
+              const selected = item.id === sort;
+              return (
+                <Pressable
+                  key={item.id}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={`Sort by ${item.label}`}
+                  onPress={() => setSort(item.id)}
+                  style={[styles.sortItem, selected && { backgroundColor: colors.surface }]}
+                >
+                  <Text variant="label" weight={selected ? "800" : "600"} tone={selected ? "ink" : "muted"}>
+                    {item.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <View style={styles.summary}>
+            <TonePill tone="ok" label={`${accounts?.length ?? "–"} accounts`} />
+            {totalSos > 0 ? <TonePill tone="active" label={`${totalSos} active SOS`} /> : null}
+          </View>
+        </Rise>
 
-          {loading ? (
-            <StateBlock icon="refresh-outline" title="Loading Guardian accounts" loading />
-          ) : error ? (
-            <StateBlock icon="alert-circle-outline" title="Guardian accounts could not be loaded" description={error} error />
-          ) : accounts.length === 0 ? (
-            <StateBlock
-              icon="people-outline"
-              title="No Guardian accounts found"
-              description={search.trim() ? "Try a different Guardian name or email." : "No Guardian records are available for this view."}
-            />
-          ) : desktop ? (
-            <View style={styles.tableSurface}>
-              <View style={[styles.tableRow, styles.tableHeader]}>
-                <Text style={[styles.headerCell, styles.guardianColumn]}>GUARDIAN</Text>
-                <Text style={[styles.headerCell, styles.smallColumn]}>CHILDREN</Text>
-                <Text style={[styles.headerCell, styles.smallColumn]}>DEVICES</Text>
-                <Text style={[styles.headerCell, styles.statusColumn]}>STATUS</Text>
-                <Text style={[styles.headerCell, styles.dateColumn]}>REGISTERED</Text>
-                <Text style={[styles.headerCell, styles.actionColumn]}>ACTION</Text>
+        {error ? (
+          <View style={[styles.state, { borderColor: colors.rule, backgroundColor: colors.surface }]}>
+            <Ionicons name="cloud-offline-outline" size={26} color={colors.danger} />
+            <Text weight="800">Guardians couldn&apos;t load</Text>
+            <Text variant="caption" tone="muted" align="center">
+              {error}
+            </Text>
+            <Button label="Try again" size="sm" icon="refresh" onPress={() => void load()} />
+          </View>
+        ) : (
+          <Rise index={2} style={[styles.table, { backgroundColor: colors.surface, borderColor: colors.rule }]}>
+            {table ? (
+              <View style={[styles.row, styles.head, { borderBottomColor: colors.rule, backgroundColor: colors.sunken }]}>
+                <Text variant="legend" style={styles.colName}>Guardian</Text>
+                <Text variant="legend" style={styles.colNum}>Children</Text>
+                <Text variant="legend" style={styles.colNum}>Devices</Text>
+                <Text variant="legend" style={styles.colNum}>Active SOS</Text>
+                <Text variant="legend" style={styles.colStatus}>Status</Text>
+                <Text variant="legend" style={styles.colDate}>Registered</Text>
+                <View style={styles.colAction} />
               </View>
+            ) : null}
 
-              {accounts.map((account, index) => {
-                const inactive = account.accountStatus === "inactive";
-                const saving = statusSavingId === account.guardianId;
-                return (
-                  <Pressable
-                    key={account.guardianId}
-                    onPress={() => openDetail(account.guardianId)}
-                    style={({ pressed }) => [
-                      styles.tableRow,
-                      index !== accounts.length - 1 && styles.rowDivider,
-                      pressed && styles.rowPressed,
-                    ]}
-                  >
-                    <View style={[styles.guardianColumn, styles.personCell]}>
-                      <View style={[styles.avatar, inactive && styles.avatarInactive]}>
-                        <Text style={styles.avatarText}>{getInitial(account.fullName)}</Text>
-                      </View>
-                      <View style={styles.personCopy}>
-                        <Text style={styles.personName} numberOfLines={1}>{account.fullName}</Text>
-                        <Text style={styles.personEmail} numberOfLines={1}>{account.email}</Text>
-                      </View>
+            {accounts === null
+              ? [0, 1, 2, 3, 4].map((index) => (
+                  <View key={index} style={[styles.row, { borderBottomColor: colors.rule }]}>
+                    <Skeleton width={36} height={36} radius={18} />
+                    <View style={{ flex: 1, gap: 6, marginLeft: 12 }}>
+                      <Skeleton width="30%" height={13} />
+                      <Skeleton width="45%" height={10} />
                     </View>
-                    <Text style={[styles.bodyCell, styles.smallColumn]}>{account.registeredChildren}</Text>
-                    <Text style={[styles.bodyCell, styles.smallColumn]}>{account.activeDevices}</Text>
-                    <View style={styles.statusColumn}>
-                      <AdminStatusPill label={inactive ? "Inactive" : "Active"} tone={inactive ? "inactive" : "active"} />
-                    </View>
-                    <Text style={[styles.bodyCell, styles.dateColumn]}>{formatDate(account.createdAt)}</Text>
-                    <View style={[styles.actionColumn, styles.actionCell]}>
-                      <Pressable
-                        disabled={saving}
-                        accessibilityLabel={`${inactive ? "Activate" : "Deactivate"} ${account.fullName}`}
-                        onPress={(event) => {
-                          event.stopPropagation?.();
-                          changeStatus(account);
-                        }}
-                        style={({ pressed }) => [styles.iconAction, pressed && styles.pressed, saving && styles.disabled]}
-                      >
-                        {saving ? (
-                          <ActivityIndicator size="small" color={colors.primary} />
-                        ) : (
-                          <Ionicons
-                            name={inactive ? "play-outline" : "pause-outline"}
-                            size={17}
-                            color={inactive ? colors.primary : colors.danger}
-                          />
-                        )}
-                      </Pressable>
-                      <Ionicons name="chevron-forward" size={17} color={colors.subtle} />
-                    </View>
-                  </Pressable>
-                );
-              })}
+                  </View>
+                ))
+              : sorted.length === 0
+                ? (
+                  <View style={styles.empty}>
+                    <Ionicons name="people-outline" size={26} color={colors.muted} />
+                    <Text variant="caption" tone="muted">
+                      {search.trim() ? "No guardian matches this search." : "No guardian accounts yet."}
+                    </Text>
+                  </View>
+                )
+                : sorted.map((account) => (
+                    <Pressable
+                      key={account.guardianId}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${account.fullName}, ${account.registeredChildren} children, ${account.activeSosAlerts} active SOS. Open`}
+                      onPress={() => setOpenId(account.guardianId)}
+                      style={(state) => [
+                        styles.row,
+                        { borderBottomColor: colors.rule },
+                        ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.sunken },
+                      ]}
+                    >
+                      {(state) => {
+                        const hovered = Boolean((state as { hovered?: boolean }).hovered);
+                        const off = account.accountStatus !== "active";
+                        return (
+                          <>
+                            <View style={[styles.colName, styles.who]}>
+                              <View style={[styles.avatar, { backgroundColor: off ? colors.sunken : colors.primaryTint, borderColor: off ? colors.ruleStrong : colors.brand }]}>
+                                <Text variant="caption" weight="800" tone={off ? "muted" : "primary"}>
+                                  {initials(account.fullName)}
+                                </Text>
+                              </View>
+                              <View style={styles.flex}>
+                                <Text weight="800" numberOfLines={1}>
+                                  {account.fullName}
+                                </Text>
+                                <Text variant="caption" tone="muted" numberOfLines={1}>
+                                  {account.email}
+                                </Text>
+                              </View>
+                            </View>
+                            {table ? (
+                              <>
+                                <Text weight="700" tabular style={styles.colNum}>{account.registeredChildren}</Text>
+                                <Text weight="700" tabular style={styles.colNum}>{account.activeDevices}</Text>
+                                <Text weight="800" tabular style={[styles.colNum, account.activeSosAlerts > 0 && { color: colors.danger }]}>
+                                  {account.activeSosAlerts}
+                                </Text>
+                                <View style={styles.colStatus}>
+                                  <TonePill tone={off ? "off" : "ok"} label={off ? "Turned off" : "Active"} center />
+                                </View>
+                                <Text variant="caption" tone="muted" style={styles.colDate}>{dateOnly(account.createdAt)}</Text>
+                              </>
+                            ) : (
+                              <TonePill tone={off ? "off" : "ok"} label={off ? "Off" : "Active"} center />
+                            )}
+                            <View style={[styles.colAction, styles.actions, { opacity: hovered || !table ? 1 : 0 }]}>
+                              {savingId === account.guardianId ? (
+                                <ActivityIndicator size="small" color={colors.primary} />
+                              ) : (
+                                <Pressable
+                                  accessibilityRole="button"
+                                  accessibilityLabel={`${off ? "Turn on" : "Turn off"} ${account.fullName}`}
+                                  onPress={(event) => {
+                                    event.stopPropagation?.();
+                                    changeStatus(account);
+                                  }}
+                                  style={[styles.quick, { backgroundColor: colors.surface, borderColor: colors.rule }]}
+                                >
+                                  <Ionicons name={off ? "play" : "pause"} size={14} color={off ? colors.primary : colors.danger} />
+                                </Pressable>
+                              )}
+                              <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+                            </View>
+                          </>
+                        );
+                      }}
+                    </Pressable>
+                  ))}
+          </Rise>
+        )}
+      </ScrollView>
+
+      <SlideOver open={Boolean(openId)} onClose={() => setOpenId(null)} title={detail?.fullName ?? "Guardian"} width={Math.min(540, width)}>
+        <ScrollView contentContainerStyle={styles.panel}>
+          {detailError ? (
+            <Text tone="danger">{detailError}</Text>
+          ) : !detail ? (
+            <View style={{ gap: 12 }}>
+              <Skeleton width="100%" height={110} radius={18} />
+              <Skeleton width="60%" height={14} />
+              <Skeleton width="100%" height={70} radius={14} />
             </View>
           ) : (
-            <View style={styles.mobileList}>
-              {accounts.map((account, index) => {
-                const inactive = account.accountStatus === "inactive";
-                const saving = statusSavingId === account.guardianId;
-                return (
-                  <View key={account.guardianId} style={[styles.mobileRow, index !== accounts.length - 1 && styles.rowDivider]}>
-                    <Pressable onPress={() => openDetail(account.guardianId)} style={({ pressed }) => [styles.mobileMain, pressed && styles.rowPressed]}>
-                      <View style={[styles.avatar, inactive && styles.avatarInactive]}>
-                        <Text style={styles.avatarText}>{getInitial(account.fullName)}</Text>
-                      </View>
-                      <View style={styles.mobileCopy}>
-                        <View style={styles.mobileNameRow}>
-                          <Text style={styles.personName} numberOfLines={1}>{account.fullName}</Text>
-                          <AdminStatusPill label={inactive ? "Inactive" : "Active"} tone={inactive ? "inactive" : "active"} />
-                        </View>
-                        <Text style={styles.personEmail} numberOfLines={1}>{account.email}</Text>
-                        <Text style={styles.mobileMeta}>
-                          {account.registeredChildren} child{account.registeredChildren === 1 ? "" : "ren"} · {account.activeDevices} active device{account.activeDevices === 1 ? "" : "s"}
-                        </Text>
-                        {account.activeSosAlerts > 0 ? (
-                          <Text style={styles.alertMeta}>{account.activeSosAlerts} active SOS record{account.activeSosAlerts === 1 ? "" : "s"}</Text>
-                        ) : null}
-                        <Text style={styles.dateMeta}>Registered {formatDate(account.createdAt)}</Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={18} color={colors.subtle} />
-                    </Pressable>
-                    <Pressable
-                      disabled={saving}
-                      onPress={() => changeStatus(account)}
-                      style={({ pressed }) => [styles.mobileStatusAction, pressed && styles.pressed, saving && styles.disabled]}
-                    >
-                      {saving ? (
-                        <ActivityIndicator size="small" color={colors.primary} />
-                      ) : (
-                        <>
-                          <Ionicons name={inactive ? "play-outline" : "pause-outline"} size={15} color={inactive ? colors.primary : colors.danger} />
-                          <Text style={[styles.mobileStatusText, !inactive && styles.mobileStatusTextDanger]}>
-                            {inactive ? "Activate account" : "Deactivate account"}
-                          </Text>
-                        </>
-                      )}
-                    </Pressable>
+            <>
+              <View style={[styles.panelHero, { backgroundColor: colors.forest }]}>
+                <View style={[styles.bigAvatar, { borderColor: "#3DDC84" }]}>
+                  <Text variant="heading" weight="800" style={{ color: "#3DDC84" }}>
+                    {initials(detail.fullName)}
+                  </Text>
+                </View>
+                <View style={styles.flex}>
+                  <Text variant="heading" weight="800" style={{ color: "#FFFFFF" }} numberOfLines={1}>
+                    {detail.fullName}
+                  </Text>
+                  <Text variant="caption" style={{ color: "#BFD8C9" }} numberOfLines={1}>
+                    {detail.email} · since {dateOnly(detail.createdAt)}
+                  </Text>
+                </View>
+                <TonePill tone={detail.accountStatus === "active" ? "ok" : "off"} label={detail.accountStatus === "active" ? "Active" : "Turned off"} center />
+              </View>
+
+              <View style={styles.stats}>
+                <Stat label="Children" value={detail.registeredChildren} />
+                <Stat label="Linked devices" value={detail.activeDevices} />
+                <Stat label="Safe zones" value={detail.activeSafeZones} />
+                <Stat label="Active SOS" value={detail.activeSosAlerts} danger={detail.activeSosAlerts > 0} />
+              </View>
+
+              <Text variant="legend" tone="muted">
+                Children
+              </Text>
+              {detail.children.length === 0 ? (
+                <Text variant="caption" tone="muted">
+                  No child registered yet.
+                </Text>
+              ) : (
+                detail.children.map((child) => (
+                  <View key={child.childId} style={[styles.child, { backgroundColor: colors.surface, borderColor: colors.rule }]}>
+                    <View style={styles.childTop}>
+                      <Text weight="800" style={styles.flex} numberOfLines={1}>
+                        {child.fullName}
+                        {child.age ? <Text variant="caption" tone="muted">{`  ·  ${child.age} yrs`}</Text> : null}
+                      </Text>
+                      <TonePill tone="ok" label={SOURCE[String(child.trackingSource)] ?? "Tracking"} icon={false} center />
+                    </View>
+                    <View style={styles.childFacts}>
+                      <Fact icon="watch-outline" text={`${child.activeDeviceCount}/${child.deviceCount} watch${child.deviceCount === 1 ? "" : "es"} active`} />
+                      <Fact icon="shield-checkmark-outline" text={`${child.safeZoneCount} safe zone${child.safeZoneCount === 1 ? "" : "s"}`} />
+                      <Fact icon="location-outline" text={child.latestLocationAt ? `${timeAgo(child.latestLocationAt)} (${phTime(child.latestLocationAt)})` : "No location yet"} />
+                    </View>
                   </View>
-                );
-              })}
-            </View>
+                ))
+              )}
+
+              <View style={styles.panelActions}>
+                <Button
+                  label={detail.accountStatus === "active" ? "Turn off account" : "Turn on account"}
+                  variant={detail.accountStatus === "active" ? "danger" : "primary"}
+                  icon={detail.accountStatus === "active" ? "pause" : "play"}
+                  loading={savingId === detail.guardianId}
+                  onPress={() => changeStatus(detail)}
+                />
+                <Button
+                  label="Full details"
+                  variant="secondary"
+                  iconRight="arrow-forward"
+                  onPress={() => {
+                    const id = detail.guardianId;
+                    setOpenId(null);
+                    router.push({ pathname: "/(app)/admin-guardian-details", params: { guardianId: id } });
+                  }}
+                />
+              </View>
+            </>
           )}
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </SlideOver>
     </SafeAreaView>
   );
 }
 
-function StateBlock({
-  icon,
-  title,
-  description,
-  loading = false,
-  error = false,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  description?: string;
-  loading?: boolean;
-  error?: boolean;
-}) {
+function Stat({ label, value, danger = false }: { label: string; value: number; danger?: boolean }) {
   const styles = useStyles();
-  const colors = adminPalette(useTheme().colors);
-
+  const { colors } = useTheme();
   return (
-    <View style={styles.stateBlock}>
-      <View style={[styles.stateIcon, error && styles.stateIconError]}>
-        {loading ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name={icon} size={22} color={error ? colors.danger : colors.primary} />}
-      </View>
-      <Text style={styles.stateTitle}>{title}</Text>
-      {description ? <Text style={styles.stateDescription}>{description}</Text> : null}
+    <View style={[styles.stat, { backgroundColor: danger ? colors.dangerTint : colors.surface, borderColor: danger ? colors.danger : colors.rule }]}>
+      <Text variant="heading" weight="800" tabular style={danger ? { color: colors.danger } : undefined}>
+        {value}
+      </Text>
+      <Text variant="caption" tone="muted">
+        {label}
+      </Text>
     </View>
   );
 }
 
-const useStyles = makeStyles((__c) => {
-  const colors = adminPalette(__c);
-  return StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  scrollContent: { paddingBottom: 118 },
-  page: {
-    width: "100%",
-    maxWidth: adminLayout.pageMax,
-    alignSelf: "center",
-    paddingHorizontal: spacing.xl,
-    paddingTop: 30,
-  },
-  toolbar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 14,
-    marginTop: 24,
-    marginBottom: 16,
-    paddingVertical: 14,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: colors.borderStrong,
-  },
-  searchWrap: { flex: 1, maxWidth: 560 },
-  resultText: {
-    color: colors.muted,
-    fontSize: 10.5,
-    fontWeight: "900",
-    letterSpacing: 1.05,
-    textTransform: "uppercase",
-    paddingHorizontal: 8,
-  },
-  tableSurface: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderTopWidth: 4,
-    borderTopColor: colors.primary,
-    borderRadius: radius.lg,
-    overflow: "hidden",
-    ...shadow.soft,
-  },
-  tableRow: {
-    minHeight: 78,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 18,
-  },
-  tableHeader: {
-    minHeight: 46,
-    backgroundColor: colors.surfaceMuted,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderStrong,
-  },
-  rowDivider: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  headerCell: { color: colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 1.05 },
-  bodyCell: { color: colors.text, fontSize: 12.5, fontWeight: "700" },
-  guardianColumn: { flex: 2.2, minWidth: 200 },
-  smallColumn: { flex: 0.68, minWidth: 72, textAlign: "center" },
-  statusColumn: { flex: 0.9, minWidth: 100, alignItems: "flex-start" },
-  dateColumn: { flex: 1, minWidth: 120 },
-  actionColumn: { width: 82, textAlign: "right" },
-  personCell: { flexDirection: "row", alignItems: "center", gap: 12 },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.primarySoft,
-    borderWidth: 1,
-    borderColor: "#C7E2D6",
-  },
-  avatarInactive: { backgroundColor: colors.surfaceStrong, borderColor: colors.borderStrong },
-  avatarText: { color: colors.primaryDark, fontSize: 13, fontWeight: "900" },
-  personCopy: { flex: 1, minWidth: 0 },
-  personName: { color: colors.ink, fontSize: 13.3, fontWeight: "800" },
-  personEmail: { color: colors.muted, fontSize: 11, marginTop: 4 },
-  actionCell: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8 },
-  iconAction: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceMuted,
-  },
-  rowPressed: { backgroundColor: colors.primarySoft },
-  mobileList: {
-    gap: 12,
-    borderTopWidth: 0,
-    borderBottomWidth: 0,
-  },
-  mobileRow: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderLeftWidth: 4,
-    borderLeftColor: colors.primary,
-    paddingHorizontal: 14,
-    ...shadow.soft,
-  },
-  mobileMain: { flexDirection: "row", alignItems: "flex-start", gap: 11, paddingVertical: 16 },
-  mobileCopy: { flex: 1, minWidth: 0 },
-  mobileNameRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  mobileMeta: { color: colors.text, fontSize: 11.5, lineHeight: 17, marginTop: 8 },
-  alertMeta: { color: colors.danger, fontSize: 10.5, fontWeight: "800", marginTop: 5 },
-  dateMeta: { color: colors.subtle, fontSize: 10.5, marginTop: 5 },
-  mobileStatusAction: {
-    minHeight: 38,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    alignSelf: "flex-start",
-    marginLeft: 51,
-    marginBottom: 14,
-    paddingHorizontal: 11,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  mobileStatusText: { color: colors.primaryDark, fontSize: 11, fontWeight: "800" },
-  mobileStatusTextDanger: { color: colors.danger },
-  stateBlock: {
-    minHeight: 280,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.xl,
-    backgroundColor: colors.surface,
-    padding: 28,
-    marginTop: 6,
-    ...shadow.soft,
-  },
-  stateIcon: { width: 54, height: 54, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: colors.primarySoft },
-  stateIconError: { backgroundColor: colors.dangerSoft },
-  stateTitle: { color: colors.ink, fontSize: 16, fontWeight: "800", textAlign: "center", marginTop: 14 },
-  stateDescription: { color: colors.muted, fontSize: 12, lineHeight: 18, textAlign: "center", marginTop: 6, maxWidth: 440 },
-  pressed: { opacity: 0.78, transform: [{ scale: 0.99 }] },
-  disabled: { opacity: 0.5 },
-});
-});
+function Fact({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: string }) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+      <Ionicons name={icon} size={14} color={colors.primary} />
+      <Text variant="caption" tone="ink2">
+        {text}
+      </Text>
+    </View>
+  );
+}
+
+const useStyles = makeStyles(() =>
+  StyleSheet.create({
+    safe: { flex: 1 },
+    content: { width: "100%", maxWidth: 1360, alignSelf: "center", padding: 24, paddingTop: 30, paddingBottom: 120, gap: 18 },
+    flex: { flex: 1, minWidth: 0 },
+    toolbar: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 12 },
+    search: { flex: 1, minWidth: 240, maxWidth: 480 },
+    sortBox: { flexDirection: "row", padding: 4, borderRadius: 12, gap: 4 },
+    sortItem: { paddingHorizontal: 12, height: 34, borderRadius: 9, justifyContent: "center" },
+    summary: { flexDirection: "row", gap: 8, marginLeft: "auto" },
+    table: { borderRadius: radius.md, borderWidth: 1, overflow: "hidden" },
+    head: { minHeight: 44 },
+    row: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 66, paddingHorizontal: 18, borderBottomWidth: 1 },
+    colName: { flex: 2.4, minWidth: 0 },
+    colNum: { width: 92 },
+    colStatus: { width: 120 },
+    colDate: { width: 120 },
+    colAction: { width: 72 },
+    who: { flexDirection: "row", alignItems: "center", gap: 12 },
+    avatar: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+    actions: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8 },
+    quick: { width: 32, height: 32, borderRadius: 10, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+    empty: { alignItems: "center", gap: 6, padding: 32 },
+    state: { alignItems: "center", gap: 8, padding: 28, borderRadius: radius.md, borderWidth: 1 },
+    panel: { padding: 20, gap: 14, paddingBottom: 40 },
+    panelHero: { flexDirection: "row", alignItems: "center", gap: 14, padding: 18, borderRadius: radius.md },
+    bigAvatar: { width: 54, height: 54, borderRadius: 27, borderWidth: 2, alignItems: "center", justifyContent: "center", backgroundColor: "#163D2B" },
+    stats: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+    stat: { flexGrow: 1, flexBasis: "22%", minWidth: 100, padding: 12, borderRadius: 14, borderWidth: 1, gap: 2 },
+    child: { borderRadius: 14, borderWidth: 1, padding: 14, gap: 10 },
+    childTop: { flexDirection: "row", alignItems: "center", gap: 10 },
+    childFacts: { gap: 6 },
+    panelActions: { gap: 10, marginTop: 8 },
+  }),
+);
