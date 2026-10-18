@@ -1,14 +1,20 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, type Href } from "expo-router";
 import type { ReactNode } from "react";
-import { Animated, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Animated, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { AuthBrandPanel } from "./AuthBrandPanel";
 import { MapPattern } from "../ui/MapPattern";
 import { Text } from "../ui/Text";
 import { useDrift, useEntrance } from "../../theme/motion";
 import { makeStyles, useTheme } from "../../theme/ThemeProvider";
 import { radius, space } from "../../theme/tokens";
+
+/** Laptop and desktop windows: brand panel on the left, the form on the right. */
+const WIDE_MIN = 960;
+const BRAND_LEAD =
+  "Guardians see their child's latest location on real roads, get calm alerts for safe zones and SOS, and review each day, from a smartwatch or phone.";
 
 type Props = {
   title: string;
@@ -34,6 +40,7 @@ type Props = {
  */
 export function AuthShell({ title, subtitle, eyebrow, back, backHref = "/(auth)/login", step, compact, children, footer }: Props) {
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { colors, scheme } = useTheme();
   const styles = useStyles();
@@ -45,6 +52,77 @@ export function AuthShell({ title, subtitle, eyebrow, back, backHref = "/(auth)/
     if (router.canGoBack()) router.back();
     else router.replace(backHref);
   };
+
+  if (width >= WIDE_MIN) {
+    return (
+      <View style={[styles.wide, { backgroundColor: colors.paper }]}>
+        <AuthBrandPanel headline={"Know where they are.\nBe there when it matters."} lead={BRAND_LEAD} />
+
+        <View style={styles.wideSide}>
+          <View style={[styles.wideCorner, { borderColor: colors.rule }]} pointerEvents="none" />
+          <ScrollView contentContainerStyle={styles.wideScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <Animated.View style={[styles.wideForm, sheet]}>
+              {back || step ? (
+                <View style={styles.wideTop}>
+                  {back ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Go back"
+                      onPress={goBack}
+                      style={(state) => [
+                        styles.wideBack,
+                        { borderColor: colors.rule, backgroundColor: (state as { hovered?: boolean }).hovered ? colors.sunken : colors.surface },
+                      ]}
+                    >
+                      <Ionicons name="arrow-back" size={16} color={colors.ink} />
+                      <Text variant="label" weight="700">
+                        Back
+                      </Text>
+                    </Pressable>
+                  ) : (
+                    <View />
+                  )}
+                  {step ? (
+                    <View accessible accessibilityLabel={`Step ${step.current} of ${step.total}`} style={styles.wideStep}>
+                      <Text variant="legend" tone="muted">
+                        Step {step.current} of {step.total}
+                      </Text>
+                      <View style={[styles.stepRail, { backgroundColor: colors.sunken }]}>
+                        <View style={[styles.stepFill, { backgroundColor: colors.primary, width: `${(step.current / step.total) * 100}%` }]} />
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+
+              <View style={styles.wideTitle}>
+                {eyebrow ? (
+                  <Text variant="legend" tone="primary">
+                    {eyebrow}
+                  </Text>
+                ) : null}
+                <Text variant="display" accessibilityRole="header" style={styles.wideHeading}>
+                  {title}
+                </Text>
+                {subtitle ? (
+                  <Text tone="muted" style={styles.wideLead}>
+                    {subtitle}
+                  </Text>
+                ) : null}
+              </View>
+
+              {children}
+
+              {footer ? <View style={[styles.footer, styles.wideFooter, { borderTopColor: colors.rule }]}>{footer}</View> : null}
+            </Animated.View>
+          </ScrollView>
+          <Text variant="caption" tone="muted" style={styles.wideNote}>
+            Latest location, not real-time · SafeTrack never contacts emergency services.
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView edges={["left", "right"]} style={styles.root}>
@@ -160,5 +238,18 @@ const useStyles = makeStyles((c, scheme) =>
     },
     titleBlock: { gap: 6, marginBottom: space.xs },
     footer: { marginTop: space.sm, gap: space.md, alignItems: "center" },
+    wide: { flex: 1, flexDirection: "row" },
+    wideSide: { flex: 1, overflow: "hidden" },
+    wideCorner: { position: "absolute", width: 420, height: 420, borderRadius: 210, borderWidth: 1, top: -210, right: -210 },
+    wideScroll: { flexGrow: 1, justifyContent: "center", paddingHorizontal: 56, paddingTop: 48, paddingBottom: 72 },
+    wideForm: { width: "100%", maxWidth: 460, alignSelf: "center", gap: space.lg },
+    wideTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: space.xs },
+    wideBack: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1 },
+    wideStep: { alignItems: "flex-end", gap: 6 },
+    wideTitle: { gap: 8, marginBottom: space.xs },
+    wideHeading: { fontSize: 36, lineHeight: 42 },
+    wideLead: { fontSize: 15, lineHeight: 23 },
+    wideFooter: { borderTopWidth: 1, paddingTop: space.lg },
+    wideNote: { position: "absolute", bottom: 22, left: 24, right: 24, textAlign: "center" },
   }),
 );

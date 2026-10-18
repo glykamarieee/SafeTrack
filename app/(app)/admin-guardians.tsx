@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -211,7 +211,8 @@ export default function AdminGuardiansScreen() {
                 : sorted.map((account) => (
                     <Pressable
                       key={account.guardianId}
-                      accessibilityRole="button"
+                      // On web, role "button" renders a <button>, and the quick action inside is one too.
+                      accessibilityRole={Platform.OS === "web" ? undefined : "button"}
                       accessibilityLabel={`${account.fullName}, ${account.registeredChildren} children, ${account.activeSosAlerts} active SOS. Open`}
                       onPress={() => setOpenId(account.guardianId)}
                       style={(state) => [
