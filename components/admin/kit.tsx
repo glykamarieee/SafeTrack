@@ -129,10 +129,10 @@ export function toneFor(value: string): ToneKey {
   return "cancelled";
 }
 
-export function TonePill({ tone, label, icon = true }: { tone: ToneKey; label: string; icon?: boolean }) {
+export function TonePill({ tone, label, icon = true, center = false }: { tone: ToneKey; label: string; icon?: boolean; center?: boolean }) {
   const t = useTone(tone);
   return (
-    <View style={[kit.pill, { backgroundColor: t.bg }]}>
+    <View style={[kit.pill, center && { alignSelf: "center" }, { backgroundColor: t.bg }]}>
       {icon ? <Ionicons name={t.icon} size={12} color={t.fg} /> : null}
       <Text variant="caption" weight="800" style={{ color: t.fg }} numberOfLines={1}>
         {label}

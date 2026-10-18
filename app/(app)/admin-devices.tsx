@@ -1,425 +1,396 @@
-import { useCallback, useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  View,
-  useWindowDimensions,
-} from "react-native";
-import { Text } from "../../components/ui/NativeText";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { showAlert } from "../../lib/platformAlert";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
+import { showAlert } from "../../lib/platformAlert";
 import {
   fetchAdminSmartwatchDevices,
   updateAdminSmartwatchDeviceStatus,
   subscribeAdminUpdates,
   type AdminSmartwatchDevice,
 } from "../../services/adminService";
-import { AdminPageHeader } from "../../components/admin/AdminPageHeader";
 import { AdminSearchField } from "../../components/admin/AdminSearchField";
-import { AdminStatusPill } from "../../components/admin/AdminStatusPill";
-import {
-  adminColors as colors,
-  adminLayout,
-  adminRadius as radius,
-  adminShadow as shadow,
-  adminSpacing as spacing,
-} from "../../constants/adminDesign";
-
+import { WatchIllustration } from "../../components/admin/WatchIllustration";
+import { Lift, Rise, Skeleton, SlideOver, TonePill, TopBar, phTime, showToast, timeAgo } from "../../components/admin/kit";
+import { Button } from "../../components/ui/Button";
+import { Text } from "../../components/ui/Text";
 import { makeStyles, useTheme } from "../../theme/ThemeProvider";
-import { adminPalette } from "../../theme/legacy";
+import { radius } from "../../theme/tokens";
 
-function formatTime(value: string | null) {
-  if (!value) return "No stored location";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "No stored location";
-  return date.toLocaleString("en-PH", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+type Freshness = "fresh" | "recent" | "old" | "none";
+
+function freshness(value: string | null): Freshness {
+  const at = Date.parse(value ?? "");
+  if (!Number.isFinite(at)) return "none";
+  const minutes = (Date.now() - at) / 60000;
+  return minutes < 10 ? "fresh" : minutes < 60 ? "recent" : "old";
 }
 
+const FRESH_LABEL: Record<Freshness, string> = {
+  fresh: "Fresh · under 10 min",
+  recent: "Recent · under 1 hour",
+  old: "Older than 1 hour",
+  none: "No location yet",
+};
+
+/** Watches split into linked (in use) and registered-only, with a detail slide-over. */
 export default function AdminDevicesScreen() {
   const styles = useStyles();
-  const colors = adminPalette(useTheme().colors);
-
+  const { colors } = useTheme();
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const desktop = width >= 1000;
 
   const [search, setSearch] = useState("");
-  const [devices, setDevices] = useState<AdminSmartwatchDevice[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [devices, setDevices] = useState<AdminSmartwatchDevice[] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [statusSavingId, setStatusSavingId] = useState<string | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
 
-  const loadDevices = useCallback(
-    // silent: a realtime reload that keeps the current list on screen.
-    async (isRefresh = false, silent = false) => {
-      if (isRefresh) setRefreshing(true);
-      else if (!silent) setLoading(true);
+  const load = useCallback(
+    async (silent = false) => {
       if (!silent) setError(null);
-
       try {
         setDevices(await fetchAdminSmartwatchDevices(search));
+        setUpdatedAt(new Date().toISOString());
       } catch (reason) {
         if (!silent) setError(reason instanceof Error ? reason.message : "Unable to load smartwatch devices.");
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
       }
     },
     [search],
   );
 
   useEffect(() => {
-    const timer = setTimeout(() => void loadDevices(), 300);
-    const unsubscribe = subscribeAdminUpdates(() => void loadDevices(false, true));
+    const timer = setTimeout(() => void load(), 250);
+    const unsubscribe = subscribeAdminUpdates(() => void load(true));
     return () => {
       clearTimeout(timer);
       unsubscribe();
     };
-  }, [loadDevices]);
+  }, [load]);
+
+  const linked = useMemo(
+    () =>
+      (devices ?? [])
+        .filter((device) => device.childId)
+        .sort((a, b) => (Date.parse(b.latestLocationAt ?? "") || 0) - (Date.parse(a.latestLocationAt ?? "") || 0)),
+    [devices],
+  );
+  const unlinked = useMemo(() => (devices ?? []).filter((device) => !device.childId), [devices]);
+  const open = devices?.find((device) => device.deviceId === openId) ?? null;
 
   const changeStatus = (device: AdminSmartwatchDevice) => {
-    const nextStatus = device.isActive ? "inactive" : "active";
-
-    showAlert(
-      `${nextStatus === "active" ? "Activate" : "Deactivate"} smartwatch device?`,
-      `${device.watchId} will be marked as ${nextStatus}.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: nextStatus === "active" ? "Activate" : "Deactivate",
-          style: nextStatus === "inactive" ? "destructive" : "default",
-          onPress: async () => {
-            setStatusSavingId(device.deviceId);
-            try {
-              await updateAdminSmartwatchDeviceStatus(device.deviceId, nextStatus);
-              setDevices((current) =>
-                current.map((item) =>
-                  item.deviceId === device.deviceId ? { ...item, isActive: nextStatus === "active" } : item,
-                ),
-              );
-              showAlert("Device status saved", `${device.watchId} is now ${nextStatus}.`);
-            } catch (reason) {
-              showAlert(
-                "Smartwatch device update error",
-                reason instanceof Error ? reason.message : "SafeTrack could not save the device status.",
-              );
-            } finally {
-              setStatusSavingId(null);
-            }
-          },
+    const next = device.isActive ? "inactive" : "active";
+    showAlert(`${next === "active" ? "Turn on" : "Turn off"} this watch?`, `${device.watchId} will be marked as ${next}.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: next === "active" ? "Turn on" : "Turn off",
+        style: next === "inactive" ? "destructive" : "default",
+        onPress: async () => {
+          setSavingId(device.deviceId);
+          try {
+            await updateAdminSmartwatchDeviceStatus(device.deviceId, next);
+            setDevices((list) => (list ?? []).map((item) => (item.deviceId === device.deviceId ? { ...item, isActive: next === "active" } : item)));
+            showToast(`${device.watchId} is now ${next}.`);
+          } catch (reason) {
+            showToast(reason instanceof Error ? reason.message : "SafeTrack could not save the device status.", "error");
+          } finally {
+            setSavingId(null);
+          }
         },
-      ],
-    );
+      },
+    ]);
   };
 
-  const openDetail = (deviceId: string) =>
-    router.push({ pathname: "/(app)/admin-device-details", params: { deviceId } });
+  const columns = width >= 1500 ? 3 : width >= 900 ? 2 : 1;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <ScrollView
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void loadDevices(true)} tintColor={colors.primary} />
-        }
-        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} tintColor={colors.primary} />}
+        contentContainerStyle={styles.content}
       >
-        <View style={styles.page}>
-          <AdminPageHeader
-            eyebrow="DEVICE ADMINISTRATION"
+        <Rise index={0}>
+          <TopBar
+            crumb="Devices"
             title="Smartwatch devices"
-            description="Review the existing watch registry, linked child and Guardian context, latest stored location time, and supported device-status action."
+            subtitle="Watches linked to a child, with how fresh their latest location is, and watches that are registered but not in use."
+            updatedAt={updatedAt}
           />
+        </Rise>
 
-          <View style={styles.toolbar}>
-            <View style={styles.searchWrap}>
-              <AdminSearchField value={search} onChangeText={setSearch} placeholder="Search Watch ID or child name" />
-            </View>
-            <Text style={styles.resultText}>{devices.length} device{devices.length === 1 ? "" : "s"}</Text>
+        <Rise index={1} style={styles.toolbar}>
+          <View style={styles.search}>
+            <AdminSearchField value={search} onChangeText={setSearch} placeholder="Search Watch ID or child name" />
           </View>
+          <View style={styles.counts}>
+            <TonePill tone="ok" label={`${linked.length} linked`} />
+            <TonePill tone="cancelled" label={`${unlinked.length} not linked`} />
+          </View>
+        </Rise>
 
-          {loading ? (
-            <StateBlock title="Loading smartwatch devices" loading />
-          ) : error ? (
-            <StateBlock title="Smartwatch devices could not be loaded" description={error} error />
-          ) : devices.length === 0 ? (
-            <StateBlock
-              title="No smartwatch devices found"
-              description={search.trim() ? "Try a different Watch ID or child name." : "No registered smartwatch records are available for this view."}
-            />
-          ) : desktop ? (
-            <View style={styles.tableSurface}>
-              <View style={[styles.tableRow, styles.tableHeader]}>
-                <Text style={[styles.headerCell, styles.deviceColumn]}>WATCH</Text>
-                <Text style={[styles.headerCell, styles.childColumn]}>LINKED CHILD</Text>
-                <Text style={[styles.headerCell, styles.guardianColumn]}>GUARDIAN</Text>
-                <Text style={[styles.headerCell, styles.locationColumn]}>LATEST LOCATION</Text>
-                <Text style={[styles.headerCell, styles.statusColumn]}>STATUS</Text>
-                <Text style={[styles.headerCell, styles.actionColumn]}>ACTION</Text>
+        {error ? (
+          <View style={[styles.state, { borderColor: colors.rule, backgroundColor: colors.surface }]}>
+            <Ionicons name="cloud-offline-outline" size={26} color={colors.danger} />
+            <Text weight="800">Devices couldn&apos;t load</Text>
+            <Text variant="caption" tone="muted" align="center">
+              {error}
+            </Text>
+            <Button label="Try again" size="sm" icon="refresh" onPress={() => void load()} />
+          </View>
+        ) : devices === null ? (
+          <View style={styles.grid}>
+            {[0, 1, 2].map((index) => (
+              <View key={index} style={[styles.cardCell, { flexBasis: `${100 / columns - 2}%` }]}>
+                <View style={[styles.card, { gap: 12 }]}>
+                  <Skeleton width={46} height={46} radius={14} />
+                  <Skeleton width="60%" height={16} />
+                  <Skeleton width="80%" height={12} />
+                </View>
               </View>
+            ))}
+          </View>
+        ) : (
+          <>
+            <Rise index={2}>
+              <SectionTitle title="Linked to a child" note="In use · newest location first" count={linked.length} />
+            </Rise>
+            {linked.length === 0 ? (
+              <EmptyNote text={search.trim() ? "No linked watch matches this search." : "No watch is linked to a child yet."} />
+            ) : (
+              <View style={styles.grid}>
+                {linked.map((device, index) => (
+                  <Rise key={device.deviceId} index={3 + index} style={[styles.cardCell, { flexBasis: `${100 / columns - 2}%` }]}>
+                    <DeviceCard device={device} onOpen={() => setOpenId(device.deviceId)} />
+                  </Rise>
+                ))}
+              </View>
+            )}
 
-              {devices.map((device, index) => {
-                const saving = statusSavingId === device.deviceId;
-                return (
+            <Rise index={4}>
+              <SectionTitle title="Registered, not linked" note="Known Watch IDs that no child uses yet" count={unlinked.length} />
+            </Rise>
+            {unlinked.length === 0 ? (
+              <EmptyNote text="Every registered watch is linked to a child." />
+            ) : (
+              <Rise index={5} style={[styles.list, { borderColor: colors.rule, backgroundColor: colors.surface }]}>
+                {unlinked.map((device, index) => (
                   <Pressable
                     key={device.deviceId}
-                    onPress={() => openDetail(device.deviceId)}
-                    style={({ pressed }) => [styles.tableRow, index !== devices.length - 1 && styles.rowDivider, pressed && styles.rowPressed]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${device.watchId}, not linked. Open`}
+                    onPress={() => setOpenId(device.deviceId)}
+                    style={(state) => [
+                      styles.listRow,
+                      index !== unlinked.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.rule },
+                      ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.sunken },
+                    ]}
                   >
-                    <View style={[styles.deviceColumn, styles.deviceCell]}>
-                      <View style={[styles.watchIcon, !device.isActive && styles.watchIconInactive]}>
-                        <Ionicons name="watch-outline" size={18} color={device.isActive ? colors.blue : colors.muted} />
-                      </View>
-                      <Text style={styles.watchId} numberOfLines={1}>{device.watchId}</Text>
+                    <View style={[styles.smallIcon, { backgroundColor: colors.sunken }]}>
+                      <Ionicons name="watch-outline" size={16} color={colors.muted} />
                     </View>
-                    <Text style={[styles.bodyCell, styles.childColumn]} numberOfLines={1}>{device.childName}</Text>
-                    <View style={styles.guardianColumn}>
-                      <Text style={styles.bodyCell} numberOfLines={1}>{device.guardianName}</Text>
-                      {device.guardianAccountStatus === "inactive" ? (
-                        <Text style={styles.guardianInactive}>Guardian inactive</Text>
-                      ) : null}
-                    </View>
-                    <Text style={[styles.secondaryCell, styles.locationColumn]} numberOfLines={2}>{formatTime(device.latestLocationAt)}</Text>
-                    <View style={styles.statusColumn}>
-                      <AdminStatusPill label={device.isActive ? "Active" : "Inactive"} tone={device.isActive ? "active" : "inactive"} />
-                    </View>
-                    <View style={[styles.actionColumn, styles.actionCell]}>
-                      <Pressable
-                        disabled={saving}
-                        onPress={(event) => {
-                          event.stopPropagation?.();
-                          changeStatus(device);
-                        }}
-                        accessibilityLabel={`${device.isActive ? "Deactivate" : "Activate"} ${device.watchId}`}
-                        style={({ pressed }) => [styles.iconAction, pressed && styles.pressed, saving && styles.disabled]}
-                      >
-                        {saving ? (
-                          <ActivityIndicator size="small" color={colors.primary} />
-                        ) : (
-                          <Ionicons name={device.isActive ? "pause-outline" : "play-outline"} size={17} color={device.isActive ? colors.danger : colors.primary} />
-                        )}
-                      </Pressable>
-                      <Ionicons name="chevron-forward" size={17} color={colors.subtle} />
-                    </View>
+                    <Text weight="800" style={styles.flex} numberOfLines={1}>
+                      {device.watchId}
+                    </Text>
+                    <Text variant="caption" tone="muted">
+                      {device.pairedAt ? `Paired ${phTime(device.pairedAt)}` : "Never paired"}
+                    </Text>
+                    <TonePill center tone={device.isActive ? "ok" : "off"} label={device.isActive ? "Enabled" : "Turned off"} icon={false} />
+                    <Ionicons name="chevron-forward" size={16} color={colors.muted} />
                   </Pressable>
-                );
-              })}
-            </View>
-          ) : (
-            <View style={styles.mobileList}>
-              {devices.map((device, index) => {
-                const saving = statusSavingId === device.deviceId;
-                return (
-                  <View key={device.deviceId} style={[styles.mobileRow, index !== devices.length - 1 && styles.rowDivider]}>
-                    <Pressable onPress={() => openDetail(device.deviceId)} style={({ pressed }) => [styles.mobileMain, pressed && styles.rowPressed]}>
-                      <View style={[styles.watchIcon, !device.isActive && styles.watchIconInactive]}>
-                        <Ionicons name="watch-outline" size={19} color={device.isActive ? colors.blue : colors.muted} />
-                      </View>
-                      <View style={styles.mobileCopy}>
-                        <View style={styles.mobileTitleRow}>
-                          <Text style={styles.watchId} numberOfLines={1}>{device.watchId}</Text>
-                          <AdminStatusPill label={device.isActive ? "Active" : "Inactive"} tone={device.isActive ? "active" : "inactive"} />
-                        </View>
-                        <Text style={styles.childName} numberOfLines={1}>{device.childName}</Text>
-                        <Text style={styles.guardianName} numberOfLines={1}>Guardian: {device.guardianName}</Text>
-                        <View style={styles.locationMetaRow}>
-                          <Ionicons name="location-outline" size={13} color={colors.muted} />
-                          <Text style={styles.locationMeta}>{formatTime(device.latestLocationAt)}</Text>
-                        </View>
-                      </View>
-                      <Ionicons name="chevron-forward" size={18} color={colors.subtle} />
-                    </Pressable>
-                    <Pressable
-                      disabled={saving}
-                      onPress={() => changeStatus(device)}
-                      style={({ pressed }) => [styles.mobileStatusAction, pressed && styles.pressed, saving && styles.disabled]}
-                    >
-                      {saving ? (
-                        <ActivityIndicator size="small" color={colors.primary} />
-                      ) : (
-                        <>
-                          <Ionicons name={device.isActive ? "pause-outline" : "play-outline"} size={15} color={device.isActive ? colors.danger : colors.primary} />
-                          <Text style={[styles.mobileStatusText, device.isActive && styles.mobileStatusTextDanger]}>
-                            {device.isActive ? "Deactivate device" : "Activate device"}
-                          </Text>
-                        </>
-                      )}
-                    </Pressable>
-                  </View>
-                );
-              })}
-            </View>
-          )}
-        </View>
+                ))}
+              </Rise>
+            )}
+          </>
+        )}
       </ScrollView>
+
+      <SlideOver open={Boolean(open)} onClose={() => setOpenId(null)} title={open?.watchId ?? "Device"} width={Math.min(520, width)}>
+        {open ? (
+          <ScrollView contentContainerStyle={styles.panel}>
+            <View style={[styles.panelHero, { backgroundColor: colors.forest }]}>
+              <WatchIllustration size={140} />
+              <View style={styles.flex}>
+                <Text variant="legend" style={{ color: "#3DDC84" }}>
+                  {open.childId ? "Linked to a child" : "Registered, not linked"}
+                </Text>
+                <Text variant="heading" weight="800" style={{ color: "#FFFFFF" }} numberOfLines={2}>
+                  {open.childId ? open.childName : open.watchId}
+                </Text>
+                <Text variant="caption" style={{ color: "#BFD8C9" }}>
+                  {open.childId ? `Guardian ${open.guardianName}` : "No child uses this watch yet."}
+                </Text>
+              </View>
+            </View>
+
+            <Info label="Watch ID" value={open.watchId} />
+            <Info label="Latest location" value={open.latestLocationAt ? `${timeAgo(open.latestLocationAt)} · ${phTime(open.latestLocationAt)} (PHT)` : "No location yet"} />
+            <Info label="Location freshness" value={FRESH_LABEL[freshness(open.latestLocationAt)]} />
+            <Info label="Paired" value={open.pairedAt ? `${phTime(open.pairedAt)} (PHT)` : "—"} />
+            {open.childId ? <Info label="Guardian account" value={open.guardianAccountStatus === "inactive" ? "Turned off" : "Active"} /> : null}
+            <View style={styles.infoRow}>
+              <Text variant="caption" tone="muted">
+                Device status
+              </Text>
+              <TonePill tone={open.isActive ? "ok" : "off"} label={open.isActive ? "Active" : "Turned off"} />
+            </View>
+
+            <Text variant="caption" tone="muted">
+              The latest location is the last position the watch sent, not a live feed.
+            </Text>
+
+            <View style={styles.panelActions}>
+              <Button
+                label={open.isActive ? "Turn off watch" : "Turn on watch"}
+                variant={open.isActive ? "danger" : "primary"}
+                icon={open.isActive ? "pause" : "play"}
+                loading={savingId === open.deviceId}
+                onPress={() => changeStatus(open)}
+              />
+              <Button
+                label="Full details"
+                variant="secondary"
+                iconRight="arrow-forward"
+                onPress={() => {
+                  setOpenId(null);
+                  router.push({ pathname: "/(app)/admin-device-details", params: { deviceId: open.deviceId } });
+                }}
+              />
+            </View>
+          </ScrollView>
+        ) : null}
+      </SlideOver>
     </SafeAreaView>
   );
 }
 
-function StateBlock({ title, description, loading = false, error = false }: { title: string; description?: string; loading?: boolean; error?: boolean }) {
+function DeviceCard({ device, onOpen }: { device: AdminSmartwatchDevice; onOpen: () => void }) {
   const styles = useStyles();
-  const colors = adminPalette(useTheme().colors);
+  const { colors } = useTheme();
+  const level = freshness(device.latestLocationAt);
+  const color = level === "fresh" ? colors.brand : level === "recent" ? "#E0A43A" : colors.offline;
+  const share = level === "fresh" ? 1 : level === "recent" ? 0.6 : level === "old" ? 0.25 : 0.05;
 
   return (
-    <View style={styles.stateBlock}>
-      <View style={[styles.stateIcon, error && styles.stateIconError]}>
-        {loading ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name={error ? "alert-circle-outline" : "watch-outline"} size={22} color={error ? colors.danger : colors.blue} />}
+    <Lift onPress={onOpen} accessibilityLabel={`${device.childName}, ${device.watchId}. Open`} style={styles.card}>
+      <View style={styles.cardTop}>
+        <View style={[styles.watchIcon, { backgroundColor: colors.primaryTint }]}>
+          <Ionicons name="watch" size={20} color={colors.primary} />
+        </View>
+        <View style={styles.flex}>
+          <Text variant="heading" weight="800" numberOfLines={1}>
+            {device.childName}
+          </Text>
+          <Text variant="caption" tone="muted" numberOfLines={1}>
+            Guardian {device.guardianName}
+          </Text>
+        </View>
+        <TonePill center tone={device.isActive ? "ok" : "off"} label={device.isActive ? "Active" : "Turned off"} />
       </View>
-      <Text style={styles.stateTitle}>{title}</Text>
-      {description ? <Text style={styles.stateDescription}>{description}</Text> : null}
+
+      <View style={[styles.freshBox, { backgroundColor: colors.sunken }]}>
+        <View style={styles.freshTop}>
+          <View style={[styles.freshDot, { backgroundColor: color }]} />
+          <Text weight="800" tabular>
+            {timeAgo(device.latestLocationAt, "No location yet")}
+          </Text>
+          <Text variant="caption" tone="muted" style={styles.flexRight}>
+            {device.latestLocationAt ? `${phTime(device.latestLocationAt)} PHT` : ""}
+          </Text>
+        </View>
+        <View style={[styles.freshTrack, { backgroundColor: colors.rule }]}>
+          <View style={[styles.freshFill, { width: `${share * 100}%`, backgroundColor: color }]} />
+        </View>
+        <Text variant="caption" tone="muted">
+          Latest location · {FRESH_LABEL[level].toLowerCase()}
+        </Text>
+      </View>
+
+      <View style={styles.cardFoot}>
+        <Text variant="caption" weight="700" tone="ink2">
+          {device.watchId}
+        </Text>
+        {device.guardianAccountStatus === "inactive" ? <TonePill center tone="off" label="Guardian off" icon={false} /> : null}
+        <Ionicons name="arrow-forward" size={16} color={colors.primary} style={styles.flexRight} />
+      </View>
+    </Lift>
+  );
+}
+
+function SectionTitle({ title, note, count }: { title: string; note: string; count: number }) {
+  const styles = useStyles();
+  return (
+    <View style={styles.section}>
+      <Text variant="heading" weight="800">
+        {title}
+      </Text>
+      <Text variant="caption" weight="800" tone="primary">
+        {count}
+      </Text>
+      <Text variant="caption" tone="muted" style={styles.flex}>
+        · {note}
+      </Text>
     </View>
   );
 }
 
-const useStyles = makeStyles((__c) => {
-  const colors = adminPalette(__c);
-  return StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  scrollContent: { paddingBottom: 118 },
-  page: {
-    width: "100%",
-    maxWidth: adminLayout.pageMax,
-    alignSelf: "center",
-    paddingHorizontal: spacing.xl,
-    paddingTop: 30,
-  },
-  toolbar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 14,
-    marginTop: 24,
-    marginBottom: 16,
-    paddingVertical: 14,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: colors.borderStrong,
-  },
-  searchWrap: { flex: 1, maxWidth: 560 },
-  resultText: {
-    color: colors.muted,
-    fontSize: 10.5,
-    fontWeight: "900",
-    letterSpacing: 1.05,
-    textTransform: "uppercase",
-    paddingHorizontal: 8,
-  },
-  tableSurface: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderTopWidth: 4,
-    borderTopColor: colors.cyan,
-    borderRadius: radius.lg,
-    overflow: "hidden",
-    ...shadow.soft,
-  },
-  tableRow: { minHeight: 78, flexDirection: "row", alignItems: "center", paddingHorizontal: 17 },
-  tableHeader: {
-    minHeight: 46,
-    backgroundColor: colors.blueSoft,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderStrong,
-  },
-  rowDivider: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  headerCell: { color: colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 1.02 },
-  bodyCell: { color: colors.ink, fontSize: 12.3, fontWeight: "700" },
-  secondaryCell: { color: colors.muted, fontSize: 11.2, lineHeight: 16 },
-  deviceColumn: { flex: 1.25, minWidth: 145 },
-  childColumn: { flex: 1.15, minWidth: 120 },
-  guardianColumn: { flex: 1.25, minWidth: 130 },
-  locationColumn: { flex: 1.12, minWidth: 125 },
-  statusColumn: { flex: 0.82, minWidth: 94, alignItems: "flex-start" },
-  actionColumn: { width: 82 },
-  deviceCell: { flexDirection: "row", alignItems: "center", gap: 10 },
-  watchIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: colors.blueSoft,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#C8E3E9",
-  },
-  watchIconInactive: { backgroundColor: colors.surfaceStrong, borderColor: colors.borderStrong },
-  watchId: { flexShrink: 1, color: colors.ink, fontSize: 12.5, fontWeight: "900", letterSpacing: 0.2 },
-  guardianInactive: { color: colors.danger, fontSize: 9.5, fontWeight: "800", marginTop: 4 },
-  actionCell: { flexDirection: "row", justifyContent: "flex-end", alignItems: "center", gap: 8 },
-  iconAction: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceMuted,
-  },
-  rowPressed: { backgroundColor: colors.blueSoft },
-  mobileList: { gap: 12 },
-  mobileRow: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderLeftWidth: 4,
-    borderLeftColor: colors.cyan,
-    paddingHorizontal: 14,
-    ...shadow.soft,
-  },
-  mobileMain: { flexDirection: "row", alignItems: "flex-start", gap: 11, paddingVertical: 16 },
-  mobileCopy: { flex: 1, minWidth: 0 },
-  mobileTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  childName: { color: colors.text, fontSize: 12, fontWeight: "700", marginTop: 7 },
-  guardianName: { color: colors.muted, fontSize: 11, marginTop: 4 },
-  locationMetaRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8 },
-  locationMeta: { color: colors.muted, fontSize: 10.5 },
-  mobileStatusAction: {
-    minHeight: 38,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    alignSelf: "flex-start",
-    marginLeft: 51,
-    marginBottom: 14,
-    paddingHorizontal: 11,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  mobileStatusText: { color: colors.primaryDark, fontSize: 11, fontWeight: "800" },
-  mobileStatusTextDanger: { color: colors.danger },
-  stateBlock: {
-    minHeight: 280,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.xl,
-    backgroundColor: colors.surface,
-    padding: 28,
-    marginTop: 6,
-    ...shadow.soft,
-  },
-  stateIcon: { width: 54, height: 54, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: colors.blueSoft },
-  stateIconError: { backgroundColor: colors.dangerSoft },
-  stateTitle: { color: colors.ink, fontSize: 16, fontWeight: "800", textAlign: "center", marginTop: 14 },
-  stateDescription: { color: colors.muted, fontSize: 12, lineHeight: 18, textAlign: "center", marginTop: 6, maxWidth: 440 },
-  pressed: { opacity: 0.78, transform: [{ scale: 0.99 }] },
-  disabled: { opacity: 0.5 },
-});
-});
+function EmptyNote({ text }: { text: string }) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ padding: 18, borderRadius: radius.md, borderWidth: 1, borderStyle: "dashed", borderColor: colors.ruleStrong }}>
+      <Text variant="caption" tone="muted">
+        {text}
+      </Text>
+    </View>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  const styles = useStyles();
+  return (
+    <View style={styles.infoRow}>
+      <Text variant="caption" tone="muted">
+        {label}
+      </Text>
+      <Text variant="label" weight="700" align="right" style={styles.infoValue}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+const useStyles = makeStyles((c) =>
+  StyleSheet.create({
+    safe: { flex: 1, backgroundColor: c.paper },
+    content: { width: "100%", maxWidth: 1360, alignSelf: "center", padding: 24, paddingTop: 30, paddingBottom: 120, gap: 18 },
+    flex: { flex: 1, minWidth: 0 },
+    flexRight: { marginLeft: "auto" },
+    toolbar: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 12 },
+    search: { flex: 1, minWidth: 260, maxWidth: 560 },
+    counts: { flexDirection: "row", gap: 8 },
+    section: { flexDirection: "row", alignItems: "baseline", gap: 8, marginTop: 8 },
+    grid: { flexDirection: "row", flexWrap: "wrap", gap: 16 },
+    cardCell: { flexGrow: 1, minWidth: 280 },
+    card: { backgroundColor: c.surface, borderRadius: radius.md, borderWidth: 1, borderColor: c.rule, padding: 18, gap: 14 },
+    cardTop: { flexDirection: "row", alignItems: "center", gap: 12 },
+    watchIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+    freshBox: { borderRadius: 14, padding: 12, gap: 8 },
+    freshTop: { flexDirection: "row", alignItems: "center", gap: 8 },
+    freshDot: { width: 10, height: 10, borderRadius: 5 },
+    freshTrack: { height: 5, borderRadius: 3, overflow: "hidden" },
+    freshFill: { height: 5, borderRadius: 3 },
+    cardFoot: { flexDirection: "row", alignItems: "center", gap: 8 },
+    list: { borderRadius: radius.md, borderWidth: 1, overflow: "hidden" },
+    listRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, minHeight: 54 },
+    smallIcon: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+    state: { alignItems: "center", gap: 8, padding: 28, borderRadius: radius.md, borderWidth: 1 },
+    panel: { padding: 20, gap: 14, paddingBottom: 40 },
+    panelHero: { flexDirection: "row", alignItems: "center", gap: 14, padding: 18, borderRadius: radius.md },
+    infoRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.rule },
+    infoValue: { flexShrink: 1 },
+    panelActions: { gap: 10, marginTop: 6 },
+  }),
+);
