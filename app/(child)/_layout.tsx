@@ -93,7 +93,8 @@ export default function ChildLayout() {
         tabBarHideOnKeyboard: true,
         tabBarStyle: {
           // Clear Android's gesture/navigation bar on edge-to-edge screens.
-          height: 68 + insets.bottom,
+          // 31 px icon + label + item padding need ~56 px between the paddings.
+          height: 74 + insets.bottom,
           paddingTop: 8,
           paddingBottom: Math.max(insets.bottom, 10),
           borderTopWidth: 1,
