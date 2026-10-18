@@ -1,4 +1,5 @@
-import { Animated, Image, StyleSheet, View } from "react-native";
+import { Animated, Image, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -7,10 +8,21 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Button } from "../../components/ui/Button";
 import { Text } from "../../components/ui/Text";
+import { MapPattern } from "../../components/ui/MapPattern";
+import { WatchIllustration } from "../../components/admin/WatchIllustration";
 import { useEntrance } from "../../theme/motion";
 import { space } from "../../theme/tokens";
+import { useTheme } from "../../theme/ThemeProvider";
+
+/** Wide screens (the web dashboard on a laptop) get their own layout. */
+const WIDE_MIN = 960;
 
 export default function WelcomeScreen() {
+  const { width } = useWindowDimensions();
+  return width >= WIDE_MIN ? <WelcomeWide /> : <WelcomePhone />;
+}
+
+function WelcomePhone() {
   const player = useVideoPlayer(require("../../assets/videos/safetrack-intro.mp4"), (videoPlayer) => {
     videoPlayer.loop = true;
     videoPlayer.muted = true;
@@ -71,4 +83,199 @@ const styles = StyleSheet.create({
   headline: { color: "#FFFFFF" },
   actions: { gap: space.sm },
   signIn: { alignSelf: "stretch" },
+});
+
+const FEATURES: { icon: keyof typeof Ionicons.glyphMap; title: string; text: string }[] = [
+  { icon: "watch-outline", title: "Watch SOS", text: "Hold to send, with a countdown to cancel." },
+  { icon: "shield-checkmark-outline", title: "Safe zones", text: "Know when they arrive and leave." },
+  { icon: "map-outline", title: "Routes on real roads", text: "Replay the day, street by street." },
+  { icon: "analytics-outline", title: "AI notices", text: "Unusual movement, flagged calmly." },
+];
+
+/**
+ * Laptop and desktop: a forest brand panel (logo, headline, a product
+ * preview, highlights) beside a clean sign-in card. Stretching the phone's
+ * full-screen video across a wide window left it washed out with an empty
+ * strip beside it.
+ */
+function WelcomeWide() {
+  const { colors } = useTheme();
+  // Shorter windows (e.g. 1280x800): the preview says enough; skip the cards.
+  const { height } = useWindowDimensions();
+  const roomy = height >= 860;
+  const brand = useEntrance(0, 16, 600);
+  const card = useEntrance(2, 24, 500);
+
+  return (
+    <View style={[wide.page, { backgroundColor: colors.paper }]}>
+      <StatusBar style="light" />
+
+      <LinearGradient colors={["#0D2A1E", "#123A28", "#15803D"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={wide.brand}>
+        <MapPattern opacity={0.07} />
+        <View style={[wide.glow, wide.glowTop]} />
+        <View style={[wide.glow, wide.glowBottom]} />
+
+        <Animated.View style={[wide.brandInner, brand]}>
+          <Image source={require("../../assets/images/logo.png")} resizeMode="contain" style={wide.logo} accessibilityLabel="SafeTrack logo" />
+
+          <View style={wide.copy}>
+            <Text variant="legend" style={wide.eyebrow}>
+              Child safety, made calm
+            </Text>
+            <Text variant="display" style={wide.headline} accessibilityRole="header">
+              Know where they are.{"\n"}Be there when it matters.
+            </Text>
+            <Text style={wide.lead}>
+              A smartwatch and phone app that keep guardians informed with the latest location, safe zones, SOS alerts and gentle AI
+              notices.
+            </Text>
+          </View>
+
+          {/* Product preview: the watch and what the guardian sees. */}
+          <View style={wide.preview}>
+            <WatchIllustration size={150} />
+            <View style={wide.previewCards}>
+              <View style={wide.previewCard}>
+                <View style={[wide.previewDot, { backgroundColor: "#3DDC84" }]} />
+                <View style={wide.featureCopy}>
+                  <Text weight="800" style={wide.previewTitle}>Inside School</Text>
+                  <Text style={wide.previewText}>Safe zone · arrived 7:42 AM</Text>
+                </View>
+              </View>
+              <View style={wide.previewCard}>
+                <Ionicons name="location" size={16} color="#3DDC84" />
+                <View style={wide.featureCopy}>
+                  <Text weight="800" style={wide.previewTitle}>Latest location</Text>
+                  <Text style={wide.previewText}>Updated 2 min ago</Text>
+                </View>
+              </View>
+              <View style={wide.previewCard}>
+                <Ionicons name="notifications" size={16} color="#FFD27A" />
+                <View style={wide.featureCopy}>
+                  <Text weight="800" style={wide.previewTitle}>No active SOS</Text>
+                  <Text style={wide.previewText}>The watch sends one with a hold</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {roomy ? <View style={wide.features}>
+            {FEATURES.map((feature) => (
+              <View key={feature.title} style={wide.feature}>
+                <View style={wide.featureIcon}>
+                  <Ionicons name={feature.icon} size={18} color="#3DDC84" />
+                </View>
+                <View style={wide.featureCopy}>
+                  <Text weight="800" style={wide.featureTitle}>
+                    {feature.title}
+                  </Text>
+                  <Text style={wide.featureText}>{feature.text}</Text>
+                </View>
+              </View>
+            ))}
+          </View> : null}
+        </Animated.View>
+      </LinearGradient>
+
+      <View style={wide.side}>
+        <Animated.View style={[wide.card, { backgroundColor: colors.surface, borderColor: colors.rule }, card]}>
+          <View style={[wide.badge, { backgroundColor: colors.primaryTint }]}>
+            <Ionicons name="shield-checkmark" size={22} color={colors.primary} />
+          </View>
+          <Text variant="title" style={wide.cardTitle}>
+            Welcome to SafeTrack
+          </Text>
+          <Text tone="muted" style={wide.cardText}>
+            Create a guardian account to link your child&apos;s watch or phone, or sign in to continue.
+          </Text>
+
+          <View style={wide.buttons}>
+            <Button label="Get started" size="lg" iconRight="arrow-forward" onPress={() => router.push("/(auth)/register")} />
+            <Button label="I already have an account" variant="secondary" size="lg" onPress={() => router.push("/(auth)/login")} />
+          </View>
+
+          <View style={[wide.note, { backgroundColor: colors.sunken }]}>
+            <Ionicons name="lock-closed-outline" size={15} color={colors.muted} />
+            <Text variant="label" tone="muted" style={wide.noteText}>
+              Administrators sign in with their admin account to open the dashboard.
+            </Text>
+          </View>
+        </Animated.View>
+
+        <Text variant="label" tone="muted" style={wide.footer}>
+          Latest location, not real-time. SafeTrack never contacts emergency services.
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+const wide = StyleSheet.create({
+  page: { flex: 1, flexDirection: "row" },
+  brand: { flex: 1.25, overflow: "hidden", justifyContent: "center" },
+  glow: { position: "absolute", borderRadius: 999, backgroundColor: "rgba(61,220,132,0.12)" },
+  glowTop: { width: 520, height: 520, top: -200, right: -160 },
+  glowBottom: { width: 420, height: 420, bottom: -220, left: -120, backgroundColor: "rgba(255,255,255,0.06)" },
+  brandInner: { width: "100%", maxWidth: 640, alignSelf: "center", paddingHorizontal: 56, paddingVertical: 40, gap: 26 },
+  logo: { width: 170, height: 100, marginLeft: -10 },
+  copy: { gap: 10 },
+  eyebrow: { color: "#3DDC84" },
+  headline: { color: "#FFFFFF", fontSize: 42, lineHeight: 48 },
+  lead: { color: "rgba(255,255,255,0.78)", fontSize: 15, lineHeight: 23, maxWidth: 520 },
+  preview: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 24,
+    padding: 22,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+  },
+  previewCards: { flex: 1, gap: 10 },
+  previewCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.09)",
+  },
+  previewDot: { width: 10, height: 10, borderRadius: 5, marginHorizontal: 3 },
+  previewTitle: { color: "#FFFFFF", fontSize: 13 },
+  previewText: { color: "rgba(255,255,255,0.7)", fontSize: 11.5, marginTop: 1 },
+  features: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  feature: {
+    width: "48%",
+    flexGrow: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  featureIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(61,220,132,0.14)",
+  },
+  featureCopy: { flex: 1 },
+  featureTitle: { color: "#FFFFFF", fontSize: 13.5 },
+  featureText: { color: "rgba(255,255,255,0.7)", fontSize: 12, lineHeight: 17, marginTop: 1 },
+  side: { flex: 1, alignItems: "center", justifyContent: "center", padding: 40, gap: 18 },
+  card: { width: "100%", maxWidth: 440, padding: 36, borderRadius: 28, borderWidth: 1, gap: 14 },
+  badge: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  cardTitle: { marginTop: 4 },
+  cardText: { lineHeight: 21 },
+  buttons: { gap: 10, marginTop: 10 },
+  note: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 14, marginTop: 6 },
+  noteText: { flex: 1 },
+  footer: { textAlign: "center", maxWidth: 440 },
 });
