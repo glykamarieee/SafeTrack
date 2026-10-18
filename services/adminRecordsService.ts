@@ -161,3 +161,94 @@ export async function fetchAdminRecords(
     })),
   };
 }
+
+/** Today's date key ("YYYY-MM-DD") in Philippine time. */
+export function philippineTodayKey(now = new Date()) {
+  return new Date(now.getTime() + 8 * 3_600_000).toISOString().slice(0, 10);
+}
+
+function shiftDayKey(key: string, days: number) {
+  const date = new Date(`${key}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+export type AdminActivityItem = {
+  id: string;
+  kind: "sos" | "event";
+  /** SOS status or geofence event type. */
+  type: string;
+  childName: string;
+  title: string;
+  detail: string;
+  occurredAt: string;
+};
+
+/** The newest SOS alerts and safety events, merged, newest first. */
+export async function fetchAdminActivityFeed(limit = 12): Promise<AdminActivityItem[]> {
+  const [sos, events] = await Promise.all([
+    supabase
+      .from("sos_alerts")
+      .select("id, child_id, status, activation_method, triggered_at, is_test")
+      .order("triggered_at", { ascending: false })
+      .limit(limit),
+    supabase
+      .from("geofence_events")
+      .select("id, child_id, event_type, title, details, occurred_at")
+      .order("occurred_at", { ascending: false })
+      .limit(limit),
+  ]);
+  if (sos.error) throw sos.error;
+  if (events.error) throw events.error;
+
+  const names = await childNames([...(sos.data ?? []), ...(events.data ?? [])].map((row) => row.child_id));
+  const items: AdminActivityItem[] = [
+    ...(sos.data ?? []).map((row) => ({
+      id: `sos:${row.id}`,
+      kind: "sos" as const,
+      type: String(row.status),
+      childName: names.get(String(row.child_id)) ?? "Unknown child",
+      title: row.is_test ? "Test SOS" : "SOS alert",
+      detail: `Activated by ${METHOD_LABELS[String(row.activation_method)] ?? String(row.activation_method ?? "unknown")}`,
+      occurredAt: String(row.triggered_at),
+    })),
+    ...(events.data ?? []).map((row) => ({
+      id: `event:${row.id}`,
+      kind: "event" as const,
+      type: String(row.event_type),
+      childName: names.get(String(row.child_id)) ?? "Unknown child",
+      title: String(row.title ?? "Safety event"),
+      detail: String(row.details ?? ""),
+      occurredAt: String(row.occurred_at),
+    })),
+  ];
+  return items.sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt)).slice(0, limit);
+}
+
+export type AdminDayCount = { day: string; locations: number; sos: number; events: number };
+
+/** Location records, SOS alerts and safety events per Philippine day, oldest first. */
+export async function fetchAdminWeek(days = 7): Promise<AdminDayCount[]> {
+  const today = philippineTodayKey();
+  const keys = Array.from({ length: days }, (_, index) => shiftDayKey(today, index - (days - 1)));
+  const count = async (table: string, column: string, key: string) => {
+    const range = philippineDayRange(key);
+    const { count: value, error } = await supabase
+      .from(table)
+      .select("id", { count: "exact", head: true })
+      .gte(column, range.start)
+      .lt(column, range.end);
+    if (error) throw error;
+    return value ?? 0;
+  };
+  return Promise.all(
+    keys.map(async (day) => {
+      const [locations, sos, events] = await Promise.all([
+        count("location_logs", "recorded_at", day),
+        count("sos_alerts", "triggered_at", day),
+        count("geofence_events", "occurred_at", day),
+      ]);
+      return { day, locations, sos, events };
+    }),
+  );
+}

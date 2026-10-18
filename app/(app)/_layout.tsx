@@ -10,6 +10,7 @@ import { useGuardianPushRegistration } from "../../hooks/useGuardianPushRegistra
 import { useGuardianSosRealtime } from "../../hooks/useGuardianSosRealtime";
 import { adminLayout } from "../../constants/adminDesign";
 import { SideNav } from "../../components/navigation/SideNav";
+import { ToastHost } from "../../components/admin/kit";
 import { fontStyle, useFontsReady } from "../../theme/fonts";
 import { useTheme } from "../../theme/ThemeProvider";
 import type { Palette } from "../../theme/tokens";
@@ -75,6 +76,7 @@ export default function AppLayout() {
   if (signedOut) return <Redirect href="/(auth)/welcome" />;
 
   return (
+    <View style={styles.shell}>
     <Tabs
       tabBar={
         wide
@@ -212,10 +214,14 @@ export default function AppLayout() {
       <Tabs.Screen name="edit-child-profile" options={{ href: null }} />
       <Tabs.Screen name="edit-guardian-profile" options={{ href: null }} />
     </Tabs>
+      {/* Admin toasts (status changed, report ready). */}
+      {isAdmin ? <ToastHost /> : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  shell: { flex: 1 },
   sidebar: {
     width: 248,
     paddingTop: Platform.OS === "web" ? 28 : 18,

@@ -1,11 +1,15 @@
-import type { ComponentProps } from "react";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
 import type { Tabs } from "expo-router";
-import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { router } from "expo-router";
+import { Animated, Image, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 
 import { Text } from "../ui/Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { radius, space } from "../../theme/tokens";
+import { showAlert } from "../../lib/platformAlert";
+import { useAuthStore } from "../../store/authStore";
 
 /** The props the Tabs navigator passes to a custom tab bar. */
 type BottomTabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
@@ -18,6 +22,9 @@ type Props = BottomTabBarProps & {
   roleLabel: string;
 };
 
+/** Below this width the forest (admin) sidebar collapses to an icon rail. */
+const RAIL_BELOW = 1280;
+
 function initials(value: string) {
   const words = value.trim().split(/\s+/).filter(Boolean);
   if (words.length === 0) return "ST";
@@ -28,38 +35,100 @@ function initials(value: string) {
 /**
  * The wide-screen navigation: the SafeTrack logo, the visible tabs and the
  * signed-in person. Tab visibility, titles and icons come from the screens'
- * own options, so it shows exactly what the bottom bar would.
+ * own options, so it shows exactly what the bottom bar would. The active
+ * item's highlight slides between items; the admin sidebar becomes an icon
+ * rail on narrower screens.
  */
 export function SideNav({ state, descriptors, navigation, forest, person, roleLabel }: Props) {
-  const { colors, scheme } = useTheme();
+  const { colors, scheme, reduceMotion } = useTheme();
+  const { width } = useWindowDimensions();
+  const rail = forest && width < RAIL_BELOW;
+  const logout = useAuthStore((s) => s.logout);
   const background = forest ? (scheme === "dark" ? colors.forest : "#0D2A1E") : colors.surface;
   const ink = forest ? "#FFFFFF" : colors.ink;
   const soft = forest ? "#BFD8C9" : colors.muted;
 
+  // Sliding highlight behind the focused item.
+  const layouts = useRef<Record<string, { y: number; height: number }>>({});
+  const indicatorY = useRef(new Animated.Value(0)).current;
+  const indicatorH = useRef(new Animated.Value(46)).current;
+  const [ready, setReady] = useState(false);
+  const focusedKey = state.routes[state.index]?.key;
+
+  const moveTo = (key: string | undefined, animate: boolean) => {
+    const box = key ? layouts.current[key] : undefined;
+    if (!box) return;
+    if (!animate || reduceMotion) {
+      indicatorY.setValue(box.y);
+      indicatorH.setValue(box.height);
+      return;
+    }
+    Animated.parallel([
+      Animated.spring(indicatorY, { toValue: box.y, useNativeDriver: false, speed: 18, bounciness: 6 }),
+      Animated.spring(indicatorH, { toValue: box.height, useNativeDriver: false, speed: 18, bounciness: 6 }),
+    ]).start();
+  };
+
+  useEffect(() => {
+    moveTo(focusedKey, ready);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedKey, ready]);
+
+  const confirmSignOut = () =>
+    showAlert("Sign out of SafeTrack?", "You will need your email and password to sign in again.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Sign out",
+        style: "destructive",
+        onPress: () => {
+          void logout().then(() => router.replace("/(auth)/login"));
+        },
+      },
+    ]);
+
   return (
-    <SafeAreaView edges={["top", "bottom", "left"]} style={[styles.root, { backgroundColor: background, borderRightColor: forest ? "transparent" : colors.rule }]}>
-      <View style={styles.brand}>
+    <SafeAreaView
+      edges={["top", "bottom", "left"]}
+      style={[styles.root, rail && styles.rootRail, { backgroundColor: background, borderRightColor: forest ? "transparent" : colors.rule }]}
+    >
+      <View style={[styles.brand, rail && styles.brandRail]}>
         <Image
           source={forest || scheme === "dark" ? require("../../assets/images/logo.png") : require("../../assets/images/logo-black.png")}
           style={styles.logo}
           resizeMode="contain"
           accessibilityLabel="SafeTrack"
         />
-        <View>
-          <Text variant="heading" weight="800" style={{ color: ink }}>
-            SafeTrack
-          </Text>
-          <Text variant="caption" style={{ color: soft }}>
-            {roleLabel}
-          </Text>
-        </View>
+        {!rail ? (
+          <View>
+            <Text variant="heading" weight="800" style={{ color: ink }}>
+              SafeTrack
+            </Text>
+            <Text variant="caption" style={{ color: soft }}>
+              {roleLabel}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
-      <Text variant="legend" style={[styles.section, { color: forest ? "#6F9580" : colors.muted }]}>
-        Navigation
-      </Text>
+      {!rail ? (
+        <Text variant="legend" style={[styles.section, { color: forest ? "#6F9580" : colors.muted }]}>
+          Navigation
+        </Text>
+      ) : null}
 
       <ScrollView contentContainerStyle={styles.items} showsVerticalScrollIndicator={false}>
+        {ready ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.indicator,
+              { top: indicatorY, height: indicatorH, backgroundColor: forest ? "#1E4633" : colors.primaryTint },
+            ]}
+          >
+            <View style={[styles.indicatorBar, { backgroundColor: forest ? "#3DDC84" : colors.primary }]} />
+          </Animated.View>
+        ) : null}
+
         {state.routes.map((route, index) => {
           const { options } = descriptors[route.key];
           // expo-router hides `href: null` screens with display: "none".
@@ -75,40 +144,76 @@ export function SideNav({ state, descriptors, navigation, forest, person, roleLa
               accessibilityRole="tab"
               accessibilityState={{ selected: focused }}
               accessibilityLabel={label}
+              onLayout={(event) => {
+                const { y, height } = event.nativeEvent.layout;
+                layouts.current[route.key] = { y, height };
+                if (focused) {
+                  if (!ready) setReady(true);
+                  moveTo(route.key, false);
+                }
+              }}
               onPress={() => {
                 const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
                 if (!focused && !event.defaultPrevented) navigation.navigate(route.name, route.params);
               }}
-              style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
-                styles.item,
-                focused && { backgroundColor: forest ? "#1E4633" : colors.primaryTint },
-                !focused && (pressed || hovered) && { backgroundColor: forest ? "rgba(255,255,255,0.06)" : colors.sunken },
-              ]}
+              style={(pressState) => {
+                const hovered = (pressState as { hovered?: boolean }).hovered;
+                return [
+                  styles.item,
+                  rail && styles.itemRail,
+                  !ready && focused && { backgroundColor: forest ? "#1E4633" : colors.primaryTint },
+                  !focused && (pressState.pressed || hovered) && { backgroundColor: forest ? "rgba(255,255,255,0.06)" : colors.sunken },
+                ];
+              }}
             >
-              {options.tabBarIcon?.({ focused, color, size: 20 })}
-              <Text variant="label" weight={focused ? "800" : "600"} style={{ color }}>
-                {label}
-              </Text>
+              {(pressState) => (
+                <>
+                  <View style={(pressState as { hovered?: boolean }).hovered && !reduceMotion ? styles.nudge : undefined}>
+                    {options.tabBarIcon?.({ focused, color, size: 20 })}
+                  </View>
+                  {!rail ? (
+                    <Text variant="label" weight={focused ? "800" : "600"} style={{ color }}>
+                      {label}
+                    </Text>
+                  ) : null}
+                </>
+              )}
             </Pressable>
           );
         })}
       </ScrollView>
 
       {person ? (
-        <View style={[styles.person, { borderTopColor: forest ? "#1E4633" : colors.rule }]}>
+        <View style={[styles.person, rail && styles.personRail, { borderTopColor: forest ? "#1E4633" : colors.rule }]}>
           <View style={[styles.avatar, { borderColor: forest ? "#3DDC84" : colors.primary, backgroundColor: forest ? "#163D2B" : colors.primaryTint }]}>
             <Text variant="caption" weight="800" style={{ color: forest ? "#3DDC84" : colors.primary }}>
               {initials(person.name)}
             </Text>
           </View>
-          <View style={styles.personCopy}>
-            <Text variant="label" weight="700" style={{ color: ink }} numberOfLines={1}>
-              {person.name}
-            </Text>
-            <Text variant="caption" style={{ color: soft }} numberOfLines={1}>
-              {person.detail}
-            </Text>
-          </View>
+          {!rail ? (
+            <View style={styles.personCopy}>
+              <Text variant="label" weight="700" style={{ color: ink }} numberOfLines={1}>
+                {person.name}
+              </Text>
+              <Text variant="caption" style={{ color: soft }} numberOfLines={1}>
+                {person.detail}
+              </Text>
+            </View>
+          ) : null}
+          {forest ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Sign out"
+              onPress={confirmSignOut}
+              hitSlop={6}
+              style={(pressState) => [
+                styles.signOut,
+                ((pressState as { hovered?: boolean }).hovered || pressState.pressed) && { backgroundColor: "rgba(255,255,255,0.08)" },
+              ]}
+            >
+              <Ionicons name="log-out-outline" size={18} color={soft} />
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
     </SafeAreaView>
@@ -117,12 +222,20 @@ export function SideNav({ state, descriptors, navigation, forest, person, roleLa
 
 const styles = StyleSheet.create({
   root: { width: 252, paddingHorizontal: space.md, paddingTop: space.xl, paddingBottom: space.lg, borderRightWidth: 1 },
+  rootRail: { width: 84, paddingHorizontal: 12 },
   brand: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.xs, marginBottom: space.xl },
+  brandRail: { justifyContent: "center", paddingHorizontal: 0 },
   logo: { width: 48, height: 48 },
   section: { paddingHorizontal: space.sm, marginBottom: space.sm },
-  items: { gap: 4 },
+  items: { gap: 4, position: "relative" },
+  indicator: { position: "absolute", left: 0, right: 0, borderRadius: radius.sm - 2, overflow: "hidden" },
+  indicatorBar: { position: "absolute", left: 0, top: 10, bottom: 10, width: 3, borderRadius: 2 },
   item: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 46, paddingHorizontal: space.md, borderRadius: radius.sm - 2 },
+  itemRail: { justifyContent: "center", paddingHorizontal: 0 },
+  nudge: { transform: [{ translateX: 2 }] },
   person: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingTop: space.lg, borderTopWidth: 1 },
+  personRail: { flexDirection: "column" },
   avatar: { width: 38, height: 38, borderRadius: 19, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   personCopy: { flex: 1, minWidth: 0 },
+  signOut: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
 });
