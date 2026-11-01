@@ -196,7 +196,7 @@ export default function AdminDevicesScreen() {
                       {device.watchId}
                     </Text>
                     <Text variant="caption" tone="muted">
-                      {device.pairedAt ? `Paired ${phTime(device.pairedAt)}` : "Never paired"}
+                      {device.pairedAt ? `Paired ${phTime(device.pairedAt)}` : "Not paired"}
                     </Text>
                     <TonePill center tone={device.isActive ? "ok" : "off"} label={device.isActive ? "Enabled" : "Turned off"} icon={false} />
                     <Ionicons name="chevron-forward" size={16} color={colors.muted} />

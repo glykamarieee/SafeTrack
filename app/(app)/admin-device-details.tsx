@@ -171,7 +171,7 @@ export default function AdminDeviceDetailsScreen() {
                 <Text style={styles.watchId}>{detail.watchId}</Text>
                 <AdminStatusPill label={inactive ? "Inactive" : "Active"} tone={inactive ? "inactive" : "active"} />
               </View>
-              <Text style={styles.paired}>Paired {formatDate(detail.pairedAt)}</Text>
+              <Text style={styles.paired}>{detail.pairedAt ? `Paired ${formatDate(detail.pairedAt)}` : "Not paired"}</Text>
             </View>
           </View>
 

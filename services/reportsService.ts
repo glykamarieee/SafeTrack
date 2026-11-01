@@ -71,10 +71,12 @@ function mapActivityReport(row: ReportRow): ActivityReport {
     guardianId: asOptionalString(row.guardian_id),
 
     generatedByAdminId:
+      asOptionalString(row.created_by_admin_id) ||
       asOptionalString(row.generated_by_admin_id) ||
       asOptionalString(row.admin_id),
 
     title:
+      asString(row.report_title) ||
       asString(row.title) ||
       asString(row.report_name) ||
       "Activity Report",
@@ -84,7 +86,7 @@ function mapActivityReport(row: ReportRow): ActivityReport {
       asString(row.type) ||
       "daily_summary",
 
-    status: asString(row.status) || "ready",
+    status: asString(row.report_status) || asString(row.status) || "ready",
 
     exportFormat:
       asString(row.export_format) ||
@@ -93,11 +95,13 @@ function mapActivityReport(row: ReportRow): ActivityReport {
       "pdf",
 
     rangeStart:
+      asString(row.date_from) ||
       asString(row.range_start) ||
       asString(row.start_date) ||
       generatedAt,
 
     rangeEnd:
+      asString(row.date_to) ||
       asString(row.range_end) ||
       asString(row.end_date) ||
       generatedAt,

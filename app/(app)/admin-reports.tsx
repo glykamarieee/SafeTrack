@@ -220,12 +220,6 @@ export default function AdminReportsScreen() {
 
     return (
 
-      summary.guardianAccounts +
-
-      summary.registeredChildren +
-
-      summary.smartwatchDevices +
-
       summary.locationRecords +
 
       summary.safeZoneEvents +
@@ -447,11 +441,11 @@ export default function AdminReportsScreen() {
 
                 <View style={styles.summaryList}>
 
-                  <SummaryRow icon="people-outline" label="Guardian accounts" value={summary.guardianAccounts} />
+                  <SummaryRow icon="people-outline" label="New guardian accounts" value={summary.guardianAccounts} />
 
-                  <SummaryRow icon="people-circle-outline" label="Registered children" value={summary.registeredChildren} />
+                  <SummaryRow icon="people-circle-outline" label="New registered children" value={summary.registeredChildren} />
 
-                  <SummaryRow icon="watch-outline" label="Smartwatch devices" value={summary.smartwatchDevices} tone="blue" />
+                  <SummaryRow icon="watch-outline" label="New smartwatch devices" value={summary.smartwatchDevices} tone="blue" />
 
                   <SummaryRow icon="location-outline" label="Location records" value={summary.locationRecords} tone="blue" />
 
@@ -465,7 +459,7 @@ export default function AdminReportsScreen() {
 
                 <View style={styles.totalLine}>
 
-                  <Text style={styles.totalLabel}>Combined retrieved count</Text>
+                  <Text style={styles.totalLabel}>Activity records in this period</Text>
 
                   <Text style={styles.totalValue}>{totalRecords.toLocaleString()}</Text>
 

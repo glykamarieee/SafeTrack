@@ -24,7 +24,7 @@ export type AdminRecord = {
   tag: string;
 };
 
-export type AdminRecordPage = { records: AdminRecord[]; hasMore: boolean };
+export type AdminRecordPage = { records: AdminRecord[]; hasMore: boolean; total: number };
 
 export const ADMIN_PAGE_SIZE = 50;
 
@@ -69,9 +69,9 @@ export async function fetchAdminRecords(
   const last = first + ADMIN_PAGE_SIZE; // one extra row
 
   if (kind === "sos") {
-    const { data, error } = await supabase
+    const { data, error, count } = await supabase
       .from("sos_alerts")
-      .select("id, child_id, status, activation_method, triggered_at, acknowledged_at, realert_count, is_test, latitude, longitude")
+      .select("id, child_id, status, activation_method, triggered_at, acknowledged_at, realert_count, is_test, latitude, longitude", { count: "exact" })
       .gte("triggered_at", start)
       .lt("triggered_at", end)
       .order("triggered_at", { ascending: false })
@@ -82,6 +82,7 @@ export async function fetchAdminRecords(
     const names = await childNames(rows.map((row) => row.child_id));
     return {
       hasMore: rows.length > ADMIN_PAGE_SIZE,
+      total: count ?? rows.length,
       records: rows.slice(0, ADMIN_PAGE_SIZE).map((row) => ({
         id: String(row.id),
         kind,
@@ -104,9 +105,9 @@ export async function fetchAdminRecords(
   }
 
   if (kind === "location") {
-    const { data, error } = await supabase
+    const { data, error, count } = await supabase
       .from("location_logs")
-      .select("id, child_id, source, latitude, longitude, accuracy_meters, location_label, recorded_at")
+      .select("id, child_id, source, latitude, longitude, accuracy_meters, location_label, recorded_at", { count: "exact" })
       .gte("recorded_at", start)
       .lt("recorded_at", end)
       .order("recorded_at", { ascending: false })
@@ -117,6 +118,7 @@ export async function fetchAdminRecords(
     const names = await childNames(rows.map((row) => row.child_id));
     return {
       hasMore: rows.length > ADMIN_PAGE_SIZE,
+      total: count ?? rows.length,
       records: rows.slice(0, ADMIN_PAGE_SIZE).map((row) => ({
         id: String(row.id),
         kind,
@@ -134,9 +136,9 @@ export async function fetchAdminRecords(
     };
   }
 
-  const { data, error } = await supabase
+  const { data, error, count } = await supabase
     .from("geofence_events")
-    .select("id, child_id, event_type, title, details, latitude, longitude, occurred_at")
+    .select("id, child_id, event_type, title, details, latitude, longitude, occurred_at", { count: "exact" })
     .gte("occurred_at", start)
     .lt("occurred_at", end)
     .order("occurred_at", { ascending: false })
@@ -147,6 +149,7 @@ export async function fetchAdminRecords(
   const names = await childNames(rows.map((row) => row.child_id));
   return {
     hasMore: rows.length > ADMIN_PAGE_SIZE,
+    total: count ?? rows.length,
     records: rows.slice(0, ADMIN_PAGE_SIZE).map((row) => ({
       id: String(row.id),
       kind,

@@ -90,6 +90,7 @@ export default function AdminRecordsScreen() {
   const [records, setRecords] = useState<AdminRecord[]>([]);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
@@ -105,12 +106,16 @@ export default function AdminRecordsScreen() {
         if (id !== request.current) return;
         setRecords((current) => (nextPage === 0 ? result.records : [...current, ...result.records]));
         setHasMore(result.hasMore);
+        setTotal(result.total);
         setPage(nextPage);
         setUpdatedAt(new Date().toISOString());
       } catch (reason) {
         if (id !== request.current) return;
         setError(messageOf(reason));
-        if (nextPage === 0) setRecords([]);
+        if (nextPage === 0) {
+          setRecords([]);
+          setTotal(0);
+        }
       } finally {
         if (id === request.current) setLoading(false);
       }
@@ -221,8 +226,8 @@ export default function AdminRecordsScreen() {
         ) : null}
         <Text variant="caption" tone="muted">
           {dayHeading(applied.from, today)}
-          {applied.from !== applied.to ? ` to ${dayHeading(applied.to, today)}` : ""} · Philippine time · {records.length}
-          {hasMore ? "+" : ""} {records.length === 1 ? "record" : "records"}
+          {applied.from !== applied.to ? ` to ${dayHeading(applied.to, today)}` : ""} · Philippine time · {total.toLocaleString()}{" "}
+          {total === 1 ? "record" : "records"}
         </Text>
       </Rise>
 
@@ -265,7 +270,9 @@ export default function AdminRecordsScreen() {
     );
   }
 
-  groups.forEach(([day, list]) => {
+  groups.forEach(([day, list], groupIndex) => {
+    // The oldest day shown may continue on the next page.
+    const partial = hasMore && groupIndex === groups.length - 1;
     sticky.push(children.length);
     children.push(
       <View key={`h-${day}`} style={[styles.dayHead, { backgroundColor: colors.paper }]}>
@@ -273,8 +280,8 @@ export default function AdminRecordsScreen() {
           {dayHeading(day, today)}
         </Text>
         <Text variant="caption" tone="muted">
-          {new Date(`${day}T00:00:00Z`).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })} · {list.length}{" "}
-          {list.length === 1 ? "record" : "records"}
+          {new Date(`${day}T00:00:00Z`).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })} · {list.length}
+          {partial ? "+" : ""} {list.length === 1 && !partial ? "record" : "records"}
         </Text>
       </View>,
     );

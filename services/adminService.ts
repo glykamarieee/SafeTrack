@@ -379,20 +379,44 @@ export async function fetchAdminReportSummary(
   }
 
   const row = data as UnknownRecord;
+  const start = philippineDayRange(startDate).start;
+  const end = philippineDayRange(endDate).end;
 
-  // The database function counts these events by UTC dates, while locations,
-  // SOS and the PDF/Excel export use Philippine dates; it left out events
-  // between 12:00 and 8:00 AM on the first day. Count them the same way here.
-  const { count: events } = await supabase
-    .from("geofence_events")
-    .select("id", { count: "exact", head: true })
-    .gte("occurred_at", philippineDayRange(startDate).start)
-    .lt("occurred_at", philippineDayRange(endDate).end);
+  // The database function counts these by UTC dates, while locations, SOS and
+  // the PDF/Excel export use Philippine dates; it left out events between 12:00
+  // and 8:00 AM on the first day, and counts the admin account as a guardian.
+  // Count them the same way as the rest of the admin screens here.
+  const [{ count: events }, guardians, children, watches] = await Promise.all([
+    supabase
+      .from("geofence_events")
+      .select("id", { count: "exact", head: true })
+      .gte("occurred_at", start)
+      .lt("occurred_at", end),
+    fetchAdminGuardianAccounts().catch(() => null),
+    supabase
+      .from("person_relationships")
+      .select("id", { count: "exact", head: true })
+      .eq("is_active", true)
+      .gte("created_at", start)
+      .lt("created_at", end),
+    supabase
+      .from("smartwatch_devices")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", start)
+      .lt("created_at", end),
+  ]);
+  const startTime = Date.parse(start);
+  const endTime = Date.parse(end);
 
   return {
-    guardianAccounts: toCount(row.guardian_accounts),
-    registeredChildren: toCount(row.registered_children),
-    smartwatchDevices: toCount(row.smartwatch_devices),
+    guardianAccounts: guardians
+      ? guardians.filter((guardian) => {
+          const created = Date.parse(guardian.createdAt ?? "");
+          return created >= startTime && created < endTime;
+        }).length
+      : toCount(row.guardian_accounts),
+    registeredChildren: typeof children.count === "number" ? children.count : toCount(row.registered_children),
+    smartwatchDevices: typeof watches.count === "number" ? watches.count : toCount(row.smartwatch_devices),
     locationRecords: toCount(row.location_records),
     safeZoneEvents: typeof events === "number" ? events : toCount(row.safe_zone_events),
     sosRecords: toCount(row.sos_records),
