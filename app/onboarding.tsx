@@ -28,6 +28,33 @@ import { space } from "../theme/tokens";
 type Page = { scene: SceneName; title: string; body: string };
 
 const PAGES: Record<OnboardingAudience, Page[]> = {
+  welcome: [
+    {
+      scene: "pin",
+      title: "Welcome to SafeTrack",
+      body: "SafeTrack shows guardians their child's latest location from a SafeTrack watch or phone. It's the last location sent, usually a few minutes old.",
+    },
+    {
+      scene: "share",
+      title: "Connect your child's device",
+      body: "Create a guardian account and register your child. SafeTrack then gives you a connection code to link their watch or phone.",
+    },
+    {
+      scene: "zone",
+      title: "Add safe places",
+      body: "Draw places like Home or School on the map. SafeTrack tells you when your child arrives or leaves.",
+    },
+    {
+      scene: "sos",
+      title: "Get alerts when it matters",
+      body: "When your child holds SOS, you get an alert with their location. You can also review their day in History.",
+    },
+    {
+      scene: "done",
+      title: "Let's get started",
+      body: "Guardians can create an account or sign in. To link a child's phone, choose I already have an account, then tap I'm a child: link this phone.",
+    },
+  ],
   guardian: [
     {
       scene: "pin",
@@ -80,16 +107,18 @@ const PAGES: Record<OnboardingAudience, Page[]> = {
 };
 
 /**
- * The first-run tour. Opened after the first guardian login and after a child
- * phone is linked, and replayable from Help & Support or the child profile.
+ * The first-run tour. Opened on the first app launch, after the first guardian
+ * login and after a child phone is linked. The last two can be replayed from
+ * Help & Support or the child profile.
  * Skip is always available; finishing or skipping is remembered per device.
  */
 export default function OnboardingScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ audience?: string; next?: string; replay?: string }>();
-  const audience: OnboardingAudience = params.audience === "child" ? "child" : "guardian";
+  const audience: OnboardingAudience = params.audience === "child" || params.audience === "welcome" ? params.audience : "guardian";
   const pages = PAGES[audience];
-  const next = (typeof params.next === "string" && params.next ? params.next : audience === "child" ? "/(child)/child-home" : "/(app)/home") as Href;
+  const defaultNext = { welcome: "/(auth)/welcome", child: "/(child)/child-home", guardian: "/(app)/home" }[audience];
+  const next = (typeof params.next === "string" && params.next ? params.next : defaultNext) as Href;
   const linkedChildren = useAuthStore((state) => state.linkedChildren);
 
   const { colors, scheme } = useTheme();

@@ -1,7 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-/** Who the tour is for. The watch has its own tour on the watch. */
-export type OnboardingAudience = "guardian" | "child";
+/**
+ * Who the tour is for: `welcome` is for anyone opening the app for the first
+ * time, before signing in. The watch has its own tour on the watch.
+ */
+export type OnboardingAudience = "welcome" | "guardian" | "child";
 
 const KEY = (audience: OnboardingAudience) => `safetrack.onboarding.${audience}`;
 
@@ -17,6 +20,12 @@ export async function hasSeenOnboarding(audience: OnboardingAudience): Promise<b
   } catch {
     return false;
   }
+}
+
+/** A device that has already seen any tour isn't new, so it skips the welcome. */
+export async function needsWelcomeGuide(): Promise<boolean> {
+  const seen = await Promise.all((["welcome", "guardian", "child"] as const).map(hasSeenOnboarding));
+  return !seen.some(Boolean);
 }
 
 export async function markOnboardingSeen(audience: OnboardingAudience): Promise<void> {

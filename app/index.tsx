@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Image,
+  Platform,
   StyleSheet,
   View,
 } from "react-native";
@@ -11,6 +12,7 @@ import { StatusBar } from "expo-status-bar";
 
 import { useAuthStore } from "../store/authStore";
 import { hasChildPhoneCredentials } from "../services/childMobileService";
+import { needsWelcomeGuide } from "../services/onboardingService";
 import { StartSplash } from "../components/StartSplash";
 
 
@@ -50,6 +52,21 @@ export default function SplashScreen() {
   // device. Without this check it reopened on the welcome screen every time.
   const [childPhoneLinked, setChildPhoneLinked] =
     useState<boolean | null>(null);
+
+  // The welcome guide is for the phone app; the admin website doesn't show it.
+  const [showWelcomeGuide, setShowWelcomeGuide] =
+    useState<boolean | null>(Platform.OS === "web" ? false : null);
+
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    let active = true;
+    needsWelcomeGuide()
+      .then((needed) => active && setShowWelcomeGuide(needed))
+      .catch(() => active && setShowWelcomeGuide(false));
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -188,7 +205,8 @@ export default function SplashScreen() {
   if(
     !isBootstrapped ||
     !minimumSplashFinished ||
-    childPhoneLinked === null
+    childPhoneLinked === null ||
+    showWelcomeGuide === null
   ){
 
     return <StartSplash />;
@@ -214,6 +232,18 @@ export default function SplashScreen() {
   if(!session && childPhoneLinked){
 
     return <Redirect href="/(child)/child-home" />;
+
+  }
+
+  if(!session && showWelcomeGuide){
+
+    return (
+
+      <Redirect
+        href={{ pathname: "/onboarding", params: { audience: "welcome" } }}
+      />
+
+    );
 
   }
 

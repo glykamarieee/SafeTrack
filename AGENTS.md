@@ -572,7 +572,7 @@ and safety events for a date range, 50 per page, through
 - **Motion** (`theme/motion.ts`): press feedback, entrance, pulse, drift. Everything respects Reduce Motion.
 - **Location wording:** never "live" or "real-time". It is the latest reported location; always show its age
   ("Updated 2 min ago"). Watch ≈ every 3 min, phone auto-share every 5 min or 100 m.
-- **Onboarding:** `app/onboarding.tsx` (guardian after first sign-in, child phone after linking; replay from
+- **Onboarding:** `app/onboarding.tsx` (welcome guide on first launch of the phone app, guardian after first sign-in, child phone after linking; replay from
   Profile, Help & Support, child profile). Watch tour: `ui/tour/WatchTour.kt` after first pairing, replay from
   Status. Seen-flags: `safetrack.onboarding.<audience>` (AsyncStorage), `safetrack_watch_tour` (SharedPreferences).
 - **Maps** follow the app's dark mode when the map theme is Auto (the default).
