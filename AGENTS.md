@@ -156,7 +156,8 @@ the Expo app.
   `anomaly-detection`) calls `POST {AI_SERVICE_URL}/score` only when
   `AI_ENABLED=true`, with header `X-SafeTrack-AI-Key: {AI_SERVICE_KEY}`. It only
   calls once a child has 100+ earlier points spanning 14+ days, and sends at most
-  one notice per 15 minutes.
+  one notice per 15 minutes. It never reviews a point inside one of the child's
+  enabled safe zones.
 - **What `/score` checks:**
   - Every data endpoint is rejected unless the same `AI_SERVICE_KEY` is set in
     the service's own environment (it holds the service-role key).
@@ -167,9 +168,9 @@ the Expo app.
 - **Features:** distance, speed, the hour in **Philippine time** (UTC+8; changed
   from UTC on 2026-10-15), accuracy, interval, stationary and source. A saved
   model with a different feature count is treated as missing (`ready: false`).
-- **Model:** retrained on 2026-10-15 from 652 `location_logs` rows (7 features).
-  624 of those rows came from one child, so retrain once more children have
-  history. Only children with 100+ records over 14+ days are scored.
+- **Model:** retrained on 2026-11-02 from 1,274 `location_logs` rows (7 features,
+  contamination 0.02). 1,244 of those rows came from two children, so retrain once
+  more children have history. Only children with 100+ records over 14+ days are scored.
   `AI_SERVICE_KEY` is generated in `ai-service/.env`; the same value must be set
   as the edge functions' secret.
 - **Commands** (in `ai-service/`):

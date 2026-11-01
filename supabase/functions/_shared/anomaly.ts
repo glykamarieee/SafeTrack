@@ -5,6 +5,43 @@ const ANOMALY_EVENT_TYPE = "possible_anomaly";
 
 const LOCATION_COLUMNS = "latitude, longitude, accuracy_meters, source, recorded_at";
 
+type SafeZone = {
+  latitude: unknown;
+  longitude: unknown;
+  radius_meters: unknown;
+};
+
+function metersBetween(
+  latitude1: number,
+  longitude1: number,
+  latitude2: number,
+  longitude2: number,
+) {
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+  const latitudeDifference = toRadians(latitude2 - latitude1);
+  const longitudeDifference = toRadians(longitude2 - longitude1);
+  const a = Math.sin(latitudeDifference / 2) ** 2 +
+    Math.cos(toRadians(latitude1)) * Math.cos(toRadians(latitude2)) *
+      Math.sin(longitudeDifference / 2) ** 2;
+
+  return 2 * 6371000 * Math.asin(Math.sqrt(a));
+}
+
+export function isInsideSafeZone(
+  latitude: number,
+  longitude: number,
+  zones: SafeZone[],
+) {
+  return zones.some((zone) =>
+    metersBetween(
+      latitude,
+      longitude,
+      Number(zone.latitude),
+      Number(zone.longitude),
+    ) <= Number(zone.radius_meters)
+  );
+}
+
 export async function reviewAnomaly(args: {
   supabase: SupabaseClient;
   childId: string;
@@ -40,6 +77,21 @@ export async function reviewAnomaly(args: {
   const latitude = Number(current.latitude);
   const longitude = Number(current.longitude);
   const recordedAt = current.recorded_at as string;
+
+  // A child inside one of their own safe zones is where the Guardian expects
+  // them, so no unusual-movement notice is raised. If the zones can't be read,
+  // the review still runs: a missed notice is worse than an extra one.
+  const { data: zones, error: zonesError } = await supabase
+    .from("geofences")
+    .select("latitude, longitude, radius_meters")
+    .eq("child_id", childId)
+    .eq("is_enabled", true);
+
+  if (zonesError) {
+    console.error("AI safe-zone query failed", zonesError);
+  } else if (isInsideSafeZone(latitude, longitude, zones ?? [])) {
+    return;
+  }
 
   const { data: recentNotice } = await supabase
     .from("geofence_events")

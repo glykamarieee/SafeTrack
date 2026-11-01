@@ -31,9 +31,11 @@ class SafeTrackAnomalyDetector:
 
     def __init__(self):
 
+        # The share of training points treated as unusual. 0.05 flagged too much
+        # ordinary watch behaviour; 0.02 still catches large jumps in location.
         self.model = IsolationForest(
             n_estimators=150,
-            contamination=0.05,
+            contamination=0.02,
             random_state=42
         )
 
