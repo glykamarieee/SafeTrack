@@ -340,6 +340,11 @@ function Entry({ record, last }: { record: AdminRecord; last: boolean }) {
             {record.detail}
           </Text>
         ) : null}
+        {record.place ? (
+          <Text variant="caption" tone="ink2" numberOfLines={2}>
+            {record.place}
+          </Text>
+        ) : null}
       </View>
     </View>
   );

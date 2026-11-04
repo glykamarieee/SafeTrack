@@ -262,7 +262,7 @@ export function AdminHome() {
               <TotalRow icon="shield-checkmark-outline" label="Active safe zones" value={metrics?.activeSafeZones ?? null} />
               <TotalRow icon="document-text-outline" label="Reports generated" value={metrics?.generatedReports ?? null} />
               <Text variant="caption" style={styles.totalsNote}>
-                Each location is the latest position a device sent, not a live feed.
+                Each location is the latest position a device sent: about every 10 seconds while moving, every 3 minutes when still.
               </Text>
               <View style={styles.links}>
                 <QuickLink icon="list-outline" label="Records" onPress={() => router.push("/(app)/admin-records")} />

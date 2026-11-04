@@ -11,7 +11,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
 
-import { useAuthStore } from "../../store/authStore";
+import { useSelectedChild } from "../../hooks/useSelectedChild";
+import { ChildSwitcher } from "../../components/common/ChildSwitcher";
 import { useSosStore } from "../../store/sosStore";
 import { fetchGeofenceEvents } from "../../services/geofenceService";
 import type { GeofenceEvent } from "../../types/safetrack";
@@ -62,7 +63,8 @@ export default function NotificationsScreen() {
   const colors = guardianPalette(useTheme().colors);
 
   const router = useRouter();
-  const child = useAuthStore((state) => state.linkedChildren?.[0] ?? null);
+  const { child } = useSelectedChild();
+  const activeAll = useSosStore((state) => state.activeAll);
   const sosAlerts = useSosStore((state) => state.alerts);
   const loadSos = useSosStore((state) => state.loadForChild);
   const [events, setEvents] = useState<GeofenceEvent[]>([]);
@@ -141,6 +143,8 @@ export default function NotificationsScreen() {
             SOS alerts and safety events for the selected child, newest first. The same events are sent as push notifications.
           </Text>
         </View>
+
+        <ChildSwitcher alertChildIds={activeAll.map((item) => item.childId)} />
 
         <View style={styles.contextBand}>
           <View style={styles.contextIcon}>

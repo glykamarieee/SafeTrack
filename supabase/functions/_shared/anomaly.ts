@@ -27,6 +27,26 @@ function metersBetween(
   return 2 * 6371000 * Math.asin(Math.sqrt(a));
 }
 
+/**
+ * Oldest first, at most one point per HISTORY_SPACING_MS. The model was
+ * trained on points a few minutes apart; 10-second points would make GPS
+ * jitter look like sudden speed and distance changes.
+ */
+export const HISTORY_SPACING_MS = 3 * 60 * 1000;
+
+export function thinHistory<T extends { recorded_at: string }>(rows: T[], spacingMs = HISTORY_SPACING_MS): T[] {
+  const sorted = [...rows].sort((a, b) => new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime());
+  const kept: T[] = [];
+  let last = -Infinity;
+  for (const row of sorted) {
+    const time = new Date(row.recorded_at).getTime();
+    if (!Number.isFinite(time) || time - last < spacingMs) continue;
+    kept.push(row);
+    last = time;
+  }
+  return kept;
+}
+
 export function isInsideSafeZone(
   latitude: number,
   longitude: number,
@@ -116,7 +136,9 @@ export async function reviewAnomaly(args: {
     // Earlier points only: the current one is sent separately.
     .lt("recorded_at", recordedAt)
     .order("recorded_at", { ascending: false })
-    .limit(500);
+    // Moving children send a point about every 10 s (since 2026-11-04), so
+    // read more rows and thin them below to the spacing the model learned.
+    .limit(3000);
 
   if (error) {
     console.error("AI history query failed", error);
@@ -129,13 +151,9 @@ export async function reviewAnomaly(args: {
   const minPoints = Number(Deno.env.get("AI_MIN_HISTORY_POINTS") ?? "100");
   const minDays = Number(Deno.env.get("AI_MIN_BASELINE_DAYS") ?? "14");
 
-  if (!history || history.length < minPoints) return;
+  const sorted = thinHistory(history ?? []).slice(-500);
 
-  const sorted = [...history].sort(
-    (a, b) =>
-      new Date(a.recorded_at).getTime() -
-      new Date(b.recorded_at).getTime(),
-  );
+  if (sorted.length < minPoints) return;
 
   // How long this child has been tracked, from their oldest record. (The 500
   // newest records cover only about a day once the watch records every few

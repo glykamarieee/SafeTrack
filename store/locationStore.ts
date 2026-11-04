@@ -73,8 +73,10 @@ interface LocationState {
 
 
 
+const LIVE_POLL_MS = 15_000;
+
 export const useLocationStore =
-create<LocationState>((set)=>({
+create<LocationState>((set, get)=>({
 
 
 latest:null,
@@ -514,113 +516,51 @@ childId,
 childName="Child"
 )=>{
 
+// A new point only needs the newest row; it is added to the front of the
+// recent history instead of reloading 80 rows every few seconds.
+let stopped = false;
+const pull = async () => {
+  try {
+    const latest = await fetchLatestLocationForChild(childId, childName);
+    if (stopped || !latest || latest.childId !== childId) return;
+    const current = get().latest;
+    if (current?.id === latest.id && current.travelMode === latest.travelMode) return;
+    const history = [latest, ...get().history.filter((item) => item.id !== latest.id && item.childId === childId)]
+      .sort((first, second) => Date.parse(second.recordedAt) - Date.parse(first.recordedAt))
+      .slice(0, 80);
+    set({ latest, history, isOffline: false, cachedAt: new Date().toISOString() });
+  } catch (error) {
+    console.log("[location realtime]", error);
+  }
+};
 
 const channel =
 supabase
-
 .channel(
 // Unique per subscription: a fixed topic is reused by supabase.channel()
 // and throws on remount.
 `child-location-${childId}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
 )
-
-
 .on(
-
 "postgres_changes",
-
-{
-
-event:"INSERT",
-
-schema:"public",
-
-table:"location_logs",
-
-filter:
-`child_id=eq.${childId}`
-
-},
-
-
-async()=>{
-
-
-try{
-
-
-const latest =
-await fetchLatestLocationForChild(
- childId,
- childName
-);
-
-
-
-const history =
-await fetchLocationHistory(
- childId,
- 80,
- childName
-);
-
-
-
-set({
-
-latest,
-
-history,
-
-isOffline:false,
-
-cachedAt:
-new Date()
-.toISOString()
-
-});
-
-
-}
-
-catch(error){
-
-
-console.log(
-"[location realtime]",
-error
-);
-
-
-}
-
-
-}
-
-
+{ event:"INSERT", schema:"public", table:"location_logs", filter:`child_id=eq.${childId}` },
+() => void pull(),
 )
-
-
 .subscribe();
 
-
-
-
+// Safety net when realtime is not delivering (before migration 20261104
+// published location_logs, or a dropped socket): one small read every 15 s
+// while a screen is watching.
+const poll = setInterval(() => void pull(), LIVE_POLL_MS);
 
 return ()=>{
-
-
+stopped = true;
+clearInterval(poll);
 supabase.removeChannel(
  channel
 );
-
-
 };
 
-
-
 }
-
-
 
 }));

@@ -382,16 +382,26 @@ export async function fetchAdminReportSummary(
   const start = philippineDayRange(startDate).start;
   const end = philippineDayRange(endDate).end;
 
-  // The database function counts these by UTC dates, while locations, SOS and
-  // the PDF/Excel export use Philippine dates; it left out events between 12:00
-  // and 8:00 AM on the first day, and counts the admin account as a guardian.
-  // Count them the same way as the rest of the admin screens here.
-  const [{ count: events }, guardians, children, watches] = await Promise.all([
+  // The database function counts by UTC dates, while the PDF/Excel export
+  // uses Philippine dates (it left out records between 12:00 and 8:00 AM on
+  // the first day) and counts the admin account as a guardian. Count every
+  // figure here by Philippine day, the same way as the export.
+  const [{ count: events }, { count: locations }, { count: sos }, guardians, children, watches] = await Promise.all([
     supabase
       .from("geofence_events")
       .select("id", { count: "exact", head: true })
       .gte("occurred_at", start)
       .lt("occurred_at", end),
+    supabase
+      .from("location_logs")
+      .select("id", { count: "exact", head: true })
+      .gte("recorded_at", start)
+      .lt("recorded_at", end),
+    supabase
+      .from("sos_alerts")
+      .select("id", { count: "exact", head: true })
+      .gte("triggered_at", start)
+      .lt("triggered_at", end),
     fetchAdminGuardianAccounts().catch(() => null),
     supabase
       .from("person_relationships")
@@ -417,9 +427,9 @@ export async function fetchAdminReportSummary(
       : toCount(row.guardian_accounts),
     registeredChildren: typeof children.count === "number" ? children.count : toCount(row.registered_children),
     smartwatchDevices: typeof watches.count === "number" ? watches.count : toCount(row.smartwatch_devices),
-    locationRecords: toCount(row.location_records),
+    locationRecords: typeof locations === "number" ? locations : toCount(row.location_records),
     safeZoneEvents: typeof events === "number" ? events : toCount(row.safe_zone_events),
-    sosRecords: toCount(row.sos_records),
+    sosRecords: typeof sos === "number" ? sos : toCount(row.sos_records),
   };
 }
 

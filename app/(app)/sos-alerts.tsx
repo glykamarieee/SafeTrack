@@ -39,6 +39,10 @@ import {
 import {
   useAuthStore,
 } from "../../store/authStore";
+import { useSosStore } from "../../store/sosStore";
+import { useSelectedChild } from "../../hooks/useSelectedChild";
+import { ChildSwitcher } from "../../components/common/ChildSwitcher";
+import { PlaceLine } from "../../components/location/PlaceLine";
 
 
 import {
@@ -156,10 +160,8 @@ export default function SosAlertsScreen(){
     );
 
 
-  const child =
-    useAuthStore(
-      state=>state.linkedChildren[0]
-    );
+  const { child } = useSelectedChild();
+  const activeAll = useSosStore((state) => state.activeAll);
 
   const trackingSource =
     child?.trackingSource ?? "smartwatch";
@@ -413,6 +415,7 @@ export default function SosAlertsScreen(){
 
 
       await loadAlerts();
+      void useSosStore.getState().loadActiveAll();
 
 
 
@@ -494,6 +497,7 @@ export default function SosAlertsScreen(){
             </Text>
           </View>
         </View>
+        <ChildSwitcher alertChildIds={activeAll.map((item) => item.childId)} />
 
         <View style={[styles.statusBand, activeCount > 0 && styles.statusBandActive]}>
           <View style={[styles.statusSymbol, activeCount > 0 && styles.statusSymbolActive]}>
@@ -585,7 +589,7 @@ export default function SosAlertsScreen(){
                       </View>
                       <View style={[styles.alertStatus, active ? styles.alertStatusActive : styles.alertStatusDone]}>
                         <Text style={[styles.alertStatusText, active && styles.alertStatusTextActive]}>
-                          {active ? "Needs acknowledgment" : "Acknowledged"}
+                          {active ? "Needs acknowledgment" : alert.status === "cancelled" ? "Cancelled" : "Acknowledged"}
                         </Text>
                       </View>
                     </View>
@@ -602,6 +606,14 @@ export default function SosAlertsScreen(){
                           : "Location unavailable"}
                       </Text>
                     </View>
+                    {hasLocation ? (
+                      <View style={styles.alertMetaRow}>
+                        <Ionicons name="business-outline" size={15} color={colors.primaryDark} />
+                        <View style={{ flex: 1 }}>
+                          <PlaceLine latitude={alert.latitude} longitude={alert.longitude} style={styles.alertMeta} />
+                        </View>
+                      </View>
+                    ) : null}
 
                     {active ? (
                       <View style={styles.acknowledgeWrap}>
@@ -617,7 +629,9 @@ export default function SosAlertsScreen(){
                     ) : (
                       <View style={styles.resolvedLine}>
                         <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
-                        <Text style={styles.resolvedText}>Acknowledgment recorded</Text>
+                        <Text style={styles.resolvedText}>
+                          {alert.status === "cancelled" ? "Cancelled by the child: sent by mistake" : "Acknowledgment recorded"}
+                        </Text>
                       </View>
                     )}
                   </View>

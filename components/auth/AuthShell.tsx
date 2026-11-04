@@ -117,7 +117,7 @@ export function AuthShell({ title, subtitle, eyebrow, back, backHref = "/(auth)/
             </Animated.View>
           </ScrollView>
           <Text variant="caption" tone="muted" style={styles.wideNote}>
-            Latest location, not real-time · SafeTrack never contacts emergency services.
+            Live location while moving · SafeTrack never contacts emergency services.
           </Text>
         </View>
       </View>

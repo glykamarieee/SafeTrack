@@ -28,6 +28,10 @@ export type ReportLocation = {
   accuracyMeters: number | null;
   label: string | null;
   recordedAt: string;
+  /** Saved street address (location_places), if known. */
+  place?: string | null;
+  speedMps?: number | null;
+  travelMode?: string | null;
 };
 
 export type ReportEvent = {
@@ -39,6 +43,7 @@ export type ReportEvent = {
   latitude: number | null;
   longitude: number | null;
   occurredAt: string;
+  place?: string | null;
 };
 
 export type ReportSos = {
@@ -51,6 +56,7 @@ export type ReportSos = {
   realertCount: number;
   latitude: number | null;
   longitude: number | null;
+  place?: string | null;
 };
 
 export type ReportData = {
@@ -824,7 +830,7 @@ export async function buildPdfReport(data: ReportData): Promise<Uint8Array> {
         { text: titleCase(alert.status), key: alert.status },
         manilaTime(alert.acknowledgedAt) || "-",
         String(alert.realertCount),
-        alert.latitude === null ? "-" : `${coordinate(alert.latitude)}, ${coordinate(alert.longitude)}`,
+        alert.place ?? (alert.latitude === null ? "-" : `${coordinate(alert.latitude)}, ${coordinate(alert.longitude)}`),
       ]),
     );
   }
@@ -1171,6 +1177,7 @@ export async function buildExcelReport(data: ReportData): Promise<Uint8Array> {
       { header: "Re-alerts", key: "realerts", width: 10, align: "right" },
       { header: "Latitude", key: "lat", width: 12, numFmt: "0.00000" },
       { header: "Longitude", key: "lng", width: 12, numFmt: "0.00000" },
+      { header: "Address (OpenStreetMap)", key: "place", width: 48 },
     ],
     [...data.sos].reverse().map((alert) => ({
       triggered: excelDate(alert.triggeredAt),
@@ -1182,6 +1189,7 @@ export async function buildExcelReport(data: ReportData): Promise<Uint8Array> {
       realerts: alert.realertCount,
       lat: alert.latitude,
       lng: alert.longitude,
+      place: alert.place ?? "",
       _tone: alert.status,
     })),
     { key: "status", toneKey: (row) => String(row._tone ?? "") },
@@ -1201,6 +1209,7 @@ export async function buildExcelReport(data: ReportData): Promise<Uint8Array> {
       { header: "AI score", key: "score", width: 10, align: "right", numFmt: "0.00" },
       { header: "Latitude", key: "lat", width: 12, numFmt: "0.00000" },
       { header: "Longitude", key: "lng", width: 12, numFmt: "0.00000" },
+      { header: "Address (OpenStreetMap)", key: "place", width: 48 },
     ],
     [...data.events].reverse().map((event) => ({
       occurred: excelDate(event.occurredAt),
@@ -1211,6 +1220,7 @@ export async function buildExcelReport(data: ReportData): Promise<Uint8Array> {
       score: event.anomalyScore,
       lat: event.latitude,
       lng: event.longitude,
+      place: event.place ?? "",
       _tone: event.eventType,
     })),
     { key: "event", toneKey: (row) => String(row._tone ?? "") },
@@ -1229,6 +1239,9 @@ export async function buildExcelReport(data: ReportData): Promise<Uint8Array> {
       { header: "Longitude", key: "lng", width: 12, numFmt: "0.00000" },
       { header: "Accuracy (m)", key: "accuracy", width: 13, align: "right", numFmt: "0" },
       { header: "Label", key: "label", width: 36 },
+      { header: "Travel mode", key: "mode", width: 14 },
+      { header: "Speed (km/h)", key: "speed", width: 12, align: "right", numFmt: "0" },
+      { header: "Address (OpenStreetMap)", key: "place", width: 48 },
     ],
     data.locations.map((location) => ({
       recorded: excelDate(location.recordedAt),
@@ -1238,6 +1251,9 @@ export async function buildExcelReport(data: ReportData): Promise<Uint8Array> {
       lng: location.longitude,
       accuracy: location.accuracyMeters,
       label: location.label ?? "",
+      mode: location.travelMode ? titleCase(location.travelMode) : "",
+      speed: location.speedMps != null ? location.speedMps * 3.6 : null,
+      place: location.place ?? "",
     })),
   );
 

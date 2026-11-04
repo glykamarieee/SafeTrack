@@ -239,7 +239,7 @@ export default function AdminDevicesScreen() {
             </View>
 
             <Text variant="caption" tone="muted">
-              The latest location is the last position the watch sent, not a live feed.
+              The latest location is the last position the watch sent: about every 10 seconds while moving, every 3 minutes when still.
             </Text>
 
             <View style={styles.panelActions}>

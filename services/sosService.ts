@@ -54,6 +54,18 @@ export async function fetchAllSosAlerts(): Promise<SosAlert[]> {
   return (data ?? []).map((row) => mapSosRow(row));
 }
 
+/** Active SOS alerts of all the guardian's children (RLS limits the rows). */
+export async function fetchActiveSosAlerts(): Promise<SosAlert[]> {
+  const { data, error } = await supabase
+    .from("sos_alerts")
+    .select("*")
+    .eq("status", "active")
+    .order("triggered_at", { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []).map((row) => mapSosRow(row));
+}
+
 export async function acknowledgeSosAlert(alertId: string): Promise<void> {
   const { error } = await supabase.rpc("acknowledge_my_sos_alert", {
     p_alert_id: alertId,

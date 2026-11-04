@@ -5,6 +5,10 @@ import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuthStore } from "../../store/authStore";
+import { useSelectedChild } from "../../hooks/useSelectedChild";
+import { ChildSwitcher } from "../common/ChildSwitcher";
+import { usePlaceDetails } from "../../hooks/usePlaceDetails";
+import { PlaceDetailsCard } from "../location/PlaceDetailsCard";
 import { useLocationStore } from "../../store/locationStore";
 import { useSosStore } from "../../store/sosStore";
 import { useGeofenceStore } from "../../store/geofenceStore";
@@ -69,7 +73,7 @@ export function GuardianHome() {
   const styles = useStyles();
 
   const guardian = useAuthStore((state) => state.guardian);
-  const child = useAuthStore((state) => state.linkedChildren?.[0] ?? null);
+  const { child, select: selectChild } = useSelectedChild();
   // Signed photo links expire; useAvatarUrl re-signs them from the stored path.
   const guardianPhoto = useAvatarUrl(guardian?.avatarPath, guardian?.avatarUrl);
   const childPhoto = useAvatarUrl(child?.avatarPath, child?.avatarUrl);
@@ -77,9 +81,13 @@ export function GuardianHome() {
   const latestLocation = useLocationStore((state) => state.latest);
   const locationLoading = useLocationStore((state) => state.isLoading);
   const loadLocation = useLocationStore((state) => state.loadForChild);
+  const subscribeLocation = useLocationStore((state) => state.subscribeToChildLocation);
+  const locationHistory = useLocationStore((state) => state.history);
 
   const sosAlerts = useSosStore((state) => state.alerts);
   const loadSos = useSosStore((state) => state.loadForChild);
+  const activeAll = useSosStore((state) => state.activeAll);
+  const loadActiveAll = useSosStore((state) => state.loadActiveAll);
 
   const zones = useGeofenceStore((state) => state.zones);
   const zoneEvents = useGeofenceStore((state) => state.events);
@@ -96,6 +104,16 @@ export function GuardianHome() {
 
   const trackingSource = child?.trackingSource ?? "mobile";
   const hasWatch = trackingSource === "smartwatch" || trackingSource === "both";
+
+  useEffect(() => {
+    void loadActiveAll();
+  }, [child?.id, loadActiveAll]);
+
+  // New points move the marker while Home is open.
+  useEffect(() => {
+    if (!child?.id) return;
+    return subscribeLocation(child.id, child.fullName ?? "Child");
+  }, [child?.id, child?.fullName, subscribeLocation]);
 
   useEffect(() => {
     if (!child) return;
@@ -115,10 +133,14 @@ export function GuardianHome() {
   }, [child?.id, hasWatch]);
 
   const zoneCircles = useMemo(() => toZoneCircles(zones, zoneEvents), [zones, zoneEvents]);
+  const details = usePlaceDetails(latestLocation, locationHistory, zoneCircles);
   // Switched-off zones are not monitored, so they are not counted.
   const activeZoneCount = zones.filter((zone) => zone.isEnabled).length;
 
   const activeSOS = useMemo(() => sosAlerts.find((item) => item.status === "active"), [sosAlerts]);
+  // Another child's SOS must be just as visible as the selected child's.
+  const otherSOS = activeAll.find((item) => item.childId !== child?.id);
+  const bandSOS = activeSOS ? { childId: child?.id, name: child?.fullName } : otherSOS ? { childId: otherSOS.childId, name: otherSOS.childName } : null;
 
   // The same rule as the map marker: SOS, then stale, then the server's
   // latest zone entry/exit.
@@ -156,9 +178,17 @@ export function GuardianHome() {
   return (
     <View style={styles.root}>
     <MapAwareScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-      {activeSOS ? <SosBand childName={child?.fullName ?? "Your child"} onOpen={() => router.push("/(app)/sos-alerts")} /> : null}
+      {bandSOS ? (
+        <SosBand
+          childName={bandSOS.name ?? "Your child"}
+          onOpen={() => {
+            if (bandSOS.childId) selectChild(bandSOS.childId);
+            router.push("/(app)/sos-alerts");
+          }}
+        />
+      ) : null}
 
-      <SafeAreaView edges={activeSOS ? [] : ["top"]} style={styles.header}>
+      <SafeAreaView edges={bandSOS ? [] : ["top"]} style={styles.header}>
         <MapPattern opacity={0.08} />
         <View style={styles.headerRow}>
           <View style={styles.guardianRow}>
@@ -192,12 +222,13 @@ export function GuardianHome() {
             style={({ pressed }) => [styles.bell, pressed && styles.pressed]}
           >
             <Ionicons name="notifications-outline" size={22} color="#FFFFFF" />
-            {activeSOS || latestAnomaly ? <View style={[styles.bellDot, { backgroundColor: activeSOS ? "#FF6B5C" : "#3DDC84" }]} /> : null}
+            {bandSOS || latestAnomaly ? <View style={[styles.bellDot, { backgroundColor: bandSOS ? "#FF6B5C" : "#3DDC84" }]} /> : null}
           </Pressable>
         </View>
       </SafeAreaView>
 
       <View style={styles.body}>
+        <ChildSwitcher alertChildIds={activeAll.map((item) => item.childId)} style={styles.switcher} />
         <Entrance index={0} style={styles.childCard}>
           {child ? (
             <>
@@ -278,7 +309,7 @@ export function GuardianHome() {
                 </Text>
                 <Text variant="caption">
                   {latestLocation && age
-                    ? `Updated ${age} · from ${latestLocation.source === "smartwatch" ? "watch" : "phone"} · not real-time`
+                    ? `${details.live ? "Live" : `Updated ${age}`} · from ${latestLocation.source === "smartwatch" ? "watch" : "phone"}`
                     : "Waiting for the child's device to send a location"}
                 </Text>
               </View>
@@ -304,6 +335,16 @@ export function GuardianHome() {
                 batteryPercent={watch?.batteryPercent ?? null}
                 networkType={watch?.networkType ?? null}
               />
+              {latestLocation ? (
+                <View style={styles.placeCard}>
+                  <PlaceDetailsCard
+                    location={latestLocation}
+                    details={details}
+                    batteryPercent={watch?.batteryPercent ?? null}
+                    networkType={watch?.networkType ?? null}
+                  />
+                </View>
+              ) : null}
             </Entrance>
 
             <Entrance index={3} style={styles.tiles}>
@@ -333,7 +374,7 @@ export function GuardianHome() {
         ) : null}
       </View>
     </MapAwareScrollView>
-    <StatusScrim color={activeSOS ? colors.danger : scheme === "dark" ? colors.forest : "#15803D"} />
+    <StatusScrim color={bandSOS ? colors.danger : scheme === "dark" ? colors.forest : "#15803D"} />
     </View>
   );
 }
@@ -492,6 +533,9 @@ const useStyles = makeStyles((c, scheme) =>
       borderColor: scheme === "dark" ? c.forest : "#15803D",
     },
     body: { width: "100%", maxWidth: 1080, alignSelf: "center", paddingHorizontal: space.gutter, gap: space.lg, marginTop: -76 },
+    placeCard: { marginTop: space.sm },
+    // Sits on the green header, above the child card.
+    switcher: { marginTop: 0, marginBottom: -space.sm },
     childCard: {
       backgroundColor: c.surface,
       borderRadius: radius.md + 2,

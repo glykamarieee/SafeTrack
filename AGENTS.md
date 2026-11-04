@@ -162,7 +162,9 @@ the Expo app.
   - Every data endpoint is rejected unless the same `AI_SERVICE_KEY` is set in
     the service's own environment (it holds the service-role key).
   - The current point must be valid, otherwise it returns 422.
-  - Only strictly earlier history is used, sorted, at most 500 points.
+  - Only strictly earlier history is used, thinned to one point per 3 minutes
+    (`thinHistory` in `_shared/anomaly.ts`, the spacing the model was trained on;
+    10-second points would turn GPS jitter into speed spikes), at most 500 points.
 - **Result:** a notice is written to `geofence_events` (`possible_anomaly`, with
   the reasons in `details`), and the push trigger notifies the guardian.
 - **Features:** distance, speed, the hour in **Philippine time** (UTC+8; changed
@@ -243,6 +245,39 @@ the Expo app.
   Connection Code" (tracking source Phone or Both).
 - Codes: 6 digits, SHA-256 hex stored, valid for 10 minutes, single use; a new code
   replaces the previous one.
+
+## Live location, travel mode and place details (migration 20261104)
+
+- **Rates:** watch and child phone send a point about every 10 s while moving
+  (each 15 m), one every 3 min when still; the watch switches to balanced-power
+  fixes every 60 s after 2 min still, and to every 5 s for 10 min after an SOS
+  (`LocationTracker.kt`, `services/childBackgroundLocation.ts`).
+- **Live map:** `location_logs` is in the `supabase_realtime` publication; the
+  location store adds each new row to the front of the recent history and also
+  reads the newest row every 15 s as a fallback. The marker glides between points
+  (`useGlide`) with a 10-minute trail.
+- **Travel mode:** `location_logs.speed_mps`, `heading_degrees`, `travel_mode`
+  (`still | walking | running | biking | vehicle | boat | unknown`) and
+  `mode_confidence`, written by `record_watch_location_v2` /
+  `record_child_phone_location_v2` (wrappers that call the unchanged originals,
+  so old watches and phones keep working; the apps fall back to the originals
+  until the migration runs). Speed bands in `lib/travelMode.ts` and
+  `TravelMode.kt`; the watch adds Android Activity Recognition (optional
+  "Physical activity" permission). Cars, jeeps and motorcycles are all
+  "In a vehicle": GPS cannot tell them apart. "Boat" is decided in the guardian
+  app when a moving point is over water.
+- **Place details:** `lib/places.ts` reverse-geocodes with OpenStreetMap
+  Nominatim (free; one request per second; results stored under the ODbL with
+  "© OpenStreetMap contributors" shown). Cached per ~55 m cell in memory and in
+  `location_places` (`location_cell()`, written with `save_location_place`).
+  Shown by `PlaceDetailsCard` (Home, Location), `PlaceLine` (SOS alerts, History
+  sheets), admin Records (cached only) and the report exports; SOS and safe-zone
+  pushes add "Near: …" when the spot is already cached. Never a guessed address:
+  "Address unavailable" plus coordinates.
+- **Selected child:** `hooks/useSelectedChild.ts` + `components/common/ChildSwitcher.tsx`
+  are shared by Home, Location, Safety (SOS alerts), Notifications, AI notices,
+  Safe Zones and History; `sosStore.activeAll` holds every child's active SOS for
+  the Home banner and the switcher dots.
 
 ## Maps
 
@@ -536,7 +571,8 @@ rest.
   - It needs "Allow all the time" location access.
   - It runs as an Android foreground service with a visible notification, or the
     iOS background-location indicator.
-  - It saves at most every 5 minutes, unless the phone moved 100 m.
+  - Moving: a point about every 10 s (each 15 m), with speed and travel mode;
+    still: one every 3 minutes.
   - It stops when the phone is unlinked.
   - The task is registered at startup (`app/_layout.tsx` imports the service).
   - It needs a build (`expo-location` background options in `app.json`, plus
@@ -570,8 +606,9 @@ and safety events for a date range, 50 per page, through
   Notice, Chip, ChoiceCard, CodeInput, Steps, Segmented, StateRing, HoldRing, MapPattern, Entrance.
   `components/auth/AuthShell` is the sign-in layout; `components/navigation/SideNav` the wide-screen sidebar.
 - **Motion** (`theme/motion.ts`): press feedback, entrance, pulse, drift. Everything respects Reduce Motion.
-- **Location wording:** never "live" or "real-time". It is the latest reported location; always show its age
-  ("Updated 2 min ago"). Watch ≈ every 3 min, phone auto-share every 5 min or 100 m.
+- **Location wording:** "Live" only when the newest point is under 30 seconds old (`isLive` in
+  `lib/travelMode.ts`); otherwise "Updated X ago" / "Last seen X ago". Moving: watch and phone auto-share
+  about every 10 s; still: every 3 min.
 - **Onboarding:** `app/onboarding.tsx` (welcome guide on first launch of the phone app, guardian after first sign-in, child phone after linking; replay from
   Profile, Help & Support, child profile). Watch tour: `ui/tour/WatchTour.kt` after first pairing, replay from
   Status. Seen-flags: `safetrack.onboarding.<audience>` (AsyncStorage), `safetrack_watch_tour` (SharedPreferences).

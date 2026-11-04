@@ -15,7 +15,8 @@ import {
 } from "./SafeTrackInteractiveMap";
 import { childRing } from "./zoneCircles";
 import { useAvatarUrl } from "./useAvatarUrl";
-import { colorFor, freshness, initialsOf } from "./mapTypes";
+import { colorFor, freshness, initialsOf, type MapPoint } from "./mapTypes";
+import { useGlide } from "./useGlide";
 import type { LocationLog } from "../../types/safetrack";
 import {
   guardianColors as colors,
@@ -50,7 +51,11 @@ export type LocationMapCardProps = {
   flush?: boolean;
   /** Space kept clear at the top for the screen's own overlay. */
   topInset?: number;
+  /** Recent points, oldest first, drawn as a short trail behind the child. */
+  trail?: MapPoint[];
 };
+
+const NO_TRAIL: MapPoint[] = [];
 
 const NO_ZONES: SafeTrackMapCircle[] = [];
 
@@ -94,6 +99,7 @@ export function LocationMapCard({
   bottomInset,
   flush = false,
   topInset = 0,
+  trail = NO_TRAIL,
 }: LocationMapCardProps) {
   const styles = useStyles();
   const { colors: theme } = useTheme();
@@ -108,6 +114,10 @@ export function LocationMapCard({
   const fresh = freshness(location?.recordedAt);
   const ring = childRing(zones, { sosActive, freshness: fresh });
   const isWatch = location?.source === "smartwatch";
+  // The marker glides to each new point instead of jumping.
+  const glide = useGlide(validLocation && location ? { latitude: location.latitude, longitude: location.longitude } : null);
+  // The trail ends where the marker is drawn.
+  const path = useMemo(() => (glide && trail.length ? [...trail, glide] : NO_TRAIL), [trail, glide]);
 
   // Memoized on the values, so unrelated re-renders never reach the map.
   const markers = useMemo<SafeTrackMapMarker[]>(
@@ -116,8 +126,8 @@ export function LocationMapCard({
         ? [
             {
               id: "child-latest",
-              latitude: location.latitude,
-              longitude: location.longitude,
+              latitude: glide?.latitude ?? location.latitude,
+              longitude: glide?.longitude ?? location.longitude,
               title: location.childName ?? "Latest available location",
               detail: location.locationLabel ?? undefined,
               kind: "child",
@@ -140,6 +150,8 @@ export function LocationMapCard({
       validLocation,
       location?.latitude,
       location?.longitude,
+      glide?.latitude,
+      glide?.longitude,
       location?.childName,
       location?.recordedAt,
       location?.source,
@@ -162,6 +174,7 @@ export function LocationMapCard({
           <SafeTrackInteractiveMap
             markers={markers}
             circles={zones}
+            path={path}
             height={height}
             mapPadding={bottomInset != null ? { bottom: bottomInset } : MAP_PADDING}
             fitPadding={bottomInset != null ? { bottom: bottomInset + 20, top: topInset + 40 } : undefined}

@@ -3,12 +3,14 @@ import * as Device from "expo-device";
 import * as Location from "expo-location";
 import { Platform } from "react-native";
 
+import { classifySpeed } from "../lib/travelMode";
 import { supabase } from "../lib/supabase";
 import type {
   ChildMobileContext,
   ChildMobileSosAlert,
   ChildSafeZoneStatus,
   LocationLog,
+  TravelMode,
 } from "../types/safetrack";
 
 
@@ -72,6 +74,7 @@ async function callAsChildPhone<T>(
   functionName:
     | "get_child_phone_state"
     | "record_child_phone_location"
+    | "record_child_phone_location_v2"
     | "trigger_child_phone_sos"
     | "realert_child_phone_sos"
     | "unlink_child_phone",
@@ -223,10 +226,12 @@ export async function sendCurrentChildPhoneLocation(): Promise<{
     accuracy: Location.Accuracy.High,
   });
 
+  const speed = position.coords.speed != null && position.coords.speed >= 0 ? position.coords.speed : null;
   return recordChildPhoneLocation(
     position.coords.latitude,
     position.coords.longitude,
-    position.coords.accuracy
+    position.coords.accuracy,
+    { speedMps: speed, headingDegrees: position.coords.heading, ...classifySpeed(speed, position.coords.accuracy) }
   );
 }
 
@@ -234,22 +239,55 @@ export async function sendCurrentChildPhoneLocation(): Promise<{
  * Stores one location for the linked child (`record_child_phone_location`).
  * Used by the "Send latest location" button and the background task.
  */
+export type PhoneMotion = {
+  speedMps: number | null;
+  headingDegrees?: number | null;
+  mode: TravelMode;
+  confidence: number;
+};
+
+// record_child_phone_location_v2 (migration 20261104) also stores speed and
+// travel mode. Until the migration runs, fall back to the original once.
+let motionFunction = true;
+
 export async function recordChildPhoneLocation(
   latitude: number,
   longitude: number,
-  accuracyMeters: number | null
+  accuracyMeters: number | null,
+  motion?: PhoneMotion
 ): Promise<{
   location: LocationLog;
   safeZoneStatus: ChildSafeZoneStatus;
 }> {
-  const data = await callAsChildPhone<{
-    location: LocationRow;
-    safeZoneStatus: ChildSafeZoneStatus;
-  }>("record_child_phone_location", {
+  const base = {
     p_latitude: latitude,
     p_longitude: longitude,
     p_accuracy_meters: accuracyMeters,
-  });
+  };
+  type Result = { location: LocationRow; safeZoneStatus: ChildSafeZoneStatus };
+  let data: Result | null = null;
+
+  if (motion && motionFunction) {
+    try {
+      data = await callAsChildPhone<Result>("record_child_phone_location_v2", {
+        ...base,
+        p_speed_mps: motion.speedMps,
+        p_heading_degrees: motion.headingDegrees != null && motion.headingDegrees >= 0 ? motion.headingDegrees : null,
+        p_travel_mode: motion.mode,
+        p_mode_confidence: Math.round(motion.confidence * 100) / 100,
+      });
+    } catch (reason) {
+      if (reason instanceof Error && /could not find the function|PGRST202/i.test(reason.message)) {
+        motionFunction = false;
+      } else {
+        throw reason;
+      }
+    }
+  }
+
+  if (!data) {
+    data = await callAsChildPhone<Result>("record_child_phone_location", base);
+  }
 
   return {
     location: toLocationLog(data.location)!,

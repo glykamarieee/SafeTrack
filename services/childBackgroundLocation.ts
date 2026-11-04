@@ -3,6 +3,7 @@ import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import { Platform } from "react-native";
 
+import { classifySpeed, speedBetween } from "../lib/travelMode";
 import { ChildPhoneUnlinkedError, recordChildPhoneLocation } from "./childMobileService";
 
 /**
@@ -11,7 +12,8 @@ import { ChildPhoneUnlinkedError, recordChildPhoneLocation } from "./childMobile
  * - Off until the child turns it on (consent), and can be turned off any time.
  * - Android shows a permanent "SafeTrack is sharing location" notification
  *   while it runs (a foreground service), iOS shows the location indicator.
- * - At most one stored location per 5 minutes unless the phone moved 100 m.
+ * - Moving: a location about every 10 seconds (each time it moved 15 m),
+ *   with speed and travel mode. Still: one every 3 minutes.
  * - Needs a development or release build; Expo Go and the web cannot run it.
  * - After the phone restarts, sharing resumes the next time SafeTrack is
  *   opened (Android does not restart the service on its own).
@@ -20,11 +22,13 @@ import { ChildPhoneUnlinkedError, recordChildPhoneLocation } from "./childMobile
 export const CHILD_LOCATION_TASK = "safetrack-child-background-location";
 
 const LAST_SENT_KEY = "safetrack.childPhone.lastBackgroundSend";
-// Location checks every CHECK_INTERVAL_MS; moving, a record every
-// MOVE_SAVE_M (so trips are drawn along the real streets); staying still,
-// one record every STILL_SAVE_MS. Same rules as the watch.
-const CHECK_INTERVAL_MS = 20 * 1000;
-const MOVE_SAVE_M = 25;
+// Location checks every CHECK_INTERVAL_MS; moving, a record each time it
+// moved MOVE_SAVE_M (so the guardian sees the trip as it happens, along the
+// real streets); staying still, one record every STILL_SAVE_MS. Same rules as
+// the watch. 10 s instead of 5 s roughly halves the extra GPS battery use and
+// still looks continuous on the map.
+const CHECK_INTERVAL_MS = 10 * 1000;
+const MOVE_SAVE_M = 15;
 const STILL_SAVE_MS = 3 * 60 * 1000;
 
 type LastSent = { at: number; latitude: number; longitude: number };
@@ -68,8 +72,16 @@ if (Platform.OS !== "web" && !TaskManager.isTaskDefined(CHILD_LOCATION_TASK)) {
     // Skips duplicates and bursts of nearby fixes.
     if (!due) return;
 
+    // The phone's own GPS speed, else the speed since the last saved point.
+    const reported = latest.coords.speed != null && latest.coords.speed >= 0 ? latest.coords.speed : null;
+    const speed = reported ?? (last ? speedBetween({ ...last, time: last.at }, { ...point, time: latest.timestamp }) : null);
+
     try {
-      await recordChildPhoneLocation(point.latitude, point.longitude, latest.coords.accuracy ?? null);
+      await recordChildPhoneLocation(point.latitude, point.longitude, latest.coords.accuracy ?? null, {
+        speedMps: speed,
+        headingDegrees: latest.coords.heading,
+        ...classifySpeed(speed, latest.coords.accuracy),
+      });
       await AsyncStorage.setItem(LAST_SENT_KEY, JSON.stringify({ at: latest.timestamp, ...point }));
     } catch (reason) {
       if (reason instanceof ChildPhoneUnlinkedError) {

@@ -1,7 +1,7 @@
 import { assertEquals } from "jsr:@std/assert@1";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
-import { isInsideSafeZone, reviewAnomaly } from "./anomaly.ts";
+import { isInsideSafeZone, reviewAnomaly, thinHistory } from "./anomaly.ts";
 
 // Run: deno test --allow-env --allow-net=jsr.io supabase/functions/_shared/anomaly_test.ts
 
@@ -137,4 +137,12 @@ Deno.test("the review still runs if the zones can't be read", async () => {
     true,
   );
   assertEquals(result, { aiCalls: 1, notices: 1 });
+});
+
+Deno.test("history is thinned to one point per 3 minutes, oldest first", () => {
+  const start = Date.parse("2026-11-01T00:00:00Z");
+  // A point every 10 s for 10 minutes, given newest first as the query returns them.
+  const rows = Array.from({ length: 60 }, (_, i) => ({ recorded_at: new Date(start + (59 - i) * 10_000).toISOString() }));
+  const kept = thinHistory(rows);
+  assertEquals(kept.map((row) => (Date.parse(row.recorded_at) - start) / 1000), [0, 180, 360, 540]);
 });

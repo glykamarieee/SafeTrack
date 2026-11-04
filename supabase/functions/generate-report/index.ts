@@ -90,6 +90,77 @@ async function fetchRows(
   return { rows, total: Math.max(total, rows.length) };
 }
 
+// Same cell as location_cell() in migration 20261104 and lib/places.ts.
+function cellOf(latitude: number | null, longitude: number | null) {
+  return latitude === null || longitude === null ? null : `${Math.floor(latitude * 2000)}:${Math.floor(longitude * 2000)}`;
+}
+
+/** Saved addresses (location_places) for the given points; empty before 20261104. */
+async function loadPlaces(supabase: SupabaseClient, points: { latitude: number | null; longitude: number | null }[]) {
+  const cells = [...new Set(points.map((point) => cellOf(point.latitude, point.longitude)).filter((cell): cell is string => Boolean(cell)))];
+  const places = new Map<string, string>();
+  for (let index = 0; index < cells.length; index += 200) {
+    const { data, error } = await supabase.from("location_places").select("cell, label").in("cell", cells.slice(index, index + 200));
+    if (error) return places;
+    for (const row of data ?? []) places.set(String(row.cell), String(row.label));
+  }
+  return places;
+}
+
+/**
+ * Looks up SOS spots that have no saved address yet (OpenStreetMap Nominatim,
+ * at most one request per second, so only a few per report) and saves them.
+ */
+async function fillSosPlaces(
+  supabase: SupabaseClient,
+  places: Map<string, string>,
+  points: { latitude: number | null; longitude: number | null }[],
+) {
+  const missing = points.filter((point) => {
+    const cell = cellOf(point.latitude, point.longitude);
+    return cell !== null && !places.has(cell);
+  });
+  for (const point of missing.slice(0, 8)) {
+    const cell = cellOf(point.latitude, point.longitude)!;
+    if (places.has(cell)) continue;
+    try {
+      const params = new URLSearchParams({
+        format: "jsonv2",
+        lat: String(point.latitude),
+        lon: String(point.longitude),
+        zoom: "18",
+        addressdetails: "1",
+        "accept-language": "en",
+      });
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${params}`, {
+        headers: { "User-Agent": "SafeTrack/1.0 (child safety capstone app; report export)" },
+      });
+      if (response.ok) {
+        const result = await response.json();
+        const a = result.address ?? {};
+        const barangay = a.quarter ?? a.suburb ?? a.village ?? a.neighbourhood;
+        const parts = [
+          result.name && result.name !== a.road ? result.name : null,
+          [a.house_number, a.road].filter(Boolean).join(" ") || null,
+          barangay ? (/^(barangay|brgy)/i.test(barangay) ? barangay : `Brgy. ${barangay}`) : null,
+          a.city ?? a.town ?? a.municipality,
+          a.state ?? a.province ?? a.region,
+        ].filter((part, index, all) => part && all.indexOf(part) === index);
+        if (parts.length) {
+          const label = parts.join(", ");
+          places.set(cell, label);
+          await supabase
+            .from("location_places")
+            .upsert({ cell, latitude: point.latitude, longitude: point.longitude, label, provider: "osm" });
+        }
+      }
+    } catch {
+      // The report still lists the coordinates.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+  }
+}
+
 async function loadNames(supabase: SupabaseClient, ids: string[]) {
   const names = new Map<string, string>();
   const unique = [...new Set(ids.filter(Boolean))];
@@ -172,10 +243,8 @@ Deno.serve(async (request: Request) => {
         forChild(
           supabase
             .from("location_logs")
-            .select(
-              "id, child_id, source, latitude, longitude, accuracy_meters, location_label, recorded_at",
-              { count: "exact" },
-            )
+            // "*": speed and travel mode exist only after migration 20261104.
+            .select("*", { count: "exact" })
             .gte("recorded_at", from)
             .lte("recorded_at", to),
         )
@@ -232,6 +301,18 @@ Deno.serve(async (request: Request) => {
     const names = await loadNames(supabase, [...childIds, ...guardianIds, childId ?? ""]);
     const nameOf = (id: unknown, fallback: string) => names.get(String(id ?? "")) ?? fallback;
 
+    const sosPoints = sosResult.rows.map((row) => ({ latitude: numberOrNull(row.latitude), longitude: numberOrNull(row.longitude) }));
+    const places = await loadPlaces(supabase, [
+      ...sosPoints,
+      ...eventResult.rows.map((row) => ({ latitude: numberOrNull(row.latitude), longitude: numberOrNull(row.longitude) })),
+      ...locationResult.rows.map((row) => ({ latitude: numberOrNull(row.latitude), longitude: numberOrNull(row.longitude) })),
+    ]);
+    await fillSosPlaces(supabase, places, sosPoints);
+    const placeOf = (row: Record<string, unknown>) => {
+      const cell = cellOf(numberOrNull(row.latitude), numberOrNull(row.longitude));
+      return cell ? places.get(cell) ?? null : null;
+    };
+
     const locations: ReportLocation[] = locationResult.rows.map((row) => ({
       childName: nameOf(row.child_id, "Unknown child"),
       source: textOrNull(row.source),
@@ -240,6 +321,9 @@ Deno.serve(async (request: Request) => {
       accuracyMeters: numberOrNull(row.accuracy_meters),
       label: textOrNull(row.location_label),
       recordedAt: String(row.recorded_at),
+      place: placeOf(row),
+      speedMps: numberOrNull(row.speed_mps),
+      travelMode: textOrNull(row.travel_mode),
     }));
 
     const events: ReportEvent[] = eventResult.rows.map((row) => ({
@@ -251,6 +335,7 @@ Deno.serve(async (request: Request) => {
       latitude: numberOrNull(row.latitude),
       longitude: numberOrNull(row.longitude),
       occurredAt: String(row.occurred_at),
+      place: placeOf(row),
     }));
 
     const sos: ReportSos[] = sosResult.rows.map((row) => ({
@@ -263,6 +348,7 @@ Deno.serve(async (request: Request) => {
       realertCount: numberOrNull(row.realert_count) ?? 0,
       latitude: numberOrNull(row.latitude),
       longitude: numberOrNull(row.longitude),
+      place: placeOf(row),
     }));
 
     const generatedAt = new Date();

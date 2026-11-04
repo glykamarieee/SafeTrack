@@ -13,6 +13,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 
+import { useSelectedChild } from "../../hooks/useSelectedChild";
+import { PlaceLine } from "../../components/location/PlaceLine";
+import { describeMotion } from "../../lib/travelMode";
 import { useAuthStore } from "../../store/authStore";
 import { lineExclusions, matchRouteToRoads } from "../../services/routeMatching";
 import {
@@ -192,9 +195,8 @@ export default function HistoryScreen() {
   const wide = width >= 1040;
 
   const guardian = useAuthStore((state) => state.guardian);
-  const children = useAuthStore((state) => state.linkedChildren);
-  const [childId, setChildId] = useState<string | null>(children[0]?.id ?? null);
-  const child: Child | null = children.find((item) => item.id === childId) ?? children[0] ?? null;
+  const { child, children, select: setChildId } = useSelectedChild();
+  const childId = child?.id ?? null;
   const childPhoto = useAvatarUrl(child?.avatarPath, child?.avatarUrl);
 
   // Recomputed each render so "Today" stays right if the app stays open past midnight.
@@ -221,10 +223,6 @@ export default function HistoryScreen() {
   const [replayTime, setReplayTime] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(4);
-
-  useEffect(() => {
-    if (!childId && children[0]) setChildId(children[0].id);
-  }, [childId, children]);
 
   // Ignore responses for a day or child that is no longer selected.
   const request = useRef(0);
@@ -788,6 +786,11 @@ export default function HistoryScreen() {
         {pointInfo ? (
           <>
             {pointInfo.point.label ? <SheetRow icon="location-outline" label="Place" value={pointInfo.point.label} /> : null}
+            <PlaceLine latitude={pointInfo.point.latitude} longitude={pointInfo.point.longitude} style={sheetStyles.note} />
+            {(() => {
+              const motion = describeMotion(pointInfo.point.travelMode, pointInfo.point.speedMps, pointInfo.point.modeConfidence);
+              return motion ? <SheetRow icon={motion.icon as keyof typeof Ionicons.glyphMap} label="Moving" value={motion.label} /> : null;
+            })()}
             <SheetRow
               icon={pointInfo.point.source === "mobile" ? "phone-portrait-outline" : "watch-outline"}
               label="Device"

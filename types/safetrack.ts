@@ -101,7 +101,15 @@ export interface LocationLog {
     | string;
 
   recordedAt: string;
+
+  /** From migration 20261104; null on older records and before it runs. */
+  speedMps?: number | null;
+  headingDegrees?: number | null;
+  travelMode?: TravelMode | null;
+  modeConfidence?: number | null;
 }
+
+export type TravelMode = "still" | "walking" | "running" | "biking" | "vehicle" | "boat" | "unknown";
 
 
 /*

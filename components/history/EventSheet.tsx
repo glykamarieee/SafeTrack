@@ -7,6 +7,7 @@ import {
 import { Text } from "../ui/NativeText";
 
 import { MapSheet, SheetButton, SheetRow, sheetStyles } from "../location/MapSheet";
+import { PlaceLine } from "../location/PlaceLine";
 import { SafeTrackInteractiveMap, type SafeTrackMapMarker } from "../location/SafeTrackInteractiveMap";
 import { directionsUrl } from "../location/mapTypes";
 import { eventLook } from "./eventLook";
@@ -109,6 +110,7 @@ export function EventSheet({ event, onClose, onShowOnMap, onAcknowledged }: Prop
               value={`${event.latitude!.toFixed(5)}, ${event.longitude!.toFixed(5)}`}
             />
           ) : null}
+          {located ? <PlaceLine latitude={event.latitude} longitude={event.longitude} style={sheetStyles.note} /> : null}
           <Text style={sheetStyles.note}>
             Battery and network at the time of an event are not stored; the map pin shows the watch's current values.
           </Text>

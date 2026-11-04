@@ -19,6 +19,8 @@ import { Text, TextInput } from "../../components/ui/NativeText";
 
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { useSelectedChild } from "../../hooks/useSelectedChild";
+import { ChildSwitcher } from "../../components/common/ChildSwitcher";
 import { showAlert } from "../../lib/platformAlert";
 import { childRing, toZoneCircles } from "../../components/location/zoneCircles";
 import { MapAwareScrollView } from "../../components/location/MapScrollLock";
@@ -262,9 +264,7 @@ export default function SafeZonesScreen() {
     (state) => state.guardian
   );
 
-  const child = useAuthStore(
-    (state) => state.linkedChildren[0]
-  );
+  const { child } = useSelectedChild();
 
   const trackingSource =
     child?.trackingSource ?? "smartwatch";
@@ -845,6 +845,8 @@ export default function SafeZonesScreen() {
             </Text>
           </View>
         </View>
+
+        <ChildSwitcher style={{ marginBottom: 12 }} />
 
         <View style={styles.mapShell}>
           <SafeTrackInteractiveMap

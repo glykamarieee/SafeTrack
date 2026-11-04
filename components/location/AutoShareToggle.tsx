@@ -83,7 +83,7 @@ export function AutoShareToggle() {
           <Text style={styles.title}>Share location automatically</Text>
           <Text style={styles.note}>
             {on
-              ? "On. Your location is sent about every 5 minutes, or when you move 100 m, even when SafeTrack is closed."
+              ? "On. Your location is sent about every 10 seconds while you move, and every 3 minutes when you stay still, even when SafeTrack is closed."
               : "Off. Your location is only sent when you tap Share latest location."}
           </Text>
         </View>

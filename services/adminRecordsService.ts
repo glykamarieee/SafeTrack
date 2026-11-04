@@ -1,3 +1,4 @@
+import { placeCell } from "../lib/places";
 import { supabase } from "../lib/supabase";
 import { philippineDayRange } from "./activityHistoryService";
 
@@ -22,6 +23,8 @@ export type AdminRecord = {
   longitude: number | null;
   /** SOS status, location source, or event type. */
   tag: string;
+  /** Street address, when one is already cached for this spot (location_places). */
+  place?: string | null;
 };
 
 export type AdminRecordPage = { records: AdminRecord[]; hasMore: boolean; total: number };
@@ -58,6 +61,38 @@ async function childNames(ids: (string | null)[]) {
  * Fetches one extra row to know whether another page exists.
  */
 export async function fetchAdminRecords(
+  kind: AdminRecordKind,
+  fromKey: string,
+  toKey: string,
+  page: number,
+): Promise<AdminRecordPage> {
+  const result = await fetchRecordPage(kind, fromKey, toKey, page);
+  return { ...result, records: await withPlaces(result.records) };
+}
+
+/**
+ * Adds addresses already saved by the guardian apps (no new lookups here: one
+ * page can hold 50 spots and the free address service allows one per second).
+ * Before migration 20261104 the table is missing and records stay as they are.
+ */
+async function withPlaces(records: AdminRecord[]): Promise<AdminRecord[]> {
+  const cells = [
+    ...new Set(
+      records.filter((record) => record.latitude != null && record.longitude != null).map((record) => placeCell(record.latitude!, record.longitude!)),
+    ),
+  ];
+  if (cells.length === 0) return records;
+  const { data, error } = await supabase.from("location_places").select("cell, label").in("cell", cells);
+  if (error || !data) return records;
+  const labels = new Map(data.map((row) => [String(row.cell), String(row.label)]));
+  return records.map((record) =>
+    record.latitude != null && record.longitude != null
+      ? { ...record, place: labels.get(placeCell(record.latitude, record.longitude)) ?? null }
+      : record,
+  );
+}
+
+async function fetchRecordPage(
   kind: AdminRecordKind,
   fromKey: string,
   toKey: string,

@@ -32,7 +32,7 @@ const PAGES: Record<OnboardingAudience, Page[]> = {
     {
       scene: "pin",
       title: "Welcome to SafeTrack",
-      body: "SafeTrack shows guardians their child's latest location from a SafeTrack watch or phone. It's the last location sent, usually a few minutes old.",
+      body: "SafeTrack shows guardians where their child is from a SafeTrack watch or phone: live while they move, with the street address and how they are travelling.",
     },
     {
       scene: "share",
@@ -59,7 +59,7 @@ const PAGES: Record<OnboardingAudience, Page[]> = {
     {
       scene: "pin",
       title: "Know where they are",
-      body: "See your child's latest location from their SafeTrack watch or phone. A green ring means they're inside a safe place. It's the last location they sent, usually a few minutes old.",
+      body: "See your child move on the map with the street address and how they're travelling. A green ring means they're inside a safe place. The Live badge means the newest point is under 30 seconds old.",
     },
     {
       scene: "zone",
@@ -96,7 +96,7 @@ const PAGES: Record<OnboardingAudience, Page[]> = {
     {
       scene: "auto",
       title: "Share automatically",
-      body: "Turn on Auto-share and this phone sends its location every 5 minutes or 100 m, even when the app is closed.",
+      body: "Turn on Auto-share and this phone sends its location about every 10 seconds while you move, and every 3 minutes when you stay still, even when the app is closed.",
     },
     {
       scene: "done",

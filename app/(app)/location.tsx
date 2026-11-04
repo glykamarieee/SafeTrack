@@ -4,6 +4,9 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
+import { useSelectedChild } from "../../hooks/useSelectedChild";
+import { usePlaceDetails } from "../../hooks/usePlaceDetails";
+import { PlaceDetailsCard } from "../../components/location/PlaceDetailsCard";
 import { useAuthStore } from "../../store/authStore";
 import { useLocationStore } from "../../store/locationStore";
 import { useGeofenceStore } from "../../store/geofenceStore";
@@ -50,11 +53,12 @@ export default function LocationScreen() {
 
   const role = useAuthStore((state) => state.role);
   const child = useAuthStore((state) => state.child);
-  const children = useAuthStore((state) => state.linkedChildren);
+  const { child: selected } = useSelectedChild();
 
-  const primaryChild = role === "child" ? child : children?.[0] ?? null;
+  const primaryChild = role === "child" ? child : selected;
 
   const location = useLocationStore((state) => state.latest);
+  const history = useLocationStore((state) => state.history);
   const loading = useLocationStore((state) => state.isLoading);
   const load = useLocationStore((state) => state.loadForChild);
   const subscribe = useLocationStore((state) => state.subscribeToChildLocation);
@@ -111,6 +115,17 @@ export default function LocationScreen() {
   const sosActive = sosAlerts.some((alert) => alert.childId === primaryChild?.id && alert.status === "active");
 
   const zoneCircles = useMemo(() => toZoneCircles(zones, zoneEvents), [zones, zoneEvents]);
+  const details = usePlaceDetails(location, history, zoneCircles);
+
+  // The last 10 minutes behind the child, oldest first.
+  const trail = useMemo(() => {
+    if (!location) return [];
+    const since = Date.parse(location.recordedAt) - 10 * 60_000;
+    return history
+      .filter((point) => point.childId === location.childId && point.id !== location.id && Date.parse(point.recordedAt) >= since)
+      .sort((first, second) => Date.parse(first.recordedAt) - Date.parse(second.recordedAt))
+      .map((point) => ({ latitude: point.latitude, longitude: point.longitude }));
+  }, [history, location]);
 
   const refresh = () => {
     if (primaryChild?.id) {
@@ -125,22 +140,23 @@ export default function LocationScreen() {
   const name = primaryChild?.fullName?.split(/\s+/)[0] ?? "Your child";
   const age = ago(location?.recordedAt);
 
+  const where = location?.locationLabel || details.place?.label || null;
   const status: { icon: ComponentProps<typeof Ionicons>["name"]; tile: string; title: string; detail: string } = !location
     ? { icon: "time-outline", tile: colors.forestRaised, title: "Waiting for a location", detail: "The map focuses when the child's device sends one." }
     : ring === "sos"
       ? { icon: "alert", tile: "#B42318", title: `${name} needs help`, detail: "SOS active · open SOS alerts" }
       : ring === "stale"
-        ? { icon: "cloud-offline-outline", tile: "#8C948F", title: `Last seen ${age ?? ""}`.trim(), detail: location.locationLabel ?? "No newer location received" }
+        ? { icon: "cloud-offline-outline", tile: "#8C948F", title: `Last seen ${age ?? ""}`.trim(), detail: where ?? "No newer location received" }
         : ring === "inside"
           ? {
               icon: "shield-checkmark",
               tile: "#22B35E",
               title: `Inside ${inside?.label ?? "a safe zone"}`,
-              detail: `${name} arrived ${clockTime(inside?.lastEventAt) ?? "earlier"}${location.locationLabel ? ` · ${location.locationLabel}` : ""}`,
+              detail: `${name} arrived ${clockTime(inside?.lastEventAt) ?? "earlier"}${where ? ` · ${where}` : ""}`,
             }
           : ring === "outside"
-            ? { icon: "walk-outline", tile: "#F5B83D", title: "Outside safe zones", detail: location.locationLabel ?? `${name}'s latest location` }
-            : { icon: "location", tile: "#22B35E", title: location.locationLabel ?? `${name}'s location`, detail: "No safe zones set up yet" };
+            ? { icon: "walk-outline", tile: "#F5B83D", title: "Outside safe zones", detail: where ?? `${name}'s latest location` }
+            : { icon: "location", tile: "#22B35E", title: where ?? `${name}'s location`, detail: "No safe zones set up yet" };
 
   const mapHeight = Math.max(420, height - TAB_BAR);
   const top = useEntrance(0, -20, 420);
@@ -162,8 +178,9 @@ export default function LocationScreen() {
         batteryPercent={watch?.batteryPercent ?? null}
         networkType={watch?.networkType ?? null}
         overlays={false}
-        bottomInset={location ? 190 : undefined}
+        bottomInset={location ? 300 : undefined}
         topInset={location ? 100 + insets.top : 0}
+        trail={trail}
         flush
       />
 
@@ -201,16 +218,14 @@ export default function LocationScreen() {
 
       {location ? (
         <Animated.View pointerEvents="box-none" style={[styles.bottomLayer, wide && styles.narrow, bottom]}>
-          <View style={styles.note}>
-            <Ionicons name="information-circle" size={17} color="#3DDC84" style={styles.noteIcon} />
-            <Text variant="caption" style={styles.noteText}>
-              <Text variant="caption" weight="800" style={styles.white}>
-                Not real-time.{" "}
-              </Text>
-              This is {name}'s last reported location. The watch sends one about every 3 minutes; a phone with auto-share every 5 minutes or
-              100 m. The map updates by itself when a new one arrives.
-            </Text>
-          </View>
+          <PlaceDetailsCard
+            location={location}
+            details={details}
+            batteryPercent={watch?.batteryPercent ?? null}
+            networkType={watch?.networkType ?? null}
+            tone="dark"
+            compact={!wide && height < 760}
+          />
 
           <View style={styles.glassBar}>
             <Pressable
@@ -242,11 +257,11 @@ export default function LocationScreen() {
                   />
                 </View>
                 <Text variant="heading" weight="800" tabular>
-                  Updated {age ?? "—"}
+                  {details.live ? "Live" : `Updated ${age ?? "—"}`}
                 </Text>
               </View>
               <Text variant="caption" numberOfLines={1}>
-                Latest location
+                {details.live ? "Moving with the child" : "Latest reported location"}
                 {location.accuracyMeters != null ? ` · ±${Math.round(location.accuracyMeters)} m` : ""}
                 {` · from ${location.source === "smartwatch" ? "watch" : "phone"}`}
                 {watch?.batteryPercent != null && location.source === "smartwatch" ? ` · ${watch.batteryPercent}%` : ""}

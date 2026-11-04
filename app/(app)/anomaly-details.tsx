@@ -12,7 +12,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 
-import { useAuthStore } from "../../store/authStore";
+import { useSelectedChild } from "../../hooks/useSelectedChild";
+import { ChildSwitcher } from "../../components/common/ChildSwitcher";
 import { useAnomalyStore } from "../../store/anomalyStore";
 import type { SafetyTimelineItem } from "../../services/safetyEventsService";
 import {
@@ -94,7 +95,7 @@ export default function AnomalyDetailsScreen() {
   const colors = guardianPalette(useTheme().colors);
 
   const router = useRouter();
-  const child = useAuthStore((state) => state.linkedChildren?.[0] ?? null);
+  const { child } = useSelectedChild();
   const anomalies = useAnomalyStore((state) => state.anomalies);
   const isLoading = useAnomalyStore((state) => state.isLoading);
   const error = useAnomalyStore((state) => state.error);
@@ -128,6 +129,8 @@ export default function AnomalyDetailsScreen() {
             <Text style={styles.subtitle}>{child?.fullName ?? "Your child"}'s recent unusual-movement notices</Text>
           </View>
         </View>
+
+        <ChildSwitcher />
 
         <View style={styles.note}>
           <Ionicons name="information-circle-outline" size={18} color={colors.primaryDark} />

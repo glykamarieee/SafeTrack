@@ -229,7 +229,7 @@ function WelcomeWide() {
         </Animated.View>
 
         <Text variant="label" tone="muted" style={wide.footer}>
-          Latest location, not real-time · SafeTrack never contacts emergency services.
+          Live location while moving · SafeTrack never contacts emergency services.
         </Text>
       </View>
     </View>

@@ -1,3 +1,4 @@
+import type { TravelMode } from "../types/safetrack";
 import { supabase } from "../lib/supabase";
 import { fetchGeofences } from "./geofenceService";
 import { acknowledgeSosAlert } from "./sosService";
@@ -11,6 +12,9 @@ export type ActivityLocationPoint = {
   label: string | null;
   accuracy: number | null;
   recordedAt: string;
+  speedMps?: number | null;
+  travelMode?: TravelMode | null;
+  modeConfidence?: number | null;
 };
 
 export type ActivityEventType =
@@ -74,7 +78,8 @@ export type ActivityStop = {
 
 // PostgREST returns at most 1000 rows per request; a watch can log more in a day.
 const PAGE_SIZE = 1000;
-const MAX_POINTS_PER_DAY = 5000;
+// A child moving all day at one point every ~10 s is about 8,600 points.
+const MAX_POINTS_PER_DAY = 9000;
 
 const METHOD_LABELS: Record<string, string> = {
   tap_and_hold: "tap and hold",
@@ -125,23 +130,34 @@ export function errorMessage(reason: unknown) {
   return typeof message === "string" && message ? message : "Unknown error";
 }
 
+const BASE_POINT_FIELDS = "id, latitude, longitude, source, location_label, accuracy_meters, recorded_at";
+// Speed and travel mode come with migration 20261104; until then, plain fields.
+let motionFields = true;
+
 async function loadPoints(childId: string, start: string, end: string) {
   const points: ActivityLocationPoint[] = [];
 
   for (let from = 0; from < MAX_POINTS_PER_DAY; from += PAGE_SIZE) {
-    const { data, error } = await supabase
-      .from("location_logs")
-      .select("id, latitude, longitude, source, location_label, accuracy_meters, recorded_at")
-      .eq("child_id", childId)
-      .gte("recorded_at", start)
-      .lt("recorded_at", end)
-      .order("recorded_at", { ascending: true })
-      .order("id", { ascending: true })
-      .range(from, from + PAGE_SIZE - 1);
+    const page = (fields: string) =>
+      supabase
+        .from("location_logs")
+        .select(fields)
+        .eq("child_id", childId)
+        .gte("recorded_at", start)
+        .lt("recorded_at", end)
+        .order("recorded_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, from + PAGE_SIZE - 1);
+
+    let { data, error } = await page(motionFields ? `${BASE_POINT_FIELDS}, speed_mps, travel_mode, mode_confidence` : BASE_POINT_FIELDS);
+    if (error && motionFields && (error.code === "42703" || /speed_mps|travel_mode|mode_confidence/.test(error.message))) {
+      motionFields = false;
+      ({ data, error } = await page(BASE_POINT_FIELDS));
+    }
 
     if (error) throw error;
 
-    for (const row of data ?? []) {
+    for (const row of (data ?? []) as unknown as Record<string, unknown>[]) {
       const point: ActivityLocationPoint = {
         id: String(row.id),
         latitude: Number(row.latitude),
@@ -150,6 +166,9 @@ async function loadPoints(childId: string, start: string, end: string) {
         label: row.location_label ? String(row.location_label) : null,
         accuracy: nullableNumber(row.accuracy_meters),
         recordedAt: String(row.recorded_at),
+        speedMps: nullableNumber(row.speed_mps),
+        travelMode: (row.travel_mode as TravelMode | undefined) ?? null,
+        modeConfidence: nullableNumber(row.mode_confidence),
       };
 
       if (validCoordinate(point.latitude, point.longitude)) points.push(point);

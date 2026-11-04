@@ -13,6 +13,24 @@ const LOCATION_FIELDS = `
   recorded_at
 `;
 
+// Speed and travel mode come with migration 20261104. Until it runs, the
+// first query that asks for them fails once and the plain columns are used.
+const MOTION_FIELDS = `${LOCATION_FIELDS}, speed_mps, heading_degrees, travel_mode, mode_confidence`;
+let motionColumns = true;
+
+async function withMotionFallback<T extends { error: { code?: string; message?: string } | null }>(
+  run: (fields: string) => PromiseLike<T>,
+): Promise<T> {
+  if (!motionColumns) return run(LOCATION_FIELDS);
+  const result = await run(MOTION_FIELDS);
+  const error = result.error;
+  if (error && (error.code === "42703" || /speed_mps|travel_mode|heading_degrees|mode_confidence/.test(error.message ?? ""))) {
+    motionColumns = false;
+    return run(LOCATION_FIELDS);
+  }
+  return result;
+}
+
 
 
 function mapRow(
@@ -111,15 +129,13 @@ export async function fetchLatestLocationForChild(
   const {
     data,
     error
-  } = await supabase
+  } = await withMotionFallback((fields) => supabase
 
 
   .from("location_logs")
 
 
-  .select(
-    LOCATION_FIELDS
-  )
+  .select(fields)
 
 
   .eq(
@@ -139,7 +155,7 @@ export async function fetchLatestLocationForChild(
   .limit(1)
 
 
-  .maybeSingle();
+  .maybeSingle());
 
 
 
@@ -175,15 +191,13 @@ export async function fetchLocationHistory(
   const {
     data,
     error
-  } = await supabase
+  } = await withMotionFallback((fields) => supabase
 
 
   .from("location_logs")
 
 
-  .select(
-    LOCATION_FIELDS
-  )
+  .select(fields)
 
 
   .eq(
@@ -200,7 +214,7 @@ export async function fetchLocationHistory(
   )
 
 
-  .limit(limit);
+  .limit(limit));
 
 
 
@@ -248,15 +262,13 @@ export async function fetchLocationHistoryForDate(
   const {
     data,
     error
-  } = await supabase
+  } = await withMotionFallback((fields) => supabase
 
 
   .from("location_logs")
 
 
-  .select(
-    LOCATION_FIELDS
-  )
+  .select(fields)
 
 
   .eq(
@@ -282,7 +294,7 @@ export async function fetchLocationHistoryForDate(
     {
       ascending:true
     }
-  );
+  ));
 
 
 
@@ -320,15 +332,13 @@ export async function fetchAllLocationRecords(
   const {
     data,
     error
-  } = await supabase
+  } = await withMotionFallback((fields) => supabase
 
 
   .from("location_logs")
 
 
-  .select(
-    LOCATION_FIELDS
-  )
+  .select(fields)
 
 
   .order(
@@ -339,7 +349,7 @@ export async function fetchAllLocationRecords(
   )
 
 
-  .limit(limit);
+  .limit(limit));
 
 
 
