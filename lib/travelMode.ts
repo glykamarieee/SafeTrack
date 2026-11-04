@@ -65,7 +65,7 @@ const ICONS: Record<TravelMode, string> = {
 };
 
 /**
- * "Walking · 4 km/h", "Running or biking · 11 km/h (likely)",
+ * "Walking · 4 km/h", "Running or biking · 11 km/h" (when unsure which),
  * "In a vehicle · 38 km/h (car, jeep or motorcycle)".
  */
 export function describeMotion(mode: TravelMode | null | undefined, speedMps?: number | null, confidence?: number | null) {
@@ -77,7 +77,7 @@ export function describeMotion(mode: TravelMode | null | undefined, speedMps?: n
   if (unsure && (mode === "running" || mode === "biking")) label = "Running or biking";
   const speed = kmh != null && mode !== "still" ? ` · ${kmh} km/h` : "";
   const hint =
-    mode === "vehicle" ? " (car, jeep or motorcycle)" : mode === "boat" ? " (over water)" : unsure ? " (likely)" : "";
+    mode === "vehicle" ? " (car, jeep or motorcycle)" : mode === "boat" ? " (over water)" : "";
   return { label: `${label}${speed}${hint}`, short: label, icon: ICONS[mode], mode, kmh };
 }
 
