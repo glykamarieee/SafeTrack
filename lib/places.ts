@@ -2,8 +2,8 @@ import { supabase } from "./supabase";
 
 /**
  * Street address and nearest landmark for a point, from OpenStreetMap
- * (Nominatim, free; results may be stored under the ODbL, and screens show
- * "© OpenStreetMap contributors").
+ * (Nominatim, free; results may be stored under the ODbL, credited as
+ * "© OpenStreetMap contributors" in Help & Support and the map's ⓘ).
  *
  * Nominatim's usage policy allows at most one request per second and asks
  * that results are cached, so:

@@ -16,6 +16,7 @@ import { useAnomalyStore } from "../../store/anomalyStore";
 import { fetchSmartwatchForChild, type SmartwatchStatus } from "../../services/smartwatchService";
 import { LocationMapCard } from "../location/LocationMapCard";
 import { MapAwareScrollView } from "../location/MapScrollLock";
+import { PullRefresh } from "../ui/PullRefresh";
 import { childRing, toZoneCircles } from "../location/zoneCircles";
 import { freshness } from "../location/mapTypes";
 import { Button } from "../ui/Button";
@@ -73,6 +74,7 @@ export function GuardianHome() {
   const styles = useStyles();
 
   const guardian = useAuthStore((state) => state.guardian);
+  const refreshChildren = useAuthStore((state) => state.refreshLinkedChildren);
   const { child, select: selectChild } = useSelectedChild();
   // Signed photo links expire; useAvatarUrl re-signs them from the stored path.
   const guardianPhoto = useAvatarUrl(guardian?.avatarPath, guardian?.avatarUrl);
@@ -115,22 +117,29 @@ export function GuardianHome() {
     return subscribeLocation(child.id, child.fullName ?? "Child");
   }, [child?.id, child?.fullName, subscribeLocation]);
 
-  useEffect(() => {
+  const reload = async () => {
     if (!child) return;
+    await Promise.allSettled([
+      loadLocation(child.id, child.fullName),
+      loadSos(child.id, child.fullName),
+      loadZones(child.guardianId, child.id),
+      loadAnomaly(child.id),
+      hasWatch
+        ? fetchSmartwatchForChild(child.id)
+            .then(setWatch)
+            .catch(() => setWatch(null))
+        : setWatch(null),
+    ]);
+  };
 
-    void loadLocation(child.id, child.fullName);
-    void loadSos(child.id, child.fullName);
-    void loadZones(child.guardianId, child.id);
-    void loadAnomaly(child.id);
-
-    if (hasWatch) {
-      fetchSmartwatchForChild(child.id)
-        .then(setWatch)
-        .catch(() => setWatch(null));
-    } else {
-      setWatch(null);
-    }
+  useEffect(() => {
+    void reload();
   }, [child?.id, hasWatch]);
+
+  // Pull down: the children list too (names, photos, a newly added child).
+  const pullRefresh = async () => {
+    await Promise.allSettled([refreshChildren(), loadActiveAll(), reload()]);
+  };
 
   const zoneCircles = useMemo(() => toZoneCircles(zones, zoneEvents), [zones, zoneEvents]);
   const details = usePlaceDetails(latestLocation, locationHistory, zoneCircles);
@@ -177,7 +186,11 @@ export function GuardianHome() {
 
   return (
     <View style={styles.root}>
-    <MapAwareScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+    <MapAwareScrollView
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={styles.scroll}
+      refreshControl={<PullRefresh onRefresh={pullRefresh} />}
+    >
       {bandSOS ? (
         <SosBand
           childName={bandSOS.name ?? "Your child"}

@@ -97,11 +97,6 @@ export function PlaceDetailsCard({
       ) : null}
       {zone ? <Row colors={rowColors} icon={inside ? "shield-checkmark" : "shield-outline"} text={stay ? `${zone} · ${stay}` : zone} /> : stay ? <Row colors={rowColors} icon="time-outline" text={stay} /> : null}
       {!compact ? <Row colors={rowColors} icon={isWatch ? "watch-outline" : "phone-portrait-outline"} text={device} /> : null}
-      {place?.label ? (
-        <Text variant="caption" style={[styles.credit, { color: soft }]}>
-          Address © OpenStreetMap contributors
-        </Text>
-      ) : null}
     </View>
   );
 }
@@ -131,6 +126,5 @@ const useStyles = makeStyles(() =>
     motion: { flexDirection: "row", alignItems: "center", gap: 5, flexShrink: 1 },
     row: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
     rowIcon: { marginTop: 1 },
-    credit: { fontSize: 10, marginTop: 2 },
   }),
 );

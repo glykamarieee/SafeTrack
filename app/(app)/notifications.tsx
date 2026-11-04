@@ -7,6 +7,7 @@ import {
   Pressable,
 } from "react-native";
 import { Text } from "../../components/ui/NativeText";
+import { PullRefresh } from "../../components/ui/PullRefresh";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
@@ -73,24 +74,33 @@ export default function NotificationsScreen() {
 
   const trackingSource = child?.trackingSource ?? "mobile";
 
-  useFocusEffect(
-    useCallback(() => {
+  const load = useCallback(
+    (isActive: () => boolean = () => true) => {
       if (!child?.id) {
         setLoading(false);
-        return;
+        return Promise.resolve();
       }
-      let active = true;
       setLoading(true);
       setProblem(null);
-      void loadSos(child.id, child.fullName);
-      fetchGeofenceEvents(child.id, 40)
-        .then((rows) => active && setEvents(rows))
-        .catch((reason: { message?: string }) => active && setProblem(reason?.message ?? "Safety events could not be loaded."))
-        .finally(() => active && setLoading(false));
+      return Promise.allSettled([
+        loadSos(child.id, child.fullName),
+        fetchGeofenceEvents(child.id, 40)
+          .then((rows) => isActive() && setEvents(rows))
+          .catch((reason: { message?: string }) => isActive() && setProblem(reason?.message ?? "Safety events could not be loaded."))
+          .finally(() => isActive() && setLoading(false)),
+      ]);
+    },
+    [child?.id, child?.fullName, loadSos],
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      void load(() => active);
       return () => {
         active = false;
       };
-    }, [child?.id, child?.fullName, loadSos]),
+    }, [load]),
   );
 
   const notifications: NotificationItem[] = [
@@ -125,7 +135,11 @@ export default function NotificationsScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<PullRefresh onRefresh={() => load()} />}
+      >
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Go back"

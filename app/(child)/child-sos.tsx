@@ -8,6 +8,7 @@ import {
   View,
 } from "react-native";
 import { Text } from "../../components/ui/NativeText";
+import { PullRefresh } from "../../components/ui/PullRefresh";
 import { HoldRing } from "../../components/ui/HoldRing";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -149,6 +150,7 @@ export default function ChildSosScreen() {
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={<PullRefresh onRefresh={refreshActiveSos} />}
       >
         <Text style={styles.eyebrow}>EMERGENCY HELP</Text>
         <Text style={styles.title}>{sosActive ? "Help request sent" : "SOS"}</Text>

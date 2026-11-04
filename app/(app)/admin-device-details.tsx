@@ -8,6 +8,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Text } from "../../components/ui/NativeText";
+import { PullRefresh } from "../../components/ui/PullRefresh";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { showAlert } from "../../lib/platformAlert";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -154,7 +155,11 @@ export default function AdminDeviceDetailsScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<PullRefresh onRefresh={() => loadDetail(true)} />}
+      >
         <View style={styles.page}>
           <Pressable onPress={() => router.navigate("/(app)/admin-devices")} style={({ pressed }) => [styles.back, pressed && styles.pressed]}>
             <Ionicons name="arrow-back" size={18} color={colors.primaryDark} />

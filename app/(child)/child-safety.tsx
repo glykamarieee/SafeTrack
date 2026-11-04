@@ -6,6 +6,7 @@ import {
   View,
 } from "react-native";
 import { Text } from "../../components/ui/NativeText";
+import { PullRefresh } from "../../components/ui/PullRefresh";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -106,6 +107,7 @@ export default function ChildSafetyScreen() {
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={<PullRefresh onRefresh={refresh} />}
       >
         <Text style={styles.eyebrow}>MY SAFETY</Text>
         <Text style={styles.title}>Safe-zone status</Text>

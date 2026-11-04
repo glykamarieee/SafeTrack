@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { Text } from "../../components/ui/NativeText";
 import { Button } from "../../components/ui/Button";
+import { PullRefresh } from "../../components/ui/PullRefresh";
 
 import {
   SafeAreaView,
@@ -486,6 +487,7 @@ export default function SosAlertsScreen(){
         style={styles.flex}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={<PullRefresh onRefresh={loadAlerts} />}
       >
         <View style={styles.header}>
           <SafeTrackBackButton />

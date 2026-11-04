@@ -6,6 +6,7 @@ import {
   View,
 } from "react-native";
 import { Text } from "../../components/ui/NativeText";
+import { PullRefresh } from "../../components/ui/PullRefresh";
 import { useRouter } from "expo-router";
 
 import { Button } from "../../components/ui/Button";
@@ -37,6 +38,7 @@ export default function ChildProfileScreen() {
   const context = useChildMobileStore((state) => state.context);
   const disconnect = useChildMobileStore((state) => state.disconnect);
   const isLoading = useChildMobileStore((state) => state.isLoading);
+  const refresh = useChildMobileStore((state) => state.refresh);
 
   if (!context) return null;
 
@@ -72,6 +74,7 @@ export default function ChildProfileScreen() {
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={<PullRefresh onRefresh={refresh} />}
       >
         <Text style={styles.eyebrow}>MY SAFETRACK</Text>
         <Text style={styles.title}>Profile</Text>

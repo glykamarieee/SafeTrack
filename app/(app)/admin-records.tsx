@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { TextInput } from "../../components/ui/NativeText";
 import { Text } from "../../components/ui/Text";
+import { PullRefresh } from "../../components/ui/PullRefresh";
 import { Button } from "../../components/ui/Button";
 import { Rise, Skeleton, TonePill, TopBar, toneFor, useTone, type IconName, type ToneKey } from "../../components/admin/kit";
 import { moveDate, todayKey } from "../../components/history/dates";
@@ -304,7 +305,11 @@ export default function AdminRecordsScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.paper }]} edges={["top", "left", "right"]}>
-      <ScrollView contentContainerStyle={styles.content} stickyHeaderIndices={sticky}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        stickyHeaderIndices={sticky}
+        refreshControl={<PullRefresh onRefresh={() => load(0)} />}
+      >
         {children}
       </ScrollView>
     </SafeAreaView>

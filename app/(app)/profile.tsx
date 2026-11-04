@@ -16,6 +16,7 @@ import { MapPattern } from "../../components/ui/MapPattern";
 import { StatusScrim } from "../../components/ui/StatusScrim";
 import { Segmented } from "../../components/ui/Segmented";
 import { Text } from "../../components/ui/Text";
+import { PullRefresh } from "../../components/ui/PullRefresh";
 import { usePressFeedback } from "../../theme/motion";
 import { radius, shadow, space } from "../../theme/tokens";
 
@@ -517,7 +518,11 @@ export default function ProfileScreen(){
 
   return(
     <View style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<PullRefresh onRefresh={load} />}
+      >
         <SafeAreaView edges={["top"]} style={styles.header}>
           <MapPattern opacity={0.08} />
           <View style={styles.headerInner}>

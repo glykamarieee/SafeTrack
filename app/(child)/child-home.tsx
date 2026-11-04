@@ -6,6 +6,7 @@ import {
   View,
 } from "react-native";
 import { Text } from "../../components/ui/NativeText";
+import { PullRefresh } from "../../components/ui/PullRefresh";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -115,6 +116,7 @@ export default function ChildHomeScreen() {
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={<PullRefresh onRefresh={refresh} />}
       >
         <View style={styles.topbar}>
           <View>

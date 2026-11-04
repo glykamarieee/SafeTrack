@@ -268,7 +268,8 @@ the Expo app.
   app when a moving point is over water.
 - **Place details:** `lib/places.ts` reverse-geocodes with OpenStreetMap
   Nominatim (free; one request per second; results stored under the ODbL with
-  "© OpenStreetMap contributors" shown). Cached per ~55 m cell in memory and in
+  "© OpenStreetMap contributors" credited in Help & Support and the map's ⓘ,
+  not on each card). Cached per ~55 m cell in memory and in
   `location_places` (`location_cell()`, written with `save_location_place`).
   Shown by `PlaceDetailsCard` (Home, Location), `PlaceLine` (SOS alerts, History
   sheets), admin Records (cached only) and the report exports; SOS and safe-zone

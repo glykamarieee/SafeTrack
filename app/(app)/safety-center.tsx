@@ -6,6 +6,7 @@ import {
   View,
 } from "react-native";
 import { Text } from "../../components/ui/NativeText";
+import { PullRefresh } from "../../components/ui/PullRefresh";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter, type Href } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -57,29 +58,31 @@ export default function SafetyCenterScreen() {
     }
   }, [child?.id, loadSos]);
 
-  useEffect(() => {
-    const loadActiveSafeZones = async () => {
-      if (!guardian?.id || !child?.id) {
-        setActiveZoneCount(0);
-        setLoadingZones(false);
-        return;
-      }
-
-      setLoadingZones(true);
-
-      const { count, error } = await supabase
-        .from("geofences")
-        .select("id", { count: "exact", head: true })
-        .eq("guardian_id", guardian.id)
-        .eq("child_id", child.id)
-        .eq("is_enabled", true);
-
-      if (!error) setActiveZoneCount(count ?? 0);
+  const loadActiveSafeZones = async () => {
+    if (!guardian?.id || !child?.id) {
+      setActiveZoneCount(0);
       setLoadingZones(false);
-    };
+      return;
+    }
 
+    setLoadingZones(true);
+
+    const { count, error } = await supabase
+      .from("geofences")
+      .select("id", { count: "exact", head: true })
+      .eq("guardian_id", guardian.id)
+      .eq("child_id", child.id)
+      .eq("is_enabled", true);
+
+    if (!error) setActiveZoneCount(count ?? 0);
+    setLoadingZones(false);
+  };
+
+  useEffect(() => {
     void loadActiveSafeZones();
   }, [guardian?.id, child?.id]);
+
+  const refresh = () => Promise.allSettled([loadActiveSafeZones(), child?.id ? loadSos(child.id) : null]);
 
   const safeZoneDescription = loadingZones
     ? "Loading guardian-defined safe zones..."
@@ -97,7 +100,11 @@ export default function SafetyCenterScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<PullRefresh onRefresh={refresh} />}
+      >
         <Text style={styles.eyebrow}>SAFETY CENTER</Text>
         <Text style={styles.heading}>Clear signals. Calm decisions.</Text>
         <Text style={styles.subtitle}>

@@ -176,6 +176,11 @@ export default function HelpSupportScreen() {
           style={styles.replay}
         />
 
+        {/* Required by the free OpenStreetMap address service (lib/places.ts). */}
+        <Text style={styles.credits}>
+          Maps © Mapbox. Map data and addresses © OpenStreetMap contributors.
+        </Text>
+
 
 
       </ScrollView>
@@ -262,6 +267,7 @@ const useStyles = makeStyles((__c) => {
   const colors = guardianPalette(__c);
   return StyleSheet.create({
   replay: { marginTop: 12 },
+  credits: { marginTop: 18, fontSize: 10.5, textAlign: "center", color: colors.muted },
 
 safe:{
 flex:1,

@@ -16,6 +16,7 @@ import {
   View,
 } from "react-native";
 import { Text, TextInput } from "../../components/ui/NativeText";
+import { PullRefresh } from "../../components/ui/PullRefresh";
 
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -826,6 +827,7 @@ export default function SafeZonesScreen() {
         style={styles.flex}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={<PullRefresh onRefresh={() => Promise.allSettled([loadZones(), loadLatestLocation(false)])} />}
       >
         <View style={styles.headingRow}>
           <View style={styles.headingCopy}>
