@@ -72,10 +72,6 @@ export function usePlaceDetails(location: LocationLog | null | undefined, histor
   return useMemo(() => {
     if (!location) return { place, motion: null, zone: null, inside: false, stay: null, live: false };
 
-    // A vehicle-speed point over water is a boat.
-    let mode = (location.travelMode ?? null) as TravelMode | null;
-    if (place?.water && mode && mode !== "still" && (location.speedMps ?? 0) > 1.5) mode = "boat";
-    const motion = describeMotion(mode, location.speedMps, location.modeConfidence);
 
     let zone: string | null = null;
     let inside = false;
@@ -96,10 +92,18 @@ export function usePlaceDetails(location: LocationLog | null | undefined, histor
     for (const point of history) {
       if (point.id === location.id) continue;
       if (Date.parse(point.recordedAt) > latestTime) continue;
-      if (meters(point, location) > 60) break;
+      // Indoor fixes wander by their accuracy; that is not leaving the place.
+      if (meters(point, location) > Math.max(60, location.accuracyMeters ?? 0)) break;
       earliest = Date.parse(point.recordedAt);
     }
     if (latestTime - earliest >= 2 * 60_000) stay = `Here for ${durationText(latestTime - earliest)}`;
+
+    let mode = (location.travelMode ?? null) as TravelMode | null;
+    // No speed (Wi-Fi/cell fixes indoors) but several minutes at one spot: still.
+    if ((!mode || mode === "unknown") && stay) mode = "still";
+    // A vehicle-speed point over water is a boat.
+    if (place?.water && mode && mode !== "still" && (location.speedMps ?? 0) > 1.5) mode = "boat";
+    const motion = describeMotion(mode, location.speedMps, location.modeConfidence);
 
     return { place, motion, zone, inside, stay, live: isLive(location.recordedAt, now) };
   }, [location, history, zones, place, now]);

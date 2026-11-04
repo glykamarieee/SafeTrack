@@ -69,14 +69,15 @@ const ICONS: Record<TravelMode, string> = {
  * "In a vehicle · 38 km/h (car, jeep or motorcycle)".
  */
 export function describeMotion(mode: TravelMode | null | undefined, speedMps?: number | null, confidence?: number | null) {
-  if (!mode) return null;
+  // Unknown is shown as nothing, never as "Moving".
+  if (!mode || mode === "unknown") return null;
   const kmh = speedMps != null && Number.isFinite(speedMps) ? Math.round(speedMps * 3.6) : null;
   const unsure = confidence != null && confidence < 0.5;
   let label = LABELS[mode];
   if (unsure && (mode === "running" || mode === "biking")) label = "Running or biking";
   const speed = kmh != null && mode !== "still" ? ` · ${kmh} km/h` : "";
   const hint =
-    mode === "vehicle" ? " (car, jeep or motorcycle)" : mode === "boat" ? " (over water)" : unsure && mode !== "unknown" ? " (likely)" : "";
+    mode === "vehicle" ? " (car, jeep or motorcycle)" : mode === "boat" ? " (over water)" : unsure ? " (likely)" : "";
   return { label: `${label}${speed}${hint}`, short: label, icon: ICONS[mode], mode, kmh };
 }
 
