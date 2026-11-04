@@ -74,6 +74,19 @@ function mapRow(
     recordedAt:
       row.recorded_at,
 
+    // Migration 20261104; absent on older rows and before it ran.
+    speedMps:
+      row.speed_mps == null ? null : Number(row.speed_mps),
+
+    headingDegrees:
+      row.heading_degrees == null ? null : Number(row.heading_degrees),
+
+    travelMode:
+      row.travel_mode ?? null,
+
+    modeConfidence:
+      row.mode_confidence == null ? null : Number(row.mode_confidence),
+
   };
 
 }
