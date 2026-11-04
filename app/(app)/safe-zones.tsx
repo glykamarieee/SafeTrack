@@ -1250,6 +1250,8 @@ export default function SafeZonesScreen() {
               </View>
 
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close"
                 onPress={closeEditor}
                 disabled={isSaving}
                 style={({ pressed }) => [

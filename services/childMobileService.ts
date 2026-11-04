@@ -210,6 +210,8 @@ LOCATION
 =====================================================
 */
 
+const LOCATION_TIMEOUT_MS = 20_000;
+
 export async function sendCurrentChildPhoneLocation(): Promise<{
   location: LocationLog;
   safeZoneStatus: ChildSafeZoneStatus;
@@ -222,9 +224,21 @@ export async function sendCurrentChildPhoneLocation(): Promise<{
     );
   }
 
-  const position = await Location.getCurrentPositionAsync({
-    accuracy: Location.Accuracy.High,
-  });
+  // With location turned off, or no signal, getCurrentPositionAsync never
+  // settles; the child gets a clear message instead of a button that hangs.
+  if (!(await Location.hasServicesEnabledAsync())) {
+    throw new Error("Location is turned off on this phone. Turn on Location in the phone's settings, then try again.");
+  }
+
+  const position = await Promise.race([
+    Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }),
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error("No location signal right now. Move near a window or outdoors, then try again.")),
+        LOCATION_TIMEOUT_MS
+      )
+    ),
+  ]);
 
   const speed = position.coords.speed != null && position.coords.speed >= 0 ? position.coords.speed : null;
   return recordChildPhoneLocation(
