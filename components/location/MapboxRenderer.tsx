@@ -65,6 +65,7 @@ export const MapboxRenderer = forwardRef<MapEngineHandle, MapEngineProps>(functi
 
   const camera = useRef<ElementRef<typeof Camera>>(null);
   const [ready, setReady] = useState(false);
+  const loaded = useRef(false);
   // Camera rules: fit once; afterwards only Fit, Focus, Zoom and My location move it.
   const fitted = useRef(Boolean(initialView));
   const currentZoom = useRef(initialView?.zoom ?? DEFAULT_VIEW.zoom);
@@ -73,15 +74,23 @@ export const MapboxRenderer = forwardRef<MapEngineHandle, MapEngineProps>(functi
   const latest = useRef(props);
   latest.current = props;
 
+  const size = useRef({ width: 0, height: 0 });
+
   // Overlays at the bottom (mapPadding) are kept clear when fitting too.
+  // Scaled down when it would leave no room for the content, which made
+  // Mapbox skip the fit ("combined padding exceeds the map size").
   const padding = () => {
     const { fitPadding, mapPadding } = latest.current;
-    return [
+    const [top, right, bottom, left] = [
       fitPadding.top + mapPadding.top,
       fitPadding.right + mapPadding.right,
       fitPadding.bottom + mapPadding.bottom,
       fitPadding.left + mapPadding.left,
     ];
+    const { width, height } = size.current;
+    const fitY = height > 0 && top + bottom > height * 0.8 ? (height * 0.8) / (top + bottom) : 1;
+    const fitX = width > 0 && left + right > width * 0.8 ? (width * 0.8) / (left + right) : 1;
+    return [top * fitY, right * fitX, bottom * fitY, left * fitX];
   };
 
   const fitPoints = useCallback((points: MapPoint[], animated: boolean) => {
@@ -170,113 +179,126 @@ export const MapboxRenderer = forwardRef<MapEngineHandle, MapEngineProps>(functi
   const ornamentBottom = 8 + mapPadding.bottom;
 
   return (
-    <MapView
+    // MapView keeps onLayout for itself, so the size is measured here.
+    <View
       style={styles.fill}
-      styleURL={styleUrl(prefs, dark)}
-      // Mapbox's terms: the logo and attribution must stay visible.
-      logoPosition={{ bottom: ornamentBottom, left: 8 }}
-      attributionPosition={{ bottom: ornamentBottom, left: 92 }}
-      scaleBarEnabled={false}
-      compassEnabled={false}
-      rotateEnabled={false}
-      pitchEnabled={false}
-      // Android: keep drags inside the map even within a ScrollView.
-      requestDisallowInterceptTouchEvent
-      onDidFinishLoadingMap={() => {
-        setReady(true);
-        onReady();
-      }}
-      onMapLoadingError={() => onError("The map could not load. Check the internet connection and the Mapbox token.")}
-      onPress={(feature) => {
-        const [longitude, latitude] = feature.geometry.coordinates;
-        onPress({ latitude: latitude!, longitude: longitude! });
-      }}
-      onCameraChanged={(state: MapState) => {
-        currentZoom.current = state.properties.zoom;
-      }}
-      onMapIdle={(state: MapState) => {
-        currentZoom.current = state.properties.zoom;
-        targetZoom.current = null;
-        const [longitude, latitude] = state.properties.center;
-        onViewChange({ latitude: latitude!, longitude: longitude!, zoom: state.properties.zoom });
+      onLayout={(event) => {
+        size.current = { width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height };
       }}
     >
-      <Camera
-        ref={camera}
-        defaultSettings={{ centerCoordinate: [start.longitude, start.latitude], zoomLevel: start.zoom }}
-        minZoomLevel={MIN_ZOOM}
-        maxZoomLevel={MAX_ZOOM}
-      />
-
-      {prefs.traffic ? (
-        <VectorSource id="st-traffic" url="mapbox://mapbox.mapbox-traffic-v1">
-          <LineLayer
-            id="st-traffic-line"
-            sourceLayerID="traffic"
-            style={{
-              lineColor: [
-                "match",
-                ["get", "congestion"],
-                "low",
-                "#2DBE84",
-                "moderate",
-                "#F4B400",
-                "heavy",
-                "#E8710A",
-                "severe",
-                "#B42318",
-                "#9AA5A0",
-              ],
-              lineWidth: 2.5,
-              lineCap: "round",
-            }}
-          />
-        </VectorSource>
-      ) : null}
-
-      <ShapeSource id="st-zones" shape={zoneShape}>
-        <FillLayer id="st-zone-fill" style={{ fillColor: ["get", "color"], fillOpacity: ["get", "opacity"] }} />
-        <LineLayer
-          id="st-zone-line"
-          filter={["==", ["get", "dashed"], false]}
-          style={{ lineColor: ["get", "color"], lineWidth: ["get", "width"], lineOpacity: 0.95 }}
+      <MapView
+        style={styles.fill}
+        styleURL={styleUrl(prefs, dark)}
+        // Mapbox's terms: the logo and attribution must stay visible.
+        logoPosition={{ bottom: ornamentBottom, left: 8 }}
+        attributionPosition={{ bottom: ornamentBottom, left: 92 }}
+        scaleBarEnabled={false}
+        compassEnabled={false}
+        rotateEnabled={false}
+        pitchEnabled={false}
+        // Android: keep drags inside the map even within a ScrollView.
+        requestDisallowInterceptTouchEvent
+        onDidFinishLoadingMap={() => {
+          loaded.current = true;
+          setReady(true);
+          onReady();
+        }}
+        // Also fired for a single map tile that failed on a brief network drop,
+        // which Mapbox retries by itself. Only a map that never loaded is an error.
+        onMapLoadingError={() => {
+          if (!loaded.current) onError("The map could not load. Check the internet connection, then reopen this screen.");
+        }}
+        onPress={(feature) => {
+          const [longitude, latitude] = feature.geometry.coordinates;
+          onPress({ latitude: latitude!, longitude: longitude! });
+        }}
+        onCameraChanged={(state: MapState) => {
+          currentZoom.current = state.properties.zoom;
+        }}
+        onMapIdle={(state: MapState) => {
+          currentZoom.current = state.properties.zoom;
+          targetZoom.current = null;
+          const [longitude, latitude] = state.properties.center;
+          onViewChange({ latitude: latitude!, longitude: longitude!, zoom: state.properties.zoom });
+        }}
+      >
+        <Camera
+          ref={camera}
+          defaultSettings={{ centerCoordinate: [start.longitude, start.latitude], zoomLevel: start.zoom }}
+          minZoomLevel={MIN_ZOOM}
+          maxZoomLevel={MAX_ZOOM}
         />
-        <LineLayer
-          id="st-zone-line-dashed"
-          filter={["==", ["get", "dashed"], true]}
-          style={{ lineColor: ["get", "color"], lineWidth: 2, lineDasharray: [3, 3] }}
-        />
-      </ShapeSource>
 
-      {routeShape ? (
-        <ShapeSource id="st-route" shape={routeShape}>
+        {prefs.traffic ? (
+          <VectorSource id="st-traffic" url="mapbox://mapbox.mapbox-traffic-v1">
+            <LineLayer
+              id="st-traffic-line"
+              sourceLayerID="traffic"
+              style={{
+                lineColor: [
+                  "match",
+                  ["get", "congestion"],
+                  "low",
+                  "#2DBE84",
+                  "moderate",
+                  "#F4B400",
+                  "heavy",
+                  "#E8710A",
+                  "severe",
+                  "#B42318",
+                  "#9AA5A0",
+                ],
+                lineWidth: 2.5,
+                lineCap: "round",
+              }}
+            />
+          </VectorSource>
+        ) : null}
+
+        <ShapeSource id="st-zones" shape={zoneShape}>
+          <FillLayer id="st-zone-fill" style={{ fillColor: ["get", "color"], fillOpacity: ["get", "opacity"] }} />
           <LineLayer
-            id="st-route-casing"
-            filter={["==", ["get", "gap"], false]}
-            style={{ lineColor: "#FFFFFF", lineWidth: 9, lineCap: "round", lineJoin: "round" }}
+            id="st-zone-line"
+            filter={["==", ["get", "dashed"], false]}
+            style={{ lineColor: ["get", "color"], lineWidth: ["get", "width"], lineOpacity: 0.95 }}
           />
           <LineLayer
-            id="st-route-line"
-            filter={["==", ["get", "gap"], false]}
-            style={{ lineColor: "#22B35E", lineWidth: 5, lineCap: "round", lineJoin: "round" }}
-          />
-          <LineLayer
-            id="st-route-gap-casing"
-            filter={["==", ["get", "gap"], true]}
-            style={{ lineColor: "#FFFFFF", lineWidth: 8, lineCap: "round", lineJoin: "round", lineOpacity: 0.9 }}
-          />
-          <LineLayer
-            id="st-route-gap"
-            filter={["==", ["get", "gap"], true]}
-            style={{ lineColor: "#22B35E", lineWidth: 5, lineDasharray: [1.6, 1.2], lineJoin: "round" }}
+            id="st-zone-line-dashed"
+            filter={["==", ["get", "dashed"], true]}
+            style={{ lineColor: ["get", "color"], lineWidth: 2, lineDasharray: [3, 3] }}
           />
         </ShapeSource>
-      ) : null}
 
-      {[...markers].sort((first, second) => zIndexFor(first) - zIndexFor(second)).map((marker) => (
-        <MapboxMarker key={marker.id} marker={marker} onPress={onMarkerPress} />
-      ))}
-    </MapView>
+        {routeShape ? (
+          <ShapeSource id="st-route" shape={routeShape}>
+            <LineLayer
+              id="st-route-casing"
+              filter={["==", ["get", "gap"], false]}
+              style={{ lineColor: "#FFFFFF", lineWidth: 9, lineCap: "round", lineJoin: "round" }}
+            />
+            <LineLayer
+              id="st-route-line"
+              filter={["==", ["get", "gap"], false]}
+              style={{ lineColor: "#22B35E", lineWidth: 5, lineCap: "round", lineJoin: "round" }}
+            />
+            <LineLayer
+              id="st-route-gap-casing"
+              filter={["==", ["get", "gap"], true]}
+              style={{ lineColor: "#FFFFFF", lineWidth: 8, lineCap: "round", lineJoin: "round", lineOpacity: 0.9 }}
+            />
+            <LineLayer
+              id="st-route-gap"
+              filter={["==", ["get", "gap"], true]}
+              style={{ lineColor: "#22B35E", lineWidth: 5, lineDasharray: [1.6, 1.2], lineJoin: "round" }}
+            />
+          </ShapeSource>
+        ) : null}
+
+        {[...markers].sort((first, second) => zIndexFor(first) - zIndexFor(second)).map((marker) => (
+          <MapboxMarker key={marker.id} marker={marker} onPress={onMarkerPress} />
+        ))}
+      </MapView>
+    </View>
   );
 });
 

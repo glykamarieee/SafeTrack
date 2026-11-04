@@ -353,7 +353,10 @@ function MapCore(props: CoreProps) {
         mapPadding={nativePadding}
         picking={picking}
         initialView={initialView}
-        onReady={() => setLoaded(true)}
+        onReady={() => {
+          setLoaded(true);
+          setEngineError(null);
+        }}
         onError={setEngineError}
         onPress={handlePress}
         onMarkerPress={handleMarker}

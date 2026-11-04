@@ -59,7 +59,7 @@ import {
   todayKey,
 } from "../../components/history/dates";
 import { showAlert } from "../../lib/platformAlert";
-import type { Child, Geofence } from "../../types/safetrack";
+import type { Geofence } from "../../types/safetrack";
 import {
   guardianColors as colors,
   guardianRadius as radius,
@@ -86,10 +86,21 @@ function flatMeters(a: LatLngPoint, b: LatLngPoint) {
   return Math.hypot(x, y);
 }
 
+// A record further than this from the road line (a rough fix or GPS jump,
+// left out of the line) does not move the replay along it.
+const ANCHOR_MAX_M = 300;
+// Road vertices this much further away than the nearest still count as a
+// match; the earliest such vertex is taken.
+const ANCHOR_SLACK_M = 40;
+
 /**
- * Ties each record to its place on the road line: for every record, the
- * index of the nearest road vertex, searched forward from the previous
- * record's so the order is kept. Also the cumulative distance along the line.
+ * Ties each record to its place on the road line, searched forward from the
+ * previous record's so the order is kept. Also the cumulative distance along
+ * the line.
+ *
+ * The earliest close vertex is taken, not the nearest: a day that starts and
+ * ends at home has the same spot at both ends of the line, and a morning
+ * record matched to the evening end left the replay stuck there all day.
  */
 function anchorRoute(points: ActivityLocationPoint[], road: LatLngPoint[]) {
   const along = [0];
@@ -97,15 +108,19 @@ function anchorRoute(points: ActivityLocationPoint[], road: LatLngPoint[]) {
   const anchors: number[] = [];
   let from = 0;
   for (const point of points) {
-    let best = from;
-    let bestDistance = Infinity;
-    // Look ahead a bounded window so a later pass on the same street isn't picked.
+    // Look ahead a bounded window so a much later pass on the same street isn't picked.
     const limit = Math.min(road.length, from + 4000);
+    let nearest = Infinity;
+    for (let index = from; index < limit; index += 1) nearest = Math.min(nearest, flatMeters(point, road[index]!));
+    if (nearest > ANCHOR_MAX_M) {
+      anchors.push(from);
+      continue;
+    }
+    let best = from;
     for (let index = from; index < limit; index += 1) {
-      const distance = flatMeters(point, road[index]!);
-      if (distance < bestDistance) {
-        bestDistance = distance;
+      if (flatMeters(point, road[index]!) <= nearest + ANCHOR_SLACK_M) {
         best = index;
+        break;
       }
     }
     anchors.push(best);
@@ -196,7 +211,6 @@ export default function HistoryScreen() {
 
   const guardian = useAuthStore((state) => state.guardian);
   const { child, children, select: setChildId } = useSelectedChild();
-  const childId = child?.id ?? null;
   const childPhoto = useAvatarUrl(child?.avatarPath, child?.avatarUrl);
 
   // Recomputed each render so "Today" stays right if the app stays open past midnight.
