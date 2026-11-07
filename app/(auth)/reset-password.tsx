@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Platform, StyleSheet, View } from "react-native";
 import { Link, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
-import { latestAuthLink, onAppLink } from "../../lib/deepLinks";
+import { latestAuthLink, onAppLink, setResetScreenOpen } from "../../lib/deepLinks";
 
 import { AuthShell } from "../../components/auth/AuthShell";
 import { Button } from "../../components/ui/Button";
@@ -19,6 +19,13 @@ import {
 } from "../../services/supabaseAuthService";
 
 type Stage = "checking" | "ready" | "invalid" | "saving";
+
+/**
+ * Reset links work once. If this screen opens twice for the same link (the
+ * router and the start screen both open it), the second time must not use
+ * the link again: that would be refused as "already used".
+ */
+let acceptedLink: string | null = null;
 
 /**
  * Opened from the password-reset email (safetrack://reset-password#…, or
@@ -39,13 +46,24 @@ export default function ResetPasswordScreen() {
   const handled = useRef<string | null>(null);
 
   useEffect(() => {
+    setResetScreenOpen(true);
+    return () => setResetScreenOpen(false);
+  }, []);
+
+  useEffect(() => {
     const fromLink = linkedUrl && /access_token=|[?&#]code=|error(_description)?=/.test(linkedUrl) ? linkedUrl : null;
     const url = Platform.OS === "web" && typeof window !== "undefined" ? window.location.href : fromLink ?? appLink;
     if (!url || handled.current === url) return;
     handled.current = url;
 
+    if (url === acceptedLink) {
+      setStage("ready");
+      return;
+    }
+
     startPasswordRecovery(url)
       .then(() => {
+        acceptedLink = url;
         setStage("ready");
         // Keep the tokens out of the browser history.
         if (Platform.OS === "web" && typeof window !== "undefined") {

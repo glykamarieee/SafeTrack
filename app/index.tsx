@@ -13,6 +13,7 @@ import { StatusBar } from "expo-status-bar";
 import { useAuthStore } from "../store/authStore";
 import { hasChildPhoneCredentials } from "../services/childMobileService";
 import { needsWelcomeGuide } from "../services/onboardingService";
+import { initialLink, isRecoveryLink } from "../lib/deepLinks";
 import { StartSplash } from "../components/StartSplash";
 
 
@@ -63,6 +64,19 @@ export default function SplashScreen() {
     needsWelcomeGuide()
       .then((needed) => active && setShowWelcomeGuide(needed))
       .catch(() => active && setShowWelcomeGuide(false));
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // A password-reset link that started the app opens Reset password, not the
+  // usual start (it showed Get started before).
+  const [openedByResetLink, setOpenedByResetLink] = useState<boolean | null>(null);
+  useEffect(() => {
+    let active = true;
+    initialLink
+      .then((url) => active && setOpenedByResetLink(isRecoveryLink(url)))
+      .catch(() => active && setOpenedByResetLink(false));
     return () => {
       active = false;
     };
@@ -202,11 +216,16 @@ export default function SplashScreen() {
 
 
 
+  if (openedByResetLink) {
+    return <Redirect href="/(auth)/reset-password" />;
+  }
+
   if(
     !isBootstrapped ||
     !minimumSplashFinished ||
     childPhoneLinked === null ||
-    showWelcomeGuide === null
+    showWelcomeGuide === null ||
+    openedByResetLink === null
   ){
 
     return <StartSplash />;
