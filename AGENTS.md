@@ -269,7 +269,10 @@ the Expo app.
   their last fix; while it answers `live: true` they take a fix every second and
   send each one (broadcast by `realtime.send`, nothing written to
   `location_logs`); a still child sends one every 5 s (any 5 m move or walking
-  speed sends at once). Runs while the screen is in front with no tap needed;
+  speed sends at once), and after 30 s still the watch also takes GPS fixes
+  only every 5 s (battery) until the child moves. Home and Location re-read the
+  watch's battery and network every 30 s and on each saved record
+  (`hooks/useWatchStatus.ts`). Runs while the screen is in front with no tap needed;
   stops in the background and when the screen closes, restarts on return, and
   a failed renewal is retried every 15 s. `applyLiveFix` in the location store ignores drift
   within the accuracy while still, needs 2 agreeing readings to change the

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ComponentProps } from "react";
+import { useEffect, useMemo, type ComponentProps } from "react";
 import { Animated, Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -16,7 +16,7 @@ import { LocationMapCard } from "../../components/location/LocationMapCard";
 import { childRing, toZoneCircles } from "../../components/location/zoneCircles";
 import { freshness } from "../../components/location/mapTypes";
 import { useSosStore } from "../../store/sosStore";
-import { fetchSmartwatchForChild, type SmartwatchStatus } from "../../services/smartwatchService";
+import { useWatchStatus } from "../../hooks/useWatchStatus";
 import { Text } from "../../components/ui/Text";
 import { useEntrance, usePulse } from "../../theme/motion";
 import { makeStyles, useTheme } from "../../theme/ThemeProvider";
@@ -73,7 +73,6 @@ export default function LocationScreen() {
   const loadZones = useGeofenceStore((state) => state.load);
   const sosAlerts = useSosStore((state) => state.alerts);
   const loadSos = useSosStore((state) => state.loadForChild);
-  const [watch, setWatch] = useState<SmartwatchStatus | null>(null);
 
   const trackingSource = primaryChild?.trackingSource ?? "mobile";
   const supportedTrackingSource = trackingSource === "mobile" || trackingSource === "both" ? trackingSource : "smartwatch";
@@ -98,24 +97,14 @@ export default function LocationScreen() {
     }
   }, [guardianId, primaryChild?.id, loadZones]);
 
-  // Active SOS (red ring) and the watch's current battery for the child marker.
+  // Active SOS (red ring) for the child marker.
   useEffect(() => {
     if (!primaryChild?.id) return;
     void loadSos(primaryChild.id, primaryChild.fullName ?? "Child");
+  }, [primaryChild?.id, primaryChild?.fullName, loadSos]);
 
-    if (trackingSource === "mobile") {
-      setWatch(null);
-      return;
-    }
-    let active = true;
-    fetchSmartwatchForChild(primaryChild.id)
-      .then((value) => active && setWatch(value))
-      .catch(() => active && setWatch(null));
-
-    return () => {
-      active = false;
-    };
-  }, [primaryChild?.id, primaryChild?.fullName, trackingSource, loadSos]);
+  // The watch's current battery and network, kept current while this screen is open.
+  const { watch } = useWatchStatus(trackingSource === "mobile" ? null : primaryChild?.id);
 
   const sosActive = sosAlerts.some((alert) => alert.childId === primaryChild?.id && alert.status === "active");
 

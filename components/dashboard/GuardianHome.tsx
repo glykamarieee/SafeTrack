@@ -15,7 +15,7 @@ import { useLocationStore } from "../../store/locationStore";
 import { useSosStore } from "../../store/sosStore";
 import { useGeofenceStore } from "../../store/geofenceStore";
 import { useAnomalyStore } from "../../store/anomalyStore";
-import { fetchSmartwatchForChild, type SmartwatchStatus } from "../../services/smartwatchService";
+import { useWatchStatus } from "../../hooks/useWatchStatus";
 import { LocationMapCard } from "../location/LocationMapCard";
 import { MapAwareScrollView } from "../location/MapScrollLock";
 import { PullRefresh } from "../ui/PullRefresh";
@@ -107,10 +107,10 @@ export function GuardianHome() {
     storedAnomaly && Date.now() - Date.parse(storedAnomaly.occurredAt) < 24 * 60 * 60 * 1000 ? storedAnomaly : null;
   const loadAnomaly = useAnomalyStore((state) => state.loadForChild);
 
-  const [watch, setWatch] = useState<SmartwatchStatus | null>(null);
-
   const trackingSource = child?.trackingSource ?? "mobile";
   const hasWatch = trackingSource === "smartwatch" || trackingSource === "both";
+  // Battery and network stay current while Home is open.
+  const { watch, refresh: refreshWatch } = useWatchStatus(hasWatch ? child?.id : null);
 
   useEffect(() => {
     void loadActiveAll();
@@ -129,11 +129,7 @@ export function GuardianHome() {
       loadSos(child.id, child.fullName),
       loadZones(child.guardianId, child.id),
       loadAnomaly(child.id),
-      hasWatch
-        ? fetchSmartwatchForChild(child.id)
-            .then(setWatch)
-            .catch(() => setWatch(null))
-        : setWatch(null),
+      refreshWatch(),
     ]);
   };
 
