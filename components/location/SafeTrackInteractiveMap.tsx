@@ -414,7 +414,6 @@ function MapCore(props: CoreProps) {
             <ControlButton icon="layers-outline" label="Map layers" active={layersOpen} onPress={() => setLayersOpen(true)} />
           ) : null}
           <ControlButton icon="scan-outline" label="Fit everything" onPress={() => engine.current?.fit(true)} />
-          <CompassButton onPress={() => engine.current?.resetNorth()} />
           {allowExpand && onToggleExpand ? (
             <ControlButton
               icon={expanded ? "contract-outline" : "expand-outline"}
@@ -423,6 +422,11 @@ function MapCore(props: CoreProps) {
             />
           ) : null}
         </View>
+      </View>
+
+      {/* Compass: its own button left of the stack, so the stack never grows into My location. */}
+      <View pointerEvents="box-none" style={[styles.compassSlot, { top: 12 + controlsTopInset }]}>
+        <CompassButton onPress={() => engine.current?.resetNorth()} />
       </View>
 
       {/* Bottom-right: my location and zoom. */}
@@ -514,7 +518,7 @@ function CompassButton({ onPress }: { onPress(): void }) {
       accessibilityLabel={`Map turned ${Math.round(bearing)} degrees. Turn back to north up`}
       onPress={onPress}
       hitSlop={4}
-      style={({ pressed }) => [styles.control, pressed && styles.controlPressed]}
+      style={({ pressed }) => [styles.group, styles.control, pressed && styles.controlPressed]}
     >
       <Animated.View style={[styles.needle, { opacity: appear, transform: [{ scale: appear }, { rotate: `${-bearing}deg` }] }]}>
         <View style={styles.needleNorth} />
@@ -999,6 +1003,8 @@ const useStyles = makeStyles((c, scheme) =>
     },
     groupGap: { marginBottom: 10 },
     control: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+    // Left of the top-right stack (44 px wide + 10 px gap).
+    compassSlot: { position: "absolute", right: 12 + 44 + 10 },
     needle: { width: 26, height: 26, alignItems: "center", justifyContent: "center" },
     needleNorth: {
       width: 0,
