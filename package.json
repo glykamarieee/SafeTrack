@@ -38,8 +38,14 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@react-native/jest-preset": "^0.86.3",
+    "@testing-library/react-native": "14.1.0",
+    "@types/jest": "29.5.14",
     "@types/react": "~19.2.2",
+    "jest": "~29.7.0",
+    "jest-expo": "57.0.6",
     "patch-package": "^8.0.1",
+    "test-renderer": "^1.0.0",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -48,7 +54,27 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "build:android": "expo prebuild -p android && android\\gradlew.bat -p android app:assembleRelease -x lint -x test && expo run:android --variant release --binary android/app/build/outputs/apk/release/app-release.apk"
+    "build:android": "expo prebuild -p android && android\\gradlew.bat -p android app:assembleRelease -x lint -x test && expo run:android --variant release --binary android/app/build/outputs/apk/release/app-release.apk",
+    "test": "jest",
+    "test:auth": "jest __tests__/auth --verbose --forceExit"
+  },
+  "jest": {
+    "preset": "jest-expo",
+    "testEnvironment": "<rootDir>/__tests__/setup/environment.js",
+    "setupFiles": [
+      "<rootDir>/__tests__/setup/env.js"
+    ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/__tests__/setup/mocks.js"
+    ],
+    "testMatch": [
+      "<rootDir>/__tests__/**/*.test.ts?(x)"
+    ],
+    "moduleNameMapper": {
+      "^expo-asset$": "<rootDir>/node_modules/expo/node_modules/expo-asset"
+    },
+    "testTimeout": 30000,
+    "maxWorkers": 1
   },
   "private": true
 }

@@ -52,3 +52,7 @@ supabase-backup-before-integration/
 # .NET build output (report-service is no longer used; never commit build files)
 report-service/bin/
 report-service/obj/
+
+# Unit test logins and run output (never pushed)
+__tests__/setup/accounts.local.json
+__tests__/results/
