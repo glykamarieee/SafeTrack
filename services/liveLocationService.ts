@@ -14,8 +14,10 @@ import type { TravelMode } from "../types/safetrack";
  *   arrives here on the private Realtime topic child-live:<child id>. Nothing
  *   is saved per second; history rows keep their usual pace.
  * - One session per child, shared by every screen that shows the child.
- * - Stops on its own after SESSION_MS (free-plan Realtime messages), when the
- *   app goes to the background, and when the last screen closes.
+ * - Runs as long as a map screen is in front (no tap needed); stops when the
+ *   app goes to the background and when the last screen closes, and starts
+ *   again on its own when the app returns. A still child sends a fix only
+ *   every 5 s (watch and phone), which keeps free-plan Realtime use low.
  */
 
 export type LiveFix = {
@@ -33,12 +35,11 @@ export type LiveFix = {
   modeConfidence: number | null;
 };
 
-/** connecting: asked, nothing yet; live: fixes arriving; paused: stopped after SESSION_MS; off: unavailable. */
+/** connecting: asked, nothing yet; live: fixes arriving; paused: app in the background; off: unavailable. */
 export type LiveStatus = "connecting" | "live" | "paused" | "off";
 
 const RENEW_MS = 15_000;
 const RENEW_SECONDS = 30;
-const SESSION_MS = 10 * 60_000;
 /** No fix for this long: back to "connecting" (device offline or no signal). */
 const QUIET_MS = 20_000;
 
@@ -110,7 +111,7 @@ function closeChannel(session: Session) {
   session.channel = null;
 }
 
-/** (Re)starts asking for live fixes for SESSION_MS. */
+/** (Re)starts asking for live fixes. */
 function start(childId: string, session: Session) {
   stopTimers(session);
   session.startedAt = Date.now();
@@ -135,18 +136,12 @@ function start(childId: string, session: Session) {
   }
 
   const renew = () => {
-    if (Date.now() - session.startedAt >= SESSION_MS) {
-      stopTimers(session);
-      void request(childId, 0).catch(() => undefined);
-      setStatus(childId, "paused");
-      return;
-    }
     request(childId, RENEW_SECONDS).catch((reason) => {
-      // Before the migration runs, or no permission: the map keeps its normal
-      // updates (saved records through realtime and the 15 s check).
+      // Offline for a moment, or no permission: the map keeps its normal
+      // updates (saved records through realtime and the 15 s check), and the
+      // next renewal tries again.
       console.log("[live location]", (reason as { message?: string })?.message ?? reason);
-      stopTimers(session);
-      setStatus(childId, "off");
+      if (!session.lastFixAt || Date.now() - session.lastFixAt > QUIET_MS) setStatus(childId, "off");
     });
   };
   renew();
@@ -200,7 +195,7 @@ export function watchChildLive(childId: string, listener: (fix: LiveFix) => void
   };
 }
 
-/** After the 10-minute pause: watch live again. */
+/** Watch live again (after an error or a pause). */
 export function resumeChildLive(childId: string) {
   const session = sessions.get(childId);
   if (session) start(childId, session);

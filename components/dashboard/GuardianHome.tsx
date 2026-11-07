@@ -334,7 +334,7 @@ export function GuardianHome() {
                 {live.status === "paused" ? (
                   <Pressable accessibilityRole="button" onPress={live.resume} hitSlop={6}>
                     <Text variant="caption" tone="primary" weight="800">
-                      Live paused to save data · tap to resume
+                      Live paused · tap to resume
                     </Text>
                   </Pressable>
                 ) : null}

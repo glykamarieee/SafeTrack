@@ -3,7 +3,7 @@ import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import { Platform } from "react-native";
 
-import { classifySpeed, speedBetween } from "../lib/travelMode";
+import { SPEED_BANDS, classifySpeed, speedBetween } from "../lib/travelMode";
 import { ChildPhoneUnlinkedError, pushChildPhoneLive, recordChildPhoneLocation } from "./childMobileService";
 
 /**
@@ -36,9 +36,14 @@ const STILL_SAVE_MS = 3 * 60 * 1000;
 // anyone is watching every LIVE_PROBE_MS with the fix it already has.
 const LIVE_INTERVAL_MS = 1000;
 const LIVE_PROBE_MS = 20 * 1000;
+// Live and still: a fix this often keeps the map "Live"; a move of LIVE_MOVE_M
+// or a walking speed sends at once.
+const LIVE_STILL_MS = 5 * 1000;
+const LIVE_MOVE_M = 5;
 const LIVE_KEY = "safetrack.childPhone.live";
 
-type LiveState = { live: boolean; probedAt: number };
+/** probedAt, latitude, longitude: the last fix sent to the live map. */
+type LiveState = { live: boolean; probedAt: number; latitude?: number; longitude?: number };
 
 async function readLive(): Promise<LiveState> {
   try {
@@ -122,11 +127,17 @@ if (Platform.OS !== "web" && !TaskManager.isTaskDefined(CHILD_LOCATION_TASK)) {
 async function shareLive(fix: Location.LocationObject, last: LastSent | null): Promise<boolean> {
   const state = await readLive();
   if (!state.live && fix.timestamp - state.probedAt < LIVE_PROBE_MS) return true;
-  // Poor fixes are not shown live, but still count as a check.
   const accuracy = fix.coords.accuracy ?? null;
   const point = { latitude: fix.coords.latitude, longitude: fix.coords.longitude };
   const reported = fix.coords.speed != null && fix.coords.speed >= 0 ? fix.coords.speed : null;
   const speed = reported ?? (last ? speedBetween({ ...last, time: last.at }, { ...point, time: fix.timestamp }) : null);
+
+  // Live and still: the marker does not move, so one fix every LIVE_STILL_MS.
+  if (state.live && state.latitude != null && state.longitude != null) {
+    const still = (speed ?? 0) < SPEED_BANDS.still;
+    const moved = metersBetween({ latitude: state.latitude, longitude: state.longitude }, point) >= LIVE_MOVE_M;
+    if (still && !moved && fix.timestamp - state.probedAt < LIVE_STILL_MS) return true;
+  }
 
   let live: boolean | null;
   try {
@@ -145,7 +156,7 @@ async function shareLive(fix: Location.LocationObject, last: LastSent | null): P
   }
 
   const next = Boolean(live);
-  await AsyncStorage.setItem(LIVE_KEY, JSON.stringify({ live: next, probedAt: fix.timestamp })).catch(() => undefined);
+  await AsyncStorage.setItem(LIVE_KEY, JSON.stringify({ live: next, probedAt: fix.timestamp, ...point })).catch(() => undefined);
   if (next !== state.live) {
     await startTask(next ? LIVE_INTERVAL_MS : CHECK_INTERVAL_MS).catch((reason) =>
       console.warn("[background location] pace change failed", reason),

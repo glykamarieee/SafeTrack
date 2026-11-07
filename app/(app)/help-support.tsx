@@ -43,7 +43,7 @@ const FAQS: Array<{ question: string; answer: string }> = [
   },
   {
     question: "How often is my child's location updated?",
-    answer: "While you have the Home or Location map open, about every second, so the map follows the child live (it pauses after 10 minutes to save data; tap to resume). Otherwise about every 10 seconds while the child is moving and every 3 minutes while still. After an SOS, the watch checks every 5 seconds for 10 minutes.",
+    answer: "While you have the Home or Location map open, about every second while the child moves (every 5 seconds while still), so the map follows the child live without refreshing. Otherwise about every 10 seconds while the child is moving and every 3 minutes while still. After an SOS, the watch checks every 5 seconds for 10 minutes.",
   },
   {
     question: "Why does the map say Updated some time ago?",

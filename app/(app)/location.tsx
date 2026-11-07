@@ -268,7 +268,7 @@ export default function LocationScreen() {
               </View>
               <Text variant="caption" numberOfLines={1} tone={live.status === "paused" ? "primary" : undefined}>
                 {live.status === "paused"
-                  ? "Live paused to save data · tap to resume"
+                  ? "Live paused · tap to resume"
                   : live.status === "live"
                     ? "Following the child every second"
                     : details.live

@@ -268,8 +268,10 @@ the Expo app.
   only `is_guardian_of`). The watch and phone ask `push_*_live` every 20 s with
   their last fix; while it answers `live: true` they take a fix every second and
   send each one (broadcast by `realtime.send`, nothing written to
-  `location_logs`). Stops after 10 min (tap to resume), in the background, and
-  when the screen closes. `applyLiveFix` in the location store ignores drift
+  `location_logs`); a still child sends one every 5 s (any 5 m move or walking
+  speed sends at once). Runs while the screen is in front with no tap needed;
+  stops in the background and when the screen closes, restarts on return, and
+  a failed renewal is retried every 15 s. `applyLiveFix` in the location store ignores drift
   within the accuracy while still, needs 2 agreeing readings to change the
   activity, and never lets an older saved row pull the marker back.
 - **Travel mode:** `location_logs.speed_mps`, `heading_degrees`, `travel_mode`
