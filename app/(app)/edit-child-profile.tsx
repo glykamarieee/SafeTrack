@@ -26,6 +26,8 @@ import {
 
 import { useAuthStore } from "../../store/authStore";
 import { supabase } from "../../lib/supabase";
+import { showAlert } from "../../lib/platformAlert";
+import { deleteChildProfile } from "../../services/profileService";
 
 import {
   guardianColors as colors,
@@ -112,8 +114,9 @@ export default function EditChildProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [openingConnectionCode, setOpeningConnectionCode] = useState(false);
   const [unlinkingWatch, setUnlinkingWatch] = useState(false);
+  const [deletingChild, setDeletingChild] = useState(false);
 
-  const busy = saving || openingConnectionCode || unlinkingWatch;
+  const busy = saving || openingConnectionCode || unlinkingWatch || deletingChild;
 
   const loadChildProfile = useCallback(async () => {
     setLoading(true);
@@ -322,6 +325,51 @@ export default function EditChildProfileScreen() {
           text: "Unlink",
           style: "destructive",
           onPress: () => void unlinkWatch(),
+        },
+      ]
+    );
+  };
+
+  const deleteChild = async () => {
+    setDeletingChild(true);
+
+    try {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+
+      if (authError || !authData.user) {
+        throw new Error("Your session has expired. Please log in again.");
+      }
+
+      // Soft delete on the server: the child is removed from this account,
+      // linked devices are released, and history is kept for the record.
+      await deleteChildProfile(authData.user.id, childId);
+      await useAuthStore.getState().refreshLinkedChildren().catch(() => undefined);
+
+      showAlert(
+        "Child profile deleted",
+        `${name.trim() || "The child"} was removed and the linked devices were released.`,
+        [{ text: "OK", onPress: () => router.replace("/(app)/home") }]
+      );
+    } catch (reason) {
+      showAlert(
+        "Unable to delete child profile",
+        reason instanceof Error ? reason.message : "Please try again."
+      );
+    } finally {
+      setDeletingChild(false);
+    }
+  };
+
+  const confirmDeleteChild = () => {
+    showAlert(
+      "Delete child profile?",
+      `${name.trim() || "This child"} will be removed from your account and the linked watch or phone will stop sending locations. Past location, safety and SOS records are kept.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => void deleteChild(),
         },
       ]
     );
@@ -650,6 +698,32 @@ export default function EditChildProfileScreen() {
               <Text style={styles.saveNote}>
                 Only the child&apos;s profile details are changed here.
               </Text>
+
+              <Pressable
+                disabled={busy}
+                onPress={confirmDeleteChild}
+                accessibilityRole="button"
+                style={({ pressed }) => [
+                  styles.deleteChild,
+                  pressed && styles.pressed,
+                  busy && styles.buttonDisabled,
+                ]}
+              >
+                {deletingChild ? (
+                  <ActivityIndicator size="small" color={colors.danger} />
+                ) : (
+                  <>
+                    <Ionicons
+                      name="trash-outline"
+                      size={18}
+                      color={colors.danger}
+                    />
+                    <Text style={styles.deleteChildText}>
+                      Delete child profile
+                    </Text>
+                  </>
+                )}
+              </Pressable>
             </>
           ) : (
             <>
@@ -1306,6 +1380,21 @@ const useStyles = makeStyles((__c) => {
     textAlign: "center",
     fontSize: 9.5,
     lineHeight: 14,
+  },
+  deleteChild: {
+    minHeight: 48,
+    marginTop: 26,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: radius.pill,
+    backgroundColor: colors.dangerSoft,
+  },
+  deleteChildText: {
+    color: colors.danger,
+    fontSize: 13,
+    fontWeight: "900",
   },
   pressed: {
     opacity: 0.82,

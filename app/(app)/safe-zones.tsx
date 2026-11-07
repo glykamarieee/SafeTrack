@@ -706,6 +706,21 @@ export default function SafeZonesScreen() {
       return;
     }
 
+    const nameKey = form.name.trim().toLowerCase();
+    if (
+      zones.some(
+        (zone) =>
+          zone.id !== editingId &&
+          zone.name.trim().toLowerCase() === nameKey
+      )
+    ) {
+      showAlert(
+        "Name already used",
+        `This child already has a Safe Zone named "${form.name.trim()}". Enter a different name.`
+      );
+      return;
+    }
+
     if (!point) {
       showAlert(
         "Choose a Safe Zone center",

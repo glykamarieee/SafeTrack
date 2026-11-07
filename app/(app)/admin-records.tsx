@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -7,7 +7,7 @@ import { TextInput } from "../../components/ui/NativeText";
 import { Text } from "../../components/ui/Text";
 import { PullRefresh } from "../../components/ui/PullRefresh";
 import { Button } from "../../components/ui/Button";
-import { Rise, Skeleton, TonePill, TopBar, toneFor, useTone, type IconName, type ToneKey } from "../../components/admin/kit";
+import { Rise, Skeleton, SlideOver, TonePill, TopBar, toneFor, useTone, type IconName, type ToneKey } from "../../components/admin/kit";
 import { moveDate, todayKey } from "../../components/history/dates";
 import { ADMIN_PAGE_SIZE, fetchAdminRecords, type AdminRecord, type AdminRecordKind } from "../../services/adminRecordsService";
 import { makeStyles, useTheme } from "../../theme/ThemeProvider";
@@ -96,6 +96,8 @@ export default function AdminRecordsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const request = useRef(0);
+  const [selected, setSelected] = useState<AdminRecord | null>(null);
+  const { width } = useWindowDimensions();
 
   const load = useCallback(
     async (nextPage: number) => {
@@ -289,7 +291,7 @@ export default function AdminRecordsScreen() {
     children.push(
       <View key={`d-${day}`} style={[styles.block, { backgroundColor: colors.surface, borderColor: colors.rule }]}>
         {list.map((record, index) => (
-          <Entry key={record.id} record={record} last={index === list.length - 1} />
+          <Entry key={record.id} record={record} last={index === list.length - 1} onOpen={setSelected} />
         ))}
       </View>,
     );
@@ -312,17 +314,74 @@ export default function AdminRecordsScreen() {
       >
         {children}
       </ScrollView>
+      <SlideOver open={Boolean(selected)} onClose={() => setSelected(null)} title="Record details" width={Math.min(520, width)}>
+        {selected ? <RecordDetail record={selected} /> : null}
+      </SlideOver>
     </SafeAreaView>
   );
 }
 
-function Entry({ record, last }: { record: AdminRecord; last: boolean }) {
+function RecordDetail({ record }: { record: AdminRecord }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const tab = TABS.find((item) => item.id === record.kind);
+  const rows: [string, string][] = [
+    ["Record type", tab?.label.replace(/s$/, "") ?? record.kind],
+    ["Child", record.childName],
+    [
+      "Date and time",
+      new Date(record.occurredAt).toLocaleString("en-PH", {
+        timeZone: "Asia/Manila",
+        weekday: "short",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        second: "2-digit",
+      }),
+    ],
+    [record.kind === "location" ? "Source" : record.kind === "sos" ? "Status" : "Event", TAG_LABELS[record.tag] ?? record.tag],
+  ];
+  if (record.detail) rows.push(["Details", record.detail]);
+  rows.push(["Address", record.place || "Address not saved for this spot"]);
+  if (record.latitude !== null && record.longitude !== null) {
+    rows.push(["Coordinates", `${record.latitude.toFixed(5)}, ${record.longitude.toFixed(5)}`]);
+  }
+  rows.push(["Record ID", record.id]);
+
+  return (
+    <View style={styles.detail}>
+      <View style={styles.entryTop}>
+        <Text variant="heading" weight="800" style={{ flexShrink: 1 }}>
+          {record.title}
+        </Text>
+        <TonePill tone={toneOf(record)} label={TAG_LABELS[record.tag] ?? record.tag} center />
+      </View>
+      {rows.map(([label, value]) => (
+        <View key={label} style={[styles.detailRow, { borderBottomColor: colors.rule }]}>
+          <Text variant="caption" weight="800" tone="muted">
+            {label}
+          </Text>
+          <Text selectable>{value}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function Entry({ record, last, onOpen }: { record: AdminRecord; last: boolean; onOpen(record: AdminRecord): void }) {
   const styles = useStyles();
   const { colors } = useTheme();
   const tone = toneOf(record);
   const t = useTone(tone);
   return (
-    <View style={styles.entry}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${record.title}, ${record.childName}. Show details`}
+      onPress={() => onOpen(record)}
+      style={({ pressed }) => [styles.entry, pressed && { opacity: 0.7 }]}
+    >
       <Text variant="caption" weight="800" tone="ink2" tabular style={styles.time}>
         {clock(record.occurredAt)}
       </Text>
@@ -351,7 +410,8 @@ function Entry({ record, last }: { record: AdminRecord; last: boolean }) {
           </Text>
         ) : null}
       </View>
-    </View>
+      <Ionicons name="chevron-forward" size={16} color={colors.muted} style={styles.chevron} />
+    </Pressable>
   );
 }
 
@@ -402,5 +462,8 @@ const useStyles = makeStyles(() =>
     entryTop: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
     empty: { alignItems: "center", gap: 6, padding: 32, borderRadius: radius.md, borderWidth: 1, borderStyle: "dashed", marginTop: 8 },
     more: { alignItems: "center", paddingVertical: 18 },
+    chevron: { alignSelf: "center" },
+    detail: { padding: 20, gap: 4, paddingBottom: 40 },
+    detailRow: { gap: 3, paddingVertical: 11, borderBottomWidth: 1 },
   }),
 );

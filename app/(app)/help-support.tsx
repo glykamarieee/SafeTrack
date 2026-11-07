@@ -5,7 +5,8 @@ import {
   Pressable,
   Linking,
 } from "react-native";
-import { Text } from "../../components/ui/NativeText";
+import { useMemo, useState } from "react";
+import { Text, TextInput } from "../../components/ui/NativeText";
 import { useRouter } from "expo-router";
 
 import { Button } from "../../components/ui/Button";
@@ -30,12 +31,70 @@ import {
 import { makeStyles, useTheme } from "../../theme/ThemeProvider";
 import { guardianPalette } from "../../theme/legacy";
 
+/** Answers describe how the current app behaves; keep them in step with it. */
+const FAQS: Array<{ question: string; answer: string }> = [
+  {
+    question: "How do I link my child's smartwatch?",
+    answer: "Open the child's tracking source, choose Watch or Both, enter the Watch ID shown on the watch, then tap Generate child device code and enter that code on the watch.",
+  },
+  {
+    question: "How do I link my child's phone?",
+    answer: "Choose Phone or Both as the tracking source and tap Generate child phone code. On the child's phone, tap I already have an account, then I'm a child: link this phone, and enter the code.",
+  },
+  {
+    question: "How often is my child's location updated?",
+    answer: "About every 10 seconds while the child is moving and every 3 minutes while still. After an SOS, the watch checks every 5 seconds for 10 minutes.",
+  },
+  {
+    question: "Why does the map say Updated some time ago?",
+    answer: "The watch or phone has not sent a new location, usually because it is off, has no internet, or has no location signal. The map shows the last known location until a new one arrives.",
+  },
+  {
+    question: "What happens when my child presses SOS?",
+    answer: "You receive an SOS alert with the child's location, and SafeTrack keeps reminding you until you acknowledge it on the SOS Alerts screen.",
+  },
+  {
+    question: "My child pressed SOS by mistake. What now?",
+    answer: "On the watch, the child taps Sent by mistake, then Yes, I'm OK. The SOS is cancelled and you are told the child is safe.",
+  },
+  {
+    question: "What is a Safe Zone?",
+    answer: "A place such as Home or School with a center and a radius from 50 to 5000 meters. You are notified when your child enters or leaves it.",
+  },
+  {
+    question: "Why am I not getting notifications?",
+    answer: "Check Notification Settings in your profile and allow SafeTrack notifications on your phone. SOS alerts are always sent and cannot be turned off.",
+  },
+  {
+    question: "What does Possible unusual movement mean?",
+    answer: "SafeTrack's AI review noticed movement that differs from your child's usual pattern. It is advice only; check the Location or History screen to see where your child is.",
+  },
+  {
+    question: "How do I reset my password?",
+    answer: "On the Login screen, tap Forgot password and enter your email address. Open the link in the email to set a new password.",
+  },
+  {
+    question: "How do I remove a child from my account?",
+    answer: "Open the child's details and tap Delete child profile. The linked watch or phone stops sending locations, and past records are kept.",
+  },
+];
+
 export default function HelpSupportScreen() {
   const styles = useStyles();
   const router = useRouter();
   const colors = guardianPalette(useTheme().colors);
+  const [query, setQuery] = useState("");
+  const [openQuestion, setOpenQuestion] = useState<string | null>(null);
 
-
+  const searching = query.trim().length > 0;
+  const faqs = useMemo(() => {
+    const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return FAQS;
+    return FAQS.filter((faq) => {
+      const text = `${faq.question} ${faq.answer}`.toLowerCase();
+      return words.every((word) => text.includes(word));
+    });
+  }, [query]);
 
 
   const openEmail = () => {
@@ -111,7 +170,56 @@ export default function HelpSupportScreen() {
         </View>
 
 
+        <Text style={styles.faqHeading}>
+          Frequently asked questions
+        </Text>
 
+        <View style={styles.searchShell}>
+          <Ionicons name="search-outline" size={18} color={colors.muted} />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search help (for example: SOS, watch, zone)"
+            placeholderTextColor={colors.mutedLight}
+            style={styles.searchInput}
+            autoCorrect={false}
+            accessibilityLabel="Search help"
+          />
+          {query ? (
+            <Pressable onPress={() => setQuery("")} accessibilityRole="button" accessibilityLabel="Clear search" hitSlop={8}>
+              <Ionicons name="close-circle" size={18} color={colors.muted} />
+            </Pressable>
+          ) : null}
+        </View>
+
+        <View style={styles.card}>
+          {faqs.length === 0 ? (
+            <Text style={styles.noMatch}>
+              No help matches &quot;{query.trim()}&quot;. Try another word or contact support.
+            </Text>
+          ) : (
+            faqs.map((faq, index) => (
+              <View key={faq.question}>
+                {index > 0 ? <Divider /> : null}
+                <Pressable
+                  onPress={() => setOpenQuestion(openQuestion === faq.question ? null : faq.question)}
+                  accessibilityRole="button"
+                  style={styles.faqRow}
+                >
+                  <Text style={styles.faqQuestion}>{faq.question}</Text>
+                  <Ionicons
+                    name={openQuestion === faq.question || searching ? "chevron-up" : "chevron-down"}
+                    size={18}
+                    color={colors.muted}
+                  />
+                </Pressable>
+                {openQuestion === faq.question || searching ? (
+                  <Text style={styles.itemDescription}>{faq.answer}</Text>
+                ) : null}
+              </View>
+            ))
+          )}
+        </View>
 
 
         <View style={styles.contact}>
@@ -267,6 +375,23 @@ const useStyles = makeStyles((__c) => {
   const colors = guardianPalette(__c);
   return StyleSheet.create({
   replay: { marginTop: 12 },
+  faqHeading: { marginTop: 26, fontSize: 17, fontWeight: "900", color: colors.ink },
+  searchShell: {
+    marginTop: 12,
+    minHeight: 48,
+    paddingHorizontal: 14,
+    gap: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.white,
+  },
+  searchInput: { flex: 1, fontSize: 14, color: colors.ink, paddingVertical: 10, outlineStyle: "none" } as any,
+  faqRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  faqQuestion: { flex: 1, fontSize: 14, fontWeight: "800", color: colors.ink },
+  noMatch: { fontSize: 13, lineHeight: 19, color: colors.muted, textAlign: "center" },
   credits: { marginTop: 18, fontSize: 10.5, textAlign: "center", color: colors.muted },
 
 safe:{
