@@ -195,6 +195,8 @@ function MapCore(props: CoreProps) {
   const engine = useRef<MapEngineHandle>(null);
   // The map's rotation: reported by the engine, read by the arrows and the compass.
   const bearing = useRef(createBearingStore()).current;
+  const [rotated, setRotated] = useState(false);
+  useEffect(() => bearing.subscribe((value) => setRotated(value > 2 && value < 358)), [bearing]);
   const touch = useMapScrollLock();
   const guardian = useAuthStore((state) => state.guardian);
   const guardianPhoto = useAvatarUrl(guardian?.avatarPath, guardian?.avatarUrl);
@@ -362,10 +364,17 @@ function MapCore(props: CoreProps) {
     return <KeyMissing />;
   }
 
-  const topStack = 12 + controlsTopInset + 44 * ((showMapStyleControl ? 1 : 0) + 1 + (allowExpand && onToggleExpand ? 1 : 0));
+  const canExpand = Boolean(allowExpand && onToggleExpand);
+  const topStack = 12 + controlsTopInset + 44 * ((showMapStyleControl ? 1 : 0) + 1 + (canExpand ? 1 : 0));
   const roomBelow = mapHeight - topStack - (26 + (mapPadding?.bottom ?? 0)) - 10;
   const showLocate = showMyLocation && (mapHeight === 0 || roomBelow >= 44);
   const showZoom = mapHeight === 0 || roomBelow >= 88 + (showLocate ? 54 : 0);
+  // While the map is turned the compass joins the white column. When the
+  // column has no room to grow (it would cover My location), the compass takes
+  // the Full screen button's place until the map is back to north.
+  const roomForCompass = mapHeight === 0 || roomBelow - 44 >= (showLocate ? 54 : 0) + (showZoom ? 88 : 0);
+  // "Close full screen" always stays.
+  const showExpand = canExpand && (expanded || !rotated || roomForCompass);
 
   return (
     <MapBearingContext.Provider value={bearing}>
@@ -414,7 +423,8 @@ function MapCore(props: CoreProps) {
             <ControlButton icon="layers-outline" label="Map layers" active={layersOpen} onPress={() => setLayersOpen(true)} />
           ) : null}
           <ControlButton icon="scan-outline" label="Fit everything" onPress={() => engine.current?.fit(true)} />
-          {allowExpand && onToggleExpand ? (
+          <CompassButton onPress={() => engine.current?.resetNorth()} />
+          {showExpand && onToggleExpand ? (
             <ControlButton
               icon={expanded ? "contract-outline" : "expand-outline"}
               label={expanded ? "Close full screen" : "Full screen"}
@@ -422,11 +432,6 @@ function MapCore(props: CoreProps) {
             />
           ) : null}
         </View>
-      </View>
-
-      {/* Compass: its own button left of the stack, so the stack never grows into My location. */}
-      <View pointerEvents="box-none" style={[styles.compassSlot, { top: 12 + controlsTopInset }]}>
-        <CompassButton onPress={() => engine.current?.resetNorth()} />
       </View>
 
       {/* Bottom-right: my location and zoom. */}
@@ -518,7 +523,7 @@ function CompassButton({ onPress }: { onPress(): void }) {
       accessibilityLabel={`Map turned ${Math.round(bearing)} degrees. Turn back to north up`}
       onPress={onPress}
       hitSlop={4}
-      style={({ pressed }) => [styles.group, styles.control, pressed && styles.controlPressed]}
+      style={({ pressed }) => [styles.control, pressed && styles.controlPressed]}
     >
       <Animated.View style={[styles.needle, { opacity: appear, transform: [{ scale: appear }, { rotate: `${-bearing}deg` }] }]}>
         <View style={styles.needleNorth} />
@@ -1003,8 +1008,6 @@ const useStyles = makeStyles((c, scheme) =>
     },
     groupGap: { marginBottom: 10 },
     control: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-    // Left of the top-right stack (44 px wide + 10 px gap).
-    compassSlot: { position: "absolute", right: 12 + 44 + 10 },
     needle: { width: 26, height: 26, alignItems: "center", justifyContent: "center" },
     needleNorth: {
       width: 0,
