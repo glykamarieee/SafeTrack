@@ -14,7 +14,7 @@ jest.mock("react-native-safe-area-context", () => require("react-native-safe-are
 
 jest.mock("expo-router", () => {
   const React = require("react");
-  const router = { replace: jest.fn(), push: jest.fn(), back: jest.fn(), canGoBack: jest.fn(() => true) };
+  const router = { replace: jest.fn(), push: jest.fn(), navigate: jest.fn(), back: jest.fn(), canGoBack: jest.fn(() => true) };
   let params = {};
   return {
     router,
@@ -46,7 +46,11 @@ jest.mock("expo-linking", () => {
 });
 
 // The welcome video and push registration need a phone.
-jest.mock("expo-video", () => ({ useVideoPlayer: () => ({ play: jest.fn(), pause: jest.fn() }), VideoView: () => null }));
+// Alert sounds play through a hidden video player.
+jest.mock("expo-video", () => {
+  const player = () => ({ play: jest.fn(), pause: jest.fn(), replace: jest.fn(), release: jest.fn(), addListener: () => ({ remove: () => undefined }) });
+  return { useVideoPlayer: player, createVideoPlayer: player, VideoView: () => null };
+});
 jest.mock("../../services/pushRegistrationService", () => ({
   registerGuardianPushToken: jest.fn(async () => "granted"),
   unregisterGuardianPushToken: jest.fn(async () => undefined),
@@ -56,6 +60,7 @@ beforeEach(async () => {
   const router = require("expo-router");
   router.router.replace.mockClear();
   router.router.push.mockClear();
+  router.router.navigate.mockClear();
   router.Redirect.mockClear();
   router.__setParams({});
 });

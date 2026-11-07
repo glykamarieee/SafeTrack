@@ -9,11 +9,16 @@ import path from "path";
  *   "guardianWithChild": { "email": "...", "password": "..." },
  *   "guardianNoChild":   { "email": "...", "password": "..." },
  *   "admin":             { "email": "...", "password": "..." },
- *   "deletedAccount":    { "email": "...", "password": "..." }
+ *   "deletedAccount":    { "email": "...", "password": "..." },
+ *   "childPhone":        { "childId": "...", "deviceToken": "..." }
  * }
+ *
+ * childPhone is the guardianWithChild account's second child, paired to a
+ * phone (the token the phone keeps after entering the connection code).
  */
 type Login = { email: string; password: string };
-type Accounts = { guardianWithChild: Login; guardianNoChild: Login; admin: Login; deletedAccount: Login };
+type ChildPhone = { childId: string; deviceToken: string };
+type Accounts = { guardianWithChild: Login; guardianNoChild: Login; admin: Login; deletedAccount: Login; childPhone: ChildPhone };
 
 const file = path.join(__dirname, "accounts.local.json");
 
