@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useFocusEffect } from "expo-router";
 
+import { useLiveStore } from "../services/liveLocationService";
 import { fetchSmartwatchForChild, type SmartwatchStatus } from "../services/smartwatchService";
 import { useLocationStore } from "../store/locationStore";
 
-/** The watch reports battery with every heartbeat and location; read it this often. */
-const REFRESH_MS = 30_000;
+/** The watch saves its battery at least every 20 s (push_watch_live); read it this often. */
+const REFRESH_MS = 15_000;
 
 /**
  * The child's watch status (battery, network, last contact), kept current
@@ -50,5 +51,19 @@ export function useWatchStatus(childId: string | null | undefined): {
     if (savedAt) void refresh();
   }, [savedAt, refresh]);
 
-  return { watch, refresh };
+  // While the map is live, the watch's battery comes with each fix (newest wins).
+  const live = useLiveStore((state) => (childId ? state.device[childId] : undefined));
+  const [readAt, setReadAt] = useState(0);
+  useEffect(() => {
+    setReadAt(Date.now());
+  }, [watch]);
+  const merged = useMemo(
+    () =>
+      watch && live && live.at >= readAt
+        ? { ...watch, batteryPercent: live.batteryPercent, networkType: live.networkType ?? watch.networkType }
+        : watch,
+    [watch, live, readAt],
+  );
+
+  return { watch: merged, refresh };
 }

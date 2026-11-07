@@ -33,6 +33,9 @@ export type LiveFix = {
   headingDegrees: number | null;
   travelMode: TravelMode | null;
   modeConfidence: number | null;
+  /** Watch only (migration 20261108b): its battery and network right now. */
+  batteryPercent: number | null;
+  networkType: string | null;
 };
 
 /** connecting: asked, nothing yet; live: fixes arriving; paused: app in the background; off: unavailable. */
@@ -58,9 +61,23 @@ type LiveState = {
   status: Record<string, LiveStatus>;
   /** Delay from the device's fix to this screen, last few fixes (ms). */
   delays: Record<string, number[]>;
+  /** The watch's battery and network from the newest live fix. */
+  device: Record<string, { batteryPercent: number; networkType: string | null; at: number }>;
 };
 
-export const useLiveStore = create<LiveState>(() => ({ status: {}, delays: {} }));
+export const useLiveStore = create<LiveState>(() => ({ status: {}, delays: {}, device: {} }));
+
+function recordDevice(fix: LiveFix) {
+  if (fix.source !== "smartwatch" || fix.batteryPercent == null) return;
+  const current = useLiveStore.getState().device[fix.childId];
+  if (current?.batteryPercent === fix.batteryPercent && current.networkType === fix.networkType) return;
+  useLiveStore.setState((state) => ({
+    device: {
+      ...state.device,
+      [fix.childId]: { batteryPercent: fix.batteryPercent!, networkType: fix.networkType, at: fix.receivedAt },
+    },
+  }));
+}
 
 function setStatus(childId: string, status: LiveStatus) {
   if (useLiveStore.getState().status[childId] === status) return;
@@ -91,6 +108,8 @@ function toFix(childId: string, payload: Record<string, unknown>): LiveFix | nul
     headingDegrees: number(payload.headingDegrees),
     travelMode: (typeof payload.travelMode === "string" ? payload.travelMode : null) as TravelMode | null,
     modeConfidence: number(payload.modeConfidence),
+    batteryPercent: number(payload.batteryPercent),
+    networkType: typeof payload.networkType === "string" ? payload.networkType : null,
   };
 }
 
@@ -128,6 +147,7 @@ function start(childId: string, session: Session) {
         setStatus(childId, "live");
         const fixTime = Date.parse(fix.recordedAt);
         if (Number.isFinite(fixTime)) recordDelay(childId, fix.receivedAt - fixTime);
+        recordDevice(fix);
         session.listeners.forEach((listener) => listener(fix));
       });
     session.channel = channel;
