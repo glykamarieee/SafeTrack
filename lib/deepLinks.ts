@@ -14,8 +14,8 @@ import { router } from "expo-router";
  *
  * A reset link that starts SafeTrack from closed was routed to the start
  * screen, which then showed Get started (2026-11-08): the start screen now
- * waits for `initialLink` and opens Reset password for a recovery link, and a
- * recovery link that arrives while another screen is open moves there too.
+ * asks `openedByNewResetLink` and opens Reset password for a recovery link,
+ * and a recovery link that arrives while another screen is open moves there.
  */
 let latest: string | null = null;
 const listeners = new Set<(url: string) => void>();
@@ -37,18 +37,30 @@ function remember(url: string | null) {
   listeners.forEach((listener) => listener(url));
 }
 
-/** The link that started the app (null when opened normally); resolves once. */
-export const initialLink: Promise<string | null> =
-  Platform.OS === "web"
-    ? Promise.resolve(null)
-    : Linking.getInitialURL()
-        .then((url) => {
-          remember(url);
-          return url;
-        })
-        .catch(() => null);
+/** Launch links already sent to Reset password (each is used once). */
+const handledLaunchLinks = new Set<string>();
+
+/**
+ * Whether the screen was just opened by a password-reset link that hasn't
+ * been handled yet. Asked fresh each time the start screen mounts: Android
+ * can open a new SafeTrack screen for a link while the app is still running,
+ * and that screen has its own launch link.
+ */
+export async function openedByNewResetLink(): Promise<boolean> {
+  if (Platform.OS === "web") return false;
+  try {
+    const url = await Linking.getInitialURL();
+    if (!url || !isRecoveryLink(url) || handledLaunchLinks.has(url)) return false;
+    handledLaunchLinks.add(url);
+    remember(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 if (Platform.OS !== "web") {
+  void Linking.getInitialURL().then(remember).catch(() => undefined);
   Linking.addEventListener("url", ({ url }) => {
     remember(url);
     // Already running on another screen: go to Reset password (unless the

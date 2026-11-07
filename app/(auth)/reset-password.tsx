@@ -44,6 +44,7 @@ export default function ResetPasswordScreen() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const handled = useRef<string | null>(null);
+  const acceptedHere = useRef(false);
 
   useEffect(() => {
     setResetScreenOpen(true);
@@ -57,6 +58,8 @@ export default function ResetPasswordScreen() {
     handled.current = url;
 
     if (url === acceptedLink) {
+      acceptedHere.current = true;
+      setProblem(null);
       setStage("ready");
       return;
     }
@@ -64,6 +67,9 @@ export default function ResetPasswordScreen() {
     startPasswordRecovery(url)
       .then(() => {
         acceptedLink = url;
+        acceptedHere.current = true;
+        // An earlier, already-used link may have left its message behind.
+        setProblem(null);
         setStage("ready");
         // Keep the tokens out of the browser history.
         if (Platform.OS === "web" && typeof window !== "undefined") {
@@ -71,6 +77,8 @@ export default function ResetPasswordScreen() {
         }
       })
       .catch((reason: Error) => {
+        // A working link already opened the form here (this was an older one).
+        if (acceptedHere.current) return;
         setProblem(reason.message);
         setStage("invalid");
       });

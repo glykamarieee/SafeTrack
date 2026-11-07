@@ -13,7 +13,7 @@ import { StatusBar } from "expo-status-bar";
 import { useAuthStore } from "../store/authStore";
 import { hasChildPhoneCredentials } from "../services/childMobileService";
 import { needsWelcomeGuide } from "../services/onboardingService";
-import { initialLink, isRecoveryLink } from "../lib/deepLinks";
+import { openedByNewResetLink } from "../lib/deepLinks";
 import { StartSplash } from "../components/StartSplash";
 
 
@@ -74,8 +74,8 @@ export default function SplashScreen() {
   const [openedByResetLink, setOpenedByResetLink] = useState<boolean | null>(null);
   useEffect(() => {
     let active = true;
-    initialLink
-      .then((url) => active && setOpenedByResetLink(isRecoveryLink(url)))
+    openedByNewResetLink()
+      .then((reset) => active && setOpenedByResetLink(reset))
       .catch(() => active && setOpenedByResetLink(false));
     return () => {
       active = false;
