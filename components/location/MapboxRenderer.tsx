@@ -2,6 +2,7 @@ import { forwardRef, memo, type ElementRef, useCallback, useEffect, useImperativ
 import { Pressable, StyleSheet, View } from "react-native";
 import Mapbox, {
   Camera,
+  CircleLayer,
   FillLayer,
   LineLayer,
   MapView,
@@ -175,6 +176,19 @@ export const MapboxRenderer = forwardRef<MapEngineHandle, MapEngineProps>(functi
     };
   }, [path]);
 
+  const stepShape = useMemo(() => {
+    const steps = props.footprints ?? [];
+    if (!steps.length) return null;
+    return {
+      type: "FeatureCollection" as const,
+      features: steps.map((step) => ({
+        type: "Feature" as const,
+        properties: { opacity: step.opacity },
+        geometry: { type: "Point" as const, coordinates: [step.longitude, step.latitude] },
+      })),
+    };
+  }, [props.footprints]);
+
   const start = initialView ?? DEFAULT_VIEW;
   const ornamentBottom = 8 + mapPadding.bottom;
 
@@ -290,6 +304,22 @@ export const MapboxRenderer = forwardRef<MapEngineHandle, MapEngineProps>(functi
               id="st-route-gap"
               filter={["==", ["get", "gap"], true]}
               style={{ lineColor: "#22B35E", lineWidth: 5, lineDasharray: [1.6, 1.2], lineJoin: "round" }}
+            />
+          </ShapeSource>
+        ) : null}
+
+        {stepShape ? (
+          <ShapeSource id="st-steps" shape={stepShape}>
+            <CircleLayer
+              id="st-steps-dot"
+              style={{
+                circleRadius: ["interpolate", ["linear"], ["zoom"], 14, 1.6, 17, 3.2, 20, 5.5],
+                circleColor: dark ? "#BFE8CF" : "#0D2A1E",
+                circleOpacity: ["get", "opacity"],
+                circleStrokeColor: dark ? "#0D2A1E" : "#FFFFFF",
+                circleStrokeWidth: 1,
+                circleStrokeOpacity: ["get", "opacity"],
+              }}
             />
           </ShapeSource>
         ) : null}

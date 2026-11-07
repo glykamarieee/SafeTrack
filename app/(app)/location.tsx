@@ -6,6 +6,8 @@ import { useRouter } from "expo-router";
 
 import { useSelectedChild } from "../../hooks/useSelectedChild";
 import { usePlaceDetails } from "../../hooks/usePlaceDetails";
+import { useChildLive } from "../../hooks/useChildLive";
+import { recentTrail } from "../../components/location/footprints";
 import { PlaceDetailsCard } from "../../components/location/PlaceDetailsCard";
 import { useAuthStore } from "../../store/authStore";
 import { useLocationStore } from "../../store/locationStore";
@@ -62,6 +64,9 @@ export default function LocationScreen() {
   const loading = useLocationStore((state) => state.isLoading);
   const load = useLocationStore((state) => state.loadForChild);
   const subscribe = useLocationStore((state) => state.subscribeToChildLocation);
+  const liveTrail = useLocationStore((state) => state.liveTrail);
+  // About one fix a second while this screen is open (guardians only).
+  const live = useChildLive(role === "child" ? null : primaryChild?.id);
   const guardianId = useAuthStore((state) => state.guardian?.id);
   const zones = useGeofenceStore((state) => state.zones);
   const zoneEvents = useGeofenceStore((state) => state.events);
@@ -117,15 +122,8 @@ export default function LocationScreen() {
   const zoneCircles = useMemo(() => toZoneCircles(zones, zoneEvents), [zones, zoneEvents]);
   const details = usePlaceDetails(location, history, zoneCircles);
 
-  // The last 10 minutes behind the child, oldest first.
-  const trail = useMemo(() => {
-    if (!location) return [];
-    const since = Date.parse(location.recordedAt) - 10 * 60_000;
-    return history
-      .filter((point) => point.childId === location.childId && point.id !== location.id && Date.parse(point.recordedAt) >= since)
-      .sort((first, second) => Date.parse(first.recordedAt) - Date.parse(second.recordedAt))
-      .map((point) => ({ latitude: point.latitude, longitude: point.longitude }));
-  }, [history, location]);
+  // The last 10 minutes behind the child: footprints on foot, a line otherwise.
+  const recent = useMemo(() => recentTrail(location, history, liveTrail), [history, location, liveTrail]);
 
   const refresh = () => {
     if (primaryChild?.id) {
@@ -180,7 +178,10 @@ export default function LocationScreen() {
         overlays={false}
         bottomInset={location ? 300 : undefined}
         topInset={location ? 100 + insets.top : 0}
-        trail={trail}
+        trail={recent.path}
+        footprints={recent.footprints}
+        mode={details.motion?.mode ?? null}
+        follow={live.status === "live"}
         flush
       />
 
@@ -236,7 +237,12 @@ export default function LocationScreen() {
             >
               <Ionicons name="time-outline" size={21} color={colors.primary} />
             </Pressable>
-            <View style={styles.barCenter}>
+            <Pressable
+              accessibilityRole={live.status === "paused" ? "button" : undefined}
+              disabled={live.status !== "paused"}
+              onPress={live.resume}
+              style={styles.barCenter}
+            >
               <View style={styles.barTitle}>
                 <View style={styles.dotWrap}>
                   <Animated.View
@@ -260,13 +266,19 @@ export default function LocationScreen() {
                   {details.live ? "Live" : `Updated ${age ?? "—"}`}
                 </Text>
               </View>
-              <Text variant="caption" numberOfLines={1}>
-                {details.live ? "Moving with the child" : "Latest reported location"}
+              <Text variant="caption" numberOfLines={1} tone={live.status === "paused" ? "primary" : undefined}>
+                {live.status === "paused"
+                  ? "Live paused to save data · tap to resume"
+                  : live.status === "live"
+                    ? "Following the child every second"
+                    : details.live
+                      ? "Moving with the child"
+                      : "Latest reported location"}
                 {location.accuracyMeters != null ? ` · ±${Math.round(location.accuracyMeters)} m` : ""}
                 {` · from ${location.source === "smartwatch" ? "watch" : "phone"}`}
                 {watch?.batteryPercent != null && location.source === "smartwatch" ? ` · ${watch.batteryPercent}%` : ""}
               </Text>
-            </View>
+            </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Open safe zones"

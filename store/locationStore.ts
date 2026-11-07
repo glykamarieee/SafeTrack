@@ -11,7 +11,9 @@ import { readCache, writeCache } from "../lib/offlineCache";
 
 import { supabase } from "../lib/supabase";
 
-import type { LocationLog } from "../types/safetrack";
+import type { LiveFix } from "../services/liveLocationService";
+
+import type { LocationLog, TravelMode } from "../types/safetrack";
 
 
 interface ChildLocationCache {
@@ -68,7 +70,42 @@ interface LocationState {
       childName?:string
     )=>()=>void;
 
+
+  /** Live fixes from the last 10 minutes, oldest first (services/liveLocationService). */
+  liveTrail: LiveTrailPoint[];
+
+  applyLiveFix: (fix: LiveFix) => void;
+
 }
+
+
+export type LiveTrailPoint = {
+  latitude: number;
+  longitude: number;
+  at: number;
+  mode: TravelMode | null;
+};
+
+const LIVE_TRAIL_MS = 10 * 60_000;
+const LIVE_TRAIL_MAX = 900;
+/** A fix this coarse is used only when nothing better is recent. */
+const POOR_ACCURACY_M = 50;
+/** Still: moves within the accuracy (at least this much) are GPS drift. */
+const STILL_DRIFT_M = 8;
+/** A new activity is shown after this many readings in a row agree. */
+const MODE_AGREE = 2;
+
+let pendingMode: { mode: TravelMode | null; count: number } = { mode: null, count: 0 };
+
+function metersBetween(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) {
+  const radians = (value: number) => (value * Math.PI) / 180;
+  const dLat = radians(b.latitude - a.latitude);
+  const dLng = radians(b.longitude - a.longitude);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(radians(a.latitude)) * Math.cos(radians(b.latitude)) * Math.sin(dLng / 2) ** 2;
+  return 6_371_000 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+const isLiveRow = (log: LocationLog | null) => Boolean(log?.id.startsWith("live:"));
 
 
 
@@ -112,7 +149,9 @@ async(
 
 set({
  isLoading:true,
- error:null
+ error:null,
+ // Another child's live trail does not belong on this map.
+ ...(get().latest?.childId !== childId ? { liveTrail: [] } : {})
 });
 
 
@@ -528,7 +567,11 @@ const pull = async () => {
     const history = [latest, ...get().history.filter((item) => item.id !== latest.id && item.childId === childId)]
       .sort((first, second) => Date.parse(second.recordedAt) - Date.parse(first.recordedAt))
       .slice(0, 80);
-    set({ latest, history, isOffline: false, cachedAt: new Date().toISOString() });
+    // A live fix newer than the saved record stays on the map: the saved row
+    // only joins the history, so the marker never jumps back.
+    const keepLive =
+      isLiveRow(current) && current!.childId === childId && Date.parse(current!.recordedAt) >= Date.parse(latest.recordedAt);
+    set({ latest: keepLive ? current : latest, history, isOffline: false, cachedAt: new Date().toISOString() });
   } catch (error) {
     console.log("[location realtime]", error);
   }
@@ -561,6 +604,66 @@ supabase.removeChannel(
 );
 };
 
-}
+},
+
+
+
+liveTrail: [],
+
+applyLiveFix: (fix) => {
+  const current = get().latest;
+  // Only the child on screen; never older than what is shown.
+  if (!current || current.childId !== fix.childId) return;
+  const fixTime = Date.parse(fix.recordedAt);
+  if (!Number.isFinite(fixTime) || fixTime <= Date.parse(current.recordedAt)) return;
+
+  // A poor fix is skipped while a better one is recent.
+  const recent = fixTime - Date.parse(current.recordedAt) < 30_000;
+  if ((fix.accuracyMeters ?? 0) > POOR_ACCURACY_M && recent && (current.accuracyMeters ?? Infinity) <= POOR_ACCURACY_M) return;
+
+  // The activity changes only when MODE_AGREE readings in a row agree, so one
+  // odd reading never flips it.
+  const reported = fix.travelMode && fix.travelMode !== "unknown" ? fix.travelMode : null;
+  let mode = (current.travelMode ?? null) as TravelMode | null;
+  if (reported && reported !== mode) {
+    pendingMode = pendingMode.mode === reported ? { mode: reported, count: pendingMode.count + 1 } : { mode: reported, count: 1 };
+    if (pendingMode.count >= MODE_AGREE || !mode || mode === "unknown") {
+      mode = reported;
+      pendingMode = { mode: null, count: 0 };
+    }
+  } else {
+    pendingMode = { mode: null, count: 0 };
+  }
+
+  // Standing still: GPS drift within the accuracy does not move the marker.
+  const still = mode === "still" || (fix.speedMps != null && fix.speedMps < 0.6);
+  const drift = metersBetween(current, fix) <= Math.max(fix.accuracyMeters ?? 0, STILL_DRIFT_M);
+  const hold = still && drift;
+
+  const latest: LocationLog = {
+    ...current,
+    id: `live:${fix.childId}`,
+    latitude: hold ? current.latitude : fix.latitude,
+    longitude: hold ? current.longitude : fix.longitude,
+    accuracyMeters: fix.accuracyMeters,
+    source: fix.source,
+    recordedAt: fix.recordedAt,
+    speedMps: fix.speedMps,
+    headingDegrees: fix.headingDegrees ?? current.headingDegrees ?? null,
+    travelMode: mode,
+    modeConfidence: fix.modeConfidence,
+    // The saved record's address is for its own spot.
+    locationLabel: hold ? current.locationLabel : null,
+  };
+
+  const since = Date.now() - LIVE_TRAIL_MS;
+  const trail = get().liveTrail.filter((point) => point.at >= since);
+  const last = trail[trail.length - 1];
+  if (!hold && (!last || metersBetween(last, latest) >= 1)) {
+    trail.push({ latitude: latest.latitude, longitude: latest.longitude, at: fixTime, mode });
+  }
+
+  set({ latest, liveTrail: trail.slice(-LIVE_TRAIL_MAX) });
+},
 
 }));

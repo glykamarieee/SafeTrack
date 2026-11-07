@@ -36,6 +36,20 @@ const ICONS: Record<string, string> = {
     '<svg viewBox="0 0 24 24"><path d="M6 2h12v5l-4 5 4 5v5H6v-5l4-5-4-5V2zm2 2v2.3L12 11l4-4.7V4H8z"/></svg>',
 };
 
+// Activity badge (native uses MaterialCommunityIcons). Stroke icons, drawn white.
+const MODE_ICONS: Record<string, string> = {
+  still: '<svg viewBox="0 0 24 24"><circle cx="12" cy="4.5" r="2.2"/><path d="M12 8v7m0 0-2 6m2-6 2 6M8 10.5h8"/></svg>',
+  walking:
+    '<svg viewBox="0 0 24 24"><circle cx="13" cy="4" r="2.2"/><path d="M12.5 8 10.5 14l-3 6M10.5 14l3.5 3 1 4M11.5 10 8 12.5M12.5 9l3.5 3"/></svg>',
+  running:
+    '<svg viewBox="0 0 24 24"><circle cx="15.5" cy="4" r="2.2"/><path d="M14.5 8 11 13H6.5M11 13l3 4-2 4.5M14 17h4.5M14.5 8.5l4 3M13.5 8.5 9 10"/></svg>',
+  biking:
+    '<svg viewBox="0 0 24 24"><circle cx="6" cy="16" r="3.6"/><circle cx="18" cy="16" r="3.6"/><path d="M6 16 9.5 9H15l3 7M9.5 9 12.5 16 15 9M8.5 6.5h3"/></svg>',
+  vehicle:
+    '<svg viewBox="0 0 24 24"><path d="M3.5 16v-3.5L6 7h12l2.5 5.5V16zM3.5 12.5h17"/><circle cx="7.5" cy="16.5" r="1.8"/><circle cx="16.5" cy="16.5" r="1.8"/></svg>',
+  boat: '<svg viewBox="0 0 24 24"><path d="M3 14h18l-3 5H6zM12 4v10M12 5l5 6h-5"/></svg>',
+};
+
 /** Ionicons names used by the native markers, mapped to the inline icons above. */
 function iconSvg(name?: string) {
   if (!name) return "";
@@ -68,10 +82,14 @@ export function markerHtml(marker: MapMarker): MarkerHtml {
           ? `<div class="st-av-battery${marker.batteryPercent <= 20 ? " low" : ""}">${Math.round(marker.batteryPercent)}%</div>`
           : "";
       const label = marker.label ? `<div class="st-av-label">${esc(marker.label)}</div>` : "";
+      const mode =
+        marker.mode && MODE_ICONS[marker.mode]
+          ? `<div class="st-av-mode" data-mode="${esc(marker.mode)}" title="${esc(marker.mode)}">${MODE_ICONS[marker.mode]}</div>`
+          : "";
       const height = marker.label ? 84 : 66;
 
       return {
-        html: `<div class="st-av${marker.ring === "sos" ? " sos" : ""}${marker.kind === "replay" ? " replay" : ""}" style="--ring:${ring}">${marker.ring === "sos" ? '<div class="st-av-halo"></div>' : ""}<div class="st-av-ring">${face}</div><div class="st-av-pointer"></div>${source}${battery}${label}</div>`,
+        html: `<div class="st-av${marker.ring === "sos" ? " sos" : ""}${marker.kind === "replay" ? " replay" : ""}" style="--ring:${ring}">${marker.ring === "sos" ? '<div class="st-av-halo"></div>' : ""}<div class="st-av-ring">${face}</div><div class="st-av-pointer"></div>${source}${mode}${battery}${label}</div>`,
         width: 64,
         height,
         anchorX: 32 - offset,
@@ -123,6 +141,9 @@ export const MARKER_CSS = `
 .st-av-source{position:absolute;top:2px;right:4px;width:20px;height:20px;border-radius:50%;background:#fff;border:1px solid #E3E9E5;display:flex;align-items:center;justify-content:center;box-sizing:border-box}
 .st-av-source svg{width:11px;height:11px;fill:#0E1411}
 .st-av-battery{position:absolute;top:40px;right:0;padding:0 4px;height:16px;border-radius:8px;background:#fff;border:1px solid #E3E9E5;font:800 9px/14px inherit;color:#0E1411;box-sizing:border-box}
+.st-av-mode{position:absolute;top:38px;left:2px;width:22px;height:22px;box-sizing:border-box;border-radius:50%;background:#15803D;border:2px solid #fff;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.st-av-mode svg{width:14px;height:14px;fill:none;stroke:#fff;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.st-av-mode svg circle{fill:none}
 .st-av-battery.low{background:#FDECEA;border-color:#F6C9C3;color:#B42318}
 .st-av-label{margin-top:2px;padding:0 7px;height:18px;border-radius:9px;background:#245E9C;color:#fff;font:800 10px/18px inherit}
 .st-av.replay .st-av-ring{opacity:.92}

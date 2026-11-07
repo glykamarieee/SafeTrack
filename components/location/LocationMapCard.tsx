@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Platform,
   Pressable,
@@ -11,13 +11,15 @@ import { Ionicons } from "@expo/vector-icons";
 import {
   SafeTrackInteractiveMap,
   type SafeTrackMapCircle,
+  type SafeTrackMapFocus,
   type SafeTrackMapMarker,
+  type SafeTrackMapState,
 } from "./SafeTrackInteractiveMap";
 import { childRing } from "./zoneCircles";
 import { useAvatarUrl } from "./useAvatarUrl";
-import { colorFor, freshness, initialsOf, type MapPoint } from "./mapTypes";
+import { colorFor, freshness, initialsOf, type MapFootprint, type MapPoint } from "./mapTypes";
 import { useGlide } from "./useGlide";
-import type { LocationLog } from "../../types/safetrack";
+import type { LocationLog, TravelMode } from "../../types/safetrack";
 import {
   guardianColors as colors,
   guardianRadius as radius,
@@ -53,7 +55,31 @@ export type LocationMapCardProps = {
   topInset?: number;
   /** Recent points, oldest first, drawn as a short trail behind the child. */
   trail?: MapPoint[];
+  /** Footprints where the child recently walked or ran. */
+  footprints?: MapFootprint[];
+  /** How the child is moving: a badge on the marker. */
+  mode?: TravelMode | null;
+  /** Live: keep the child in view when they walk or drive off the visible map. */
+  follow?: boolean;
 };
+
+/** Leaflet (web) uses 256 px tiles; Mapbox zoom levels are 512 px tiles. */
+const TILE_PX = Platform.OS === "web" ? 256 : 512;
+/** After the guardian pans or zooms, following waits this long. */
+const USER_HOLD_MS = 15_000;
+
+/** Pixel offset of a point from the view's centre (Web Mercator). */
+function pixelOffset(view: SafeTrackMapState, point: { latitude: number; longitude: number }) {
+  const world = TILE_PX * 2 ** view.zoom;
+  const x = (longitude: number) => ((longitude + 180) / 360) * world;
+  const y = (latitude: number) => {
+    const sin = Math.sin((Math.max(-85, Math.min(85, latitude)) * Math.PI) / 180);
+    return (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * world;
+  };
+  return { dx: x(point.longitude) - x(view.longitude), dy: y(point.latitude) - y(view.latitude) };
+}
+
+const NO_FOOTPRINTS: MapFootprint[] = [];
 
 const NO_TRAIL: MapPoint[] = [];
 
@@ -100,6 +126,9 @@ export function LocationMapCard({
   flush = false,
   topInset = 0,
   trail = NO_TRAIL,
+  footprints = NO_FOOTPRINTS,
+  mode = null,
+  follow = false,
 }: LocationMapCardProps) {
   const styles = useStyles();
   const { colors: theme } = useTheme();
@@ -118,6 +147,33 @@ export function LocationMapCard({
   const glide = useGlide(validLocation && location ? { latitude: location.latitude, longitude: location.longitude } : null);
   // The trail ends where the marker is drawn.
   const path = useMemo(() => (glide && trail.length ? [...trail, glide] : NO_TRAIL), [trail, glide]);
+
+  // ---- Follow: re-centre only when the child leaves the visible map, and
+  // never within USER_HOLD_MS of the guardian moving the map.
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  const [followFocus, setFollowFocus] = useState<SafeTrackMapFocus | null>(null);
+  const view = useRef<SafeTrackMapState | null>(null);
+  const moves = useRef({ autoAt: 0, userAt: 0 });
+  const handleView = useCallback((next: SafeTrackMapState) => {
+    view.current = next;
+    // A move long after our own re-centre was the guardian's.
+    if (Date.now() - moves.current.autoAt > 1500) moves.current.userAt = Date.now();
+  }, []);
+
+  useEffect(() => {
+    if (!follow || !validLocation || !location || !view.current || !size.width) return;
+    const now = Date.now();
+    if (now - moves.current.userAt < USER_HOLD_MS) return;
+    const { dx, dy } = pixelOffset(view.current, location);
+    const half = size.width / 2 - 48;
+    const top = -size.height / 2 + topInset + 56;
+    const bottom = size.height / 2 - (bottomInset ?? MAP_PADDING.bottom) - 48;
+    if (Math.abs(dx) > half || dy < top || dy > bottom) {
+      moves.current.autoAt = now;
+      // Keeps the guardian's zoom.
+      setFollowFocus({ latitude: location.latitude, longitude: location.longitude, zoom: view.current.zoom, key: now });
+    }
+  }, [follow, validLocation, location?.latitude, location?.longitude, size.width, size.height, topInset, bottomInset]);
 
   // Memoized on the values, so unrelated re-renders never reach the map.
   const markers = useMemo<SafeTrackMapMarker[]>(
@@ -143,6 +199,7 @@ export function LocationMapCard({
               batteryPercent: isWatch ? batteryPercent : null,
               networkType: isWatch ? networkType : null,
               accuracyMeters: location.accuracyMeters ?? null,
+              mode,
             },
           ]
         : [],
@@ -164,17 +221,24 @@ export function LocationMapCard({
       isWatch,
       batteryPercent,
       networkType,
+      mode,
     ],
   );
 
   return (
-    <View style={[styles.container, flush && styles.flush, { height }]}>
+    <View
+      style={[styles.container, flush && styles.flush, { height }]}
+      onLayout={(event) => setSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })}
+    >
       {validLocation && location ? (
         <>
           <SafeTrackInteractiveMap
+            focus={followFocus}
+            onMapStateChange={handleView}
             markers={markers}
             circles={zones}
             path={path}
+            footprints={footprints}
             height={height}
             mapPadding={bottomInset != null ? { bottom: bottomInset } : MAP_PADDING}
             fitPadding={bottomInset != null ? { bottom: bottomInset + 20, top: topInset + 40 } : undefined}

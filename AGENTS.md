@@ -97,10 +97,12 @@ Key RPCs:
   - `delete_my_account` (soft delete; `20261015_accounts_notifications_fixes.sql`)
   - `get_my_child_safety_timeline`, `acknowledge_my_sos_alert`
   - `get_my_child_activity_days` (History calendar; `20261014_child_activity_days.sql`)
+  - `request_child_live(p_child_id, p_seconds)` (live map; `20261108_live_stream.sql`)
 - **Child phone** (callable by `anon`; authenticated by a device token inside the function):
   - `pair_child_phone`
   - `get_child_phone_state`
   - `record_child_phone_location`
+  - `push_child_phone_live` (live map, not saved; `20261108_live_stream.sql`)
   - `trigger_child_phone_sos`, `realert_child_phone_sos`
   - `unlink_child_phone`
 - **Smartwatch** (callable by `anon`; authenticated by Watch ID + device token inside
@@ -108,6 +110,7 @@ Key RPCs:
   - `pair_watch`
   - `record_watch_heartbeat`, `record_watch_location`
   - `trigger_watch_sos`
+  - `push_watch_live` (live map, not saved; `20261108_live_stream.sql`)
   - `cancel_watch_sos` (migration 20261017b): the child's "Sent by mistake";
     cancels only that child's *active* SOS and pushes the guardian
     (`type: sos_cancelled`)
@@ -250,12 +253,25 @@ the Expo app.
 
 - **Rates:** watch and child phone send a point about every 10 s while moving
   (each 15 m), one every 3 min when still; the watch switches to balanced-power
-  fixes every 60 s after 2 min still, and to every 5 s for 10 min after an SOS
+  fixes every 60 s after 2 min still, to every 5 s for 10 min after an SOS, and
+  to every 1 s while a guardian has the map open (see Live position)
   (`LocationTracker.kt`, `services/childBackgroundLocation.ts`).
 - **Live map:** `location_logs` is in the `supabase_realtime` publication; the
   location store adds each new row to the front of the recent history and also
   reads the newest row every 15 s as a fallback. The marker glides between points
-  (`useGlide`) with a 10-minute trail.
+  (`useGlide`) with a 10-minute trail: footprints where the child walked or ran,
+  a line for the current bike or vehicle stretch (`components/location/footprints.ts`).
+- **Live position (about 1 s, `20261108_live_stream.sql`):** while Home or
+  Location is in front, `useChildLive` → `services/liveLocationService.ts` calls
+  `request_child_live` every 15 s (`live_viewers.until` = now + 30 s) and joins
+  the private Realtime topic `child-live:<child id>` (RLS on `realtime.messages`:
+  only `is_guardian_of`). The watch and phone ask `push_*_live` every 20 s with
+  their last fix; while it answers `live: true` they take a fix every second and
+  send each one (broadcast by `realtime.send`, nothing written to
+  `location_logs`). Stops after 10 min (tap to resume), in the background, and
+  when the screen closes. `applyLiveFix` in the location store ignores drift
+  within the accuracy while still, needs 2 agreeing readings to change the
+  activity, and never lets an older saved row pull the marker back.
 - **Travel mode:** `location_logs.speed_mps`, `heading_degrees`, `travel_mode`
   (`still | walking | running | biking | vehicle | boat | unknown`) and
   `mode_confidence`, written by `record_watch_location_v2` /

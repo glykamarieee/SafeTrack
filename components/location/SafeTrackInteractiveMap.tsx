@@ -34,6 +34,7 @@ import {
   type BaseMapType,
   type MapCircle,
   type MapEngineHandle,
+  type MapFootprint,
   type MapMarker,
   type MapPadding,
   type MapPoint,
@@ -55,6 +56,8 @@ export type SafeTrackMapFocus = {
   longitude: number;
   /** Fit this radius around the point instead of a fixed zoom. */
   radiusMeters?: number;
+  /** At least this zoom (default 16). */
+  zoom?: number;
   /** Change it to focus again on the same point. */
   key: string | number;
 };
@@ -63,6 +66,8 @@ type Props = {
   markers?: MapMarker[];
   circles?: MapCircle[];
   path?: MapPoint[];
+  /** Footprints behind a walking or running child (live map). */
+  footprints?: MapFootprint[];
   height?: number;
   style?: StyleProp<ViewStyle>;
   /** Increment to fit all content again. */
@@ -114,6 +119,7 @@ const NO_PADDING: MapPadding = { top: 0, right: 0, bottom: 0, left: 0 };
 const NO_MARKERS: MapMarker[] = [];
 const NO_CIRCLES: MapCircle[] = [];
 const NO_PATH: MapPoint[] = [];
+const NO_FOOTPRINTS: MapFootprint[] = [];
 
 const NATIVE_MODE = nativeMapMode();
 
@@ -150,6 +156,7 @@ function MapCore(props: CoreProps) {
     markers = NO_MARKERS,
     circles = NO_CIRCLES,
     path = NO_PATH,
+    footprints = NO_FOOTPRINTS,
     recenterSignal,
     focus,
     fitPadding,
@@ -264,6 +271,7 @@ function MapCore(props: CoreProps) {
   );
 
   const enginePath = useStable(prefs.route ? path : NO_PATH);
+  const engineFootprints = useStable(prefs.route ? footprints : NO_FOOTPRINTS);
 
   const padding = useStable({ ...BASE_PADDING, ...fitPadding });
   const nativePadding = useStable({ ...NO_PADDING, ...mapPadding });
@@ -347,6 +355,7 @@ function MapCore(props: CoreProps) {
         markers={engineMarkers}
         circles={engineCircles}
         path={enginePath}
+        footprints={engineFootprints}
         prefs={prefs}
         dark={dark}
         fitPadding={padding}

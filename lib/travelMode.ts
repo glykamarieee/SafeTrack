@@ -48,7 +48,7 @@ const LABELS: Record<TravelMode, string> = {
   still: "Staying still",
   walking: "Walking",
   running: "Running",
-  biking: "Biking",
+  biking: "Biking (sikad)",
   vehicle: "In a vehicle",
   boat: "On a boat",
   unknown: "Moving",
@@ -65,8 +65,22 @@ const ICONS: Record<TravelMode, string> = {
 };
 
 /**
+ * MaterialCommunityIcons names: Ionicons has no running figure. One vehicle
+ * icon on purpose: a watch or phone cannot tell a car, jeep or tricycle apart.
+ */
+export const MODE_GLYPHS: Record<TravelMode, string> = {
+  still: "human-handsdown",
+  walking: "walk",
+  running: "run",
+  biking: "bike",
+  vehicle: "car",
+  boat: "ferry",
+  unknown: "navigation-variant",
+};
+
+/**
  * "Walking · 4 km/h", "Running or biking · 11 km/h" (when unsure which),
- * "In a vehicle · 38 km/h (car, jeep or motorcycle)".
+ * "In a vehicle · 38 km/h (car, jeep, tricycle or motorcycle)".
  */
 export function describeMotion(mode: TravelMode | null | undefined, speedMps?: number | null, confidence?: number | null) {
   // Unknown is shown as nothing, never as "Moving".
@@ -77,8 +91,8 @@ export function describeMotion(mode: TravelMode | null | undefined, speedMps?: n
   if (unsure && (mode === "running" || mode === "biking")) label = "Running or biking";
   const speed = kmh != null && mode !== "still" ? ` · ${kmh} km/h` : "";
   const hint =
-    mode === "vehicle" ? " (car, jeep or motorcycle)" : mode === "boat" ? " (over water)" : "";
-  return { label: `${label}${speed}${hint}`, short: label, icon: ICONS[mode], mode, kmh };
+    mode === "vehicle" ? " (car, jeep, tricycle or motorcycle)" : mode === "boat" ? " (over water)" : "";
+  return { label: `${label}${speed}${hint}`, short: label, icon: ICONS[mode], glyph: MODE_GLYPHS[mode], mode, kmh };
 }
 
 /** Points younger than this count as live. */

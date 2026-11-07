@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect, useRef, type ComponentProps } from "react";
 import {
   Animated,
   Easing,
@@ -7,8 +7,9 @@ import {
 } from "react-native";
 import { Text } from "../ui/NativeText";
 import { Image } from "expo-image";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 
+import { MODE_GLYPHS } from "../../lib/travelMode";
 import { RING_COLORS, type MapMarker } from "./mapTypes";
 
 /** Size and anchor of each marker's view, shared with the native engine. */
@@ -164,6 +165,16 @@ function AvatarGlyph({
         </View>
       ) : null}
 
+      {marker.mode && marker.mode !== "unknown" ? (
+        <View style={styles.modeBadge}>
+          <MaterialCommunityIcons
+            name={MODE_GLYPHS[marker.mode] as ComponentProps<typeof MaterialCommunityIcons>["name"]}
+            size={13}
+            color="#FFFFFF"
+          />
+        </View>
+      ) : null}
+
       {marker.batteryPercent != null ? (
         <View style={[styles.battery, marker.batteryPercent <= 20 && styles.batteryLow]}>
           <Text style={[styles.batteryText, marker.batteryPercent <= 20 && styles.batteryTextLow]}>
@@ -232,6 +243,19 @@ const styles = StyleSheet.create({
     borderColor: "#E3E9E5",
   },
   batteryLow: { backgroundColor: "#FDECEA", borderColor: "#F6C9C3" },
+  modeBadge: {
+    position: "absolute",
+    top: 38,
+    left: 2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#15803D",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+  },
   batteryText: { fontSize: 9, fontWeight: "800", color: "#0E1411" },
   batteryTextLow: { color: "#B42318" },
   youChip: {

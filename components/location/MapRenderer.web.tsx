@@ -45,7 +45,7 @@ const LeafletEngine = forwardRef<MapEngineHandle, MapEngineProps>(function Leafl
   );
 
   const dataMessage = useCallback(() => {
-    const { markers, circles, path } = latest.current;
+    const { markers, circles, path, footprints = [] } = latest.current;
 
     return {
       type: "data",
@@ -66,6 +66,7 @@ const LeafletEngine = forwardRef<MapEngineHandle, MapEngineProps>(function Leafl
       }),
       circles,
       path,
+      steps: footprints.map((step) => [step.latitude, step.longitude, step.opacity]),
     };
   }, []);
 
@@ -118,7 +119,7 @@ const LeafletEngine = forwardRef<MapEngineHandle, MapEngineProps>(function Leafl
 
   useEffect(() => {
     post(dataMessage());
-  }, [props.markers, props.circles, props.path, post, dataMessage]);
+  }, [props.markers, props.circles, props.path, props.footprints, post, dataMessage]);
 
   useEffect(() => {
     post({ type: "base", mapType: props.prefs.mapType, labels: props.prefs.labels, dark: props.dark });

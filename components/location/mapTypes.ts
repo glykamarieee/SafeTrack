@@ -1,6 +1,8 @@
 // Types shared by every SafeTrack map engine: react-native-maps on Android and
 // iOS, and the Google Maps JavaScript API (or the Leaflet fallback) on web.
 
+import type { TravelMode } from "../../types/safetrack";
+
 export type MarkerKind =
   | "child"
   | "guardian"
@@ -50,7 +52,12 @@ export type MapMarker = {
   recordedAt?: string | null;
   /** Horizontal pixel offset so overlapping avatars stay visible. */
   offsetX?: number;
+  /** Child avatar: how the child is moving, shown as a small badge. */
+  mode?: TravelMode | null;
 };
+
+/** One footprint behind a walking or running child; opacity fades with age. */
+export type MapFootprint = { latitude: number; longitude: number; heading: number; opacity: number };
 
 export type ZoneStatus = "inside" | "outside" | "active" | "inactive" | "draft" | "accuracy";
 
@@ -134,6 +141,8 @@ export type MapEngineProps = {
   markers: MapMarker[];
   circles: MapCircle[];
   path: MapPoint[];
+  /** Live map only; engines without support ignore them. */
+  footprints?: MapFootprint[];
   prefs: MapPrefs;
   dark: boolean;
   /** Space covered by overlays, kept clear when fitting content. */

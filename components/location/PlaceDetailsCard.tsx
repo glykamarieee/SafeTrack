@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react";
 import { StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { Text } from "../ui/Text";
 import type { PlaceDetails } from "../../hooks/usePlaceDetails";
@@ -83,7 +83,11 @@ export function PlaceDetailsCard({
         </View>
         {motion ? (
           <View style={styles.motion}>
-            <Ionicons name={motion.icon as IconName} size={16} color={iconColor} />
+            <MaterialCommunityIcons
+              name={motion.glyph as ComponentProps<typeof MaterialCommunityIcons>["name"]}
+              size={17}
+              color={iconColor}
+            />
             <Text variant="label" weight="800" style={{ color: ink }} numberOfLines={1}>
               {motion.label}
             </Text>

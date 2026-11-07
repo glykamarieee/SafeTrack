@@ -75,6 +75,7 @@ async function callAsChildPhone<T>(
     | "get_child_phone_state"
     | "record_child_phone_location"
     | "record_child_phone_location_v2"
+    | "push_child_phone_live"
     | "trigger_child_phone_sos"
     | "realert_child_phone_sos"
     | "unlink_child_phone",
@@ -307,6 +308,45 @@ export async function recordChildPhoneLocation(
     location: toLocationLog(data.location)!,
     safeZoneStatus: data.safeZoneStatus,
   };
+}
+
+// push_child_phone_live (migration 20261108). Until it exists, ask again only
+// every LIVE_RETRY_MS (the migration can be applied while the phone shares).
+const LIVE_RETRY_MS = 10 * 60_000;
+let liveMissingUntil = 0;
+
+/**
+ * Sends one fix for the guardian's live map (not saved). Returns whether a
+ * guardian is watching, so the caller keeps the 1-second pace or goes back
+ * to the normal one; null when live updates are unavailable.
+ */
+export async function pushChildPhoneLive(
+  latitude: number,
+  longitude: number,
+  accuracyMeters: number | null,
+  recordedAt: number,
+  motion: PhoneMotion,
+): Promise<boolean | null> {
+  if (Date.now() < liveMissingUntil) return null;
+  try {
+    const data = await callAsChildPhone<{ live?: boolean }>("push_child_phone_live", {
+      p_latitude: latitude,
+      p_longitude: longitude,
+      p_accuracy_meters: accuracyMeters,
+      p_recorded_at: new Date(recordedAt).toISOString(),
+      p_speed_mps: motion.speedMps,
+      p_heading_degrees: motion.headingDegrees != null && motion.headingDegrees >= 0 ? motion.headingDegrees : null,
+      p_travel_mode: motion.mode,
+      p_mode_confidence: Math.round(motion.confidence * 100) / 100,
+    });
+    return Boolean(data?.live);
+  } catch (reason) {
+    if (reason instanceof Error && /could not find the function|PGRST202/i.test(reason.message)) {
+      liveMissingUntil = Date.now() + LIVE_RETRY_MS;
+      return null;
+    }
+    throw reason;
+  }
 }
 
 

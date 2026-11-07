@@ -13,6 +13,9 @@ function meters(a: { latitude: number; longitude: number }, b: { latitude: numbe
   return 6_371_000 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
+/** A still child saves a record every 3 minutes; a longer silence ends the stay. */
+const STAY_GAP_MS = 20 * 60_000;
+
 function distanceText(value: number) {
   return value < 1000 ? `${Math.round(value / 10) * 10} m` : `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)} km`;
 }
@@ -87,18 +90,22 @@ export function usePlaceDetails(location: LocationLog | null | undefined, histor
     }
 
     let stay: string | null = null;
+    let mode = (location.travelMode ?? null) as TravelMode | null;
+    const moving = mode === "walking" || mode === "running" || mode === "biking" || mode === "vehicle" || mode === "boat";
     const latestTime = Date.parse(location.recordedAt);
     let earliest = latestTime;
     for (const point of history) {
       if (point.id === location.id) continue;
-      if (Date.parse(point.recordedAt) > latestTime) continue;
+      const time = Date.parse(point.recordedAt);
+      if (time > latestTime) continue;
       // Indoor fixes wander by their accuracy; that is not leaving the place.
       if (meters(point, location) > Math.max(60, location.accuracyMeters ?? 0)) break;
-      earliest = Date.parse(point.recordedAt);
+      // No records for a long time is not proof the child stayed.
+      if (earliest - time > STAY_GAP_MS) break;
+      earliest = time;
     }
-    if (latestTime - earliest >= 2 * 60_000) stay = `Here for ${durationText(latestTime - earliest)}`;
+    if (!moving && latestTime - earliest >= 2 * 60_000) stay = `Here for ${durationText(latestTime - earliest)}`;
 
-    let mode = (location.travelMode ?? null) as TravelMode | null;
     // No speed (Wi-Fi/cell fixes indoors) but several minutes at one spot: still.
     if ((!mode || mode === "unknown") && stay) mode = "still";
     // A vehicle-speed point over water is a boat.

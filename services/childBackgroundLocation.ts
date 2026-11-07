@@ -4,7 +4,7 @@ import * as TaskManager from "expo-task-manager";
 import { Platform } from "react-native";
 
 import { classifySpeed, speedBetween } from "../lib/travelMode";
-import { ChildPhoneUnlinkedError, recordChildPhoneLocation } from "./childMobileService";
+import { ChildPhoneUnlinkedError, pushChildPhoneLive, recordChildPhoneLocation } from "./childMobileService";
 
 /**
  * Optional automatic location sharing for a linked child phone.
@@ -30,6 +30,24 @@ const LAST_SENT_KEY = "safetrack.childPhone.lastBackgroundSend";
 const CHECK_INTERVAL_MS = 10 * 1000;
 const MOVE_SAVE_M = 15;
 const STILL_SAVE_MS = 3 * 60 * 1000;
+
+// While a guardian has the map open (migration 20261108): a fix every second,
+// each sent to the live map (not saved). Otherwise the phone asks whether
+// anyone is watching every LIVE_PROBE_MS with the fix it already has.
+const LIVE_INTERVAL_MS = 1000;
+const LIVE_PROBE_MS = 20 * 1000;
+const LIVE_KEY = "safetrack.childPhone.live";
+
+type LiveState = { live: boolean; probedAt: number };
+
+async function readLive(): Promise<LiveState> {
+  try {
+    const raw = await AsyncStorage.getItem(LIVE_KEY);
+    return raw ? (JSON.parse(raw) as LiveState) : { live: false, probedAt: 0 };
+  } catch {
+    return { live: false, probedAt: 0 };
+  }
+}
 
 type LastSent = { at: number; latitude: number; longitude: number };
 
@@ -64,6 +82,7 @@ if (Platform.OS !== "web" && !TaskManager.isTaskDefined(CHILD_LOCATION_TASK)) {
 
     const point = { latitude: latest.coords.latitude, longitude: latest.coords.longitude };
     const last = await readLastSent();
+    if (!(await shareLive(latest, last))) return;
     const due =
       !last ||
       latest.timestamp - last.at >= STILL_SAVE_MS ||
@@ -93,6 +112,46 @@ if (Platform.OS !== "web" && !TaskManager.isTaskDefined(CHILD_LOCATION_TASK)) {
       console.warn("[background location] send failed", reason);
     }
   });
+}
+
+/**
+ * Live map: every fix while a guardian is watching, otherwise a check every
+ * LIVE_PROBE_MS. Switches the task between 1-second and normal fixes.
+ * False when the guardian unlinked this phone (sharing is stopped).
+ */
+async function shareLive(fix: Location.LocationObject, last: LastSent | null): Promise<boolean> {
+  const state = await readLive();
+  if (!state.live && fix.timestamp - state.probedAt < LIVE_PROBE_MS) return true;
+  // Poor fixes are not shown live, but still count as a check.
+  const accuracy = fix.coords.accuracy ?? null;
+  const point = { latitude: fix.coords.latitude, longitude: fix.coords.longitude };
+  const reported = fix.coords.speed != null && fix.coords.speed >= 0 ? fix.coords.speed : null;
+  const speed = reported ?? (last ? speedBetween({ ...last, time: last.at }, { ...point, time: fix.timestamp }) : null);
+
+  let live: boolean | null;
+  try {
+    live = await pushChildPhoneLive(point.latitude, point.longitude, accuracy, fix.timestamp, {
+      speedMps: speed,
+      headingDegrees: fix.coords.heading,
+      ...classifySpeed(speed, accuracy),
+    });
+  } catch (reason) {
+    if (reason instanceof ChildPhoneUnlinkedError) {
+      await stopBackgroundSharing();
+      return false;
+    }
+    // Offline: try again at the next check.
+    live = false;
+  }
+
+  const next = Boolean(live);
+  await AsyncStorage.setItem(LIVE_KEY, JSON.stringify({ live: next, probedAt: fix.timestamp })).catch(() => undefined);
+  if (next !== state.live) {
+    await startTask(next ? LIVE_INTERVAL_MS : CHECK_INTERVAL_MS).catch((reason) =>
+      console.warn("[background location] pace change failed", reason),
+    );
+  }
+  return true;
 }
 
 export function backgroundSharingSupported() {
@@ -128,13 +187,13 @@ export async function startBackgroundSharing(): Promise<StartResult> {
 }
 
 /** Starts (or restarts with the current settings) the background task. */
-async function startTask() {
+async function startTask(intervalMs = CHECK_INTERVAL_MS) {
   await Location.startLocationUpdatesAsync(CHILD_LOCATION_TASK, {
     // GPS: network-based fixes can be 100+ m off the road.
-    accuracy: Location.Accuracy.High,
-    timeInterval: CHECK_INTERVAL_MS,
+    accuracy: intervalMs < CHECK_INTERVAL_MS ? Location.Accuracy.BestForNavigation : Location.Accuracy.High,
+    timeInterval: intervalMs,
     distanceInterval: 0,
-    deferredUpdatesInterval: CHECK_INTERVAL_MS,
+    deferredUpdatesInterval: intervalMs,
     pausesUpdatesAutomatically: false,
     showsBackgroundLocationIndicator: true,
     activityType: Location.LocationActivityType.Other,
@@ -154,6 +213,8 @@ async function startTask() {
  */
 export async function refreshBackgroundSharing(): Promise<void> {
   try {
+    // Normal pace; the next check switches to live again if a guardian watches.
+    await AsyncStorage.removeItem(LIVE_KEY).catch(() => undefined);
     if (await isBackgroundSharingOn()) await startTask();
   } catch (reason) {
     console.warn("[background location] refresh failed", reason);
@@ -168,5 +229,5 @@ export async function stopBackgroundSharing(): Promise<void> {
   } catch (reason) {
     console.warn("[background location] stop failed", reason);
   }
-  await AsyncStorage.removeItem(LAST_SENT_KEY).catch(() => undefined);
+  await AsyncStorage.multiRemove([LAST_SENT_KEY, LIVE_KEY]).catch(() => undefined);
 }

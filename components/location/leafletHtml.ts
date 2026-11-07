@@ -114,7 +114,7 @@ map.setView([DEFAULT_VIEW.latitude,DEFAULT_VIEW.longitude],DEFAULT_VIEW.zoom);
 map.createPane("zones").style.zIndex=410;
 map.createPane("route").style.zIndex=420;
 
-var zoneGroup=L.layerGroup().addTo(map),routeGroup=L.layerGroup().addTo(map),markerGroup=L.layerGroup().addTo(map);
+var zoneGroup=L.layerGroup().addTo(map),routeGroup=L.layerGroup().addTo(map),stepGroup=L.layerGroup().addTo(map),markerGroup=L.layerGroup().addTo(map);
 var state={base:null,baseLayers:[],markers:{},circles:{},routeOuter:null,routeInner:null,
   data:{markers:[],circles:[],path:[]},picking:false,fitted:false,
   padding:{top:56,right:64,bottom:56,left:56},tiles:{}};
@@ -248,10 +248,22 @@ function renderPath(path){
   gaps.forEach(function(pts){L.polyline(pts,{pane:"route",color:"#22B35E",weight:5,opacity:1,dashArray:"10 8",interactive:false}).addTo(routeGroup);});
 }
 
+// Footprints behind a walking or running child: [lat, lng, opacity].
+function renderSteps(steps){
+  stepGroup.clearLayers();
+  var dark=document.body.classList.contains("dark"),r=map.getZoom()>=18?4:(map.getZoom()>=16?3:2);
+  steps.forEach(function(s){
+    L.circleMarker([s[0],s[1]],{pane:"route",radius:r,weight:1,color:dark?"#0D2A1E":"#FFFFFF",opacity:s[2],
+      fillColor:dark?"#BFE8CF":"#0D2A1E",fillOpacity:s[2],interactive:false}).addTo(stepGroup);
+  });
+}
+map.on("zoomend",function(){renderSteps(state.data.steps||[]);});
+
 function setData(d){
-  state.data={markers:d.markers||[],circles:d.circles||[],path:d.path||[]};
+  state.data={markers:d.markers||[],circles:d.circles||[],path:d.path||[],steps:d.steps||[]};
   renderCircles(state.data.circles);
   renderPath(state.data.path);
+  renderSteps(state.data.steps);
   renderMarkers(state.data.markers);
   if(!state.fitted&&contentBounds().isValid())fitContent(false);
 }

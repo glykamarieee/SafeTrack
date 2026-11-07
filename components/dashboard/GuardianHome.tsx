@@ -8,6 +8,8 @@ import { useAuthStore } from "../../store/authStore";
 import { useSelectedChild } from "../../hooks/useSelectedChild";
 import { ChildSwitcher } from "../common/ChildSwitcher";
 import { usePlaceDetails } from "../../hooks/usePlaceDetails";
+import { useChildLive } from "../../hooks/useChildLive";
+import { recentTrail } from "../location/footprints";
 import { PlaceDetailsCard } from "../location/PlaceDetailsCard";
 import { useLocationStore } from "../../store/locationStore";
 import { useSosStore } from "../../store/sosStore";
@@ -85,6 +87,9 @@ export function GuardianHome() {
   const loadLocation = useLocationStore((state) => state.loadForChild);
   const subscribeLocation = useLocationStore((state) => state.subscribeToChildLocation);
   const locationHistory = useLocationStore((state) => state.history);
+  const liveTrail = useLocationStore((state) => state.liveTrail);
+  // About one fix a second while Home is in front.
+  const live = useChildLive(child?.id);
 
   const sosAlerts = useSosStore((state) => state.alerts);
   const loadSos = useSosStore((state) => state.loadForChild);
@@ -143,6 +148,7 @@ export function GuardianHome() {
 
   const zoneCircles = useMemo(() => toZoneCircles(zones, zoneEvents), [zones, zoneEvents]);
   const details = usePlaceDetails(latestLocation, locationHistory, zoneCircles);
+  const recent = useMemo(() => recentTrail(latestLocation, locationHistory, liveTrail), [latestLocation, locationHistory, liveTrail]);
   // Switched-off zones are not monitored, so they are not counted.
   const activeZoneCount = zones.filter((zone) => zone.isEnabled).length;
 
@@ -325,6 +331,13 @@ export function GuardianHome() {
                     ? `${details.live ? "Live" : `Updated ${age}`} · from ${latestLocation.source === "smartwatch" ? "watch" : "phone"}`
                     : "Waiting for the child's device to send a location"}
                 </Text>
+                {live.status === "paused" ? (
+                  <Pressable accessibilityRole="button" onPress={live.resume} hitSlop={6}>
+                    <Text variant="caption" tone="primary" weight="800">
+                      Live paused to save data · tap to resume
+                    </Text>
+                  </Pressable>
+                ) : null}
               </View>
               <Pressable accessibilityRole="link" onPress={() => router.push("/(app)/location")} hitSlop={8} style={styles.linkRow}>
                 <Text variant="label" tone="primary" weight="800">
@@ -347,6 +360,10 @@ export function GuardianHome() {
                 sosActive={Boolean(activeSOS)}
                 batteryPercent={watch?.batteryPercent ?? null}
                 networkType={watch?.networkType ?? null}
+                trail={recent.path}
+                footprints={recent.footprints}
+                mode={details.motion?.mode ?? null}
+                follow={live.status === "live"}
               />
               {latestLocation ? (
                 <View style={styles.placeCard}>
