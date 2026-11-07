@@ -3,8 +3,11 @@ import { AccessibilityInfo } from "react-native";
 
 type Point = { latitude: number; longitude: number };
 
-const STEPS = 12;
-const DURATION_MS = 900;
+/** One map update this often while gliding (~30 per second). */
+const FRAME_MS = 33;
+/** The glide takes as long as the gap between fixes, within these limits. */
+const MIN_GLIDE_MS = 250;
+const MAX_GLIDE_MS = 1_100;
 // Further than this is a jump (new trip, first fix after a gap): no glide.
 const MAX_GLIDE_M = 2_000;
 
@@ -17,13 +20,18 @@ function meters(a: Point, b: Point) {
 }
 
 /**
- * The marker position, moved in small steps from the previous point to the
- * new one so the child appears to travel instead of jumping. Respects Reduce
- * Motion. Few steps on purpose: each one re-renders the map marker.
+ * The marker position, moved from where it is drawn now to each new point at
+ * an even pace that lasts about as long as the gap between fixes. With live
+ * fixes every second the marker therefore keeps moving like the child does,
+ * instead of dashing to each point and waiting (the old 0.9 s ease-out looked
+ * like a delay when the child ran). It never goes past the newest real point.
+ * Respects Reduce Motion.
  */
 export function useGlide(point: Point | null): Point | null {
   const [shown, setShown] = useState<Point | null>(point);
+  const shownRef = useRef<Point | null>(point);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastTargetAt = useRef(0);
   const reduce = useRef(false);
 
   useEffect(() => {
@@ -34,26 +42,33 @@ export function useGlide(point: Point | null): Point | null {
 
   useEffect(() => {
     if (timer.current) clearInterval(timer.current);
+    const show = (next: Point | null) => {
+      shownRef.current = next;
+      setShown(next);
+    };
     if (!point) {
-      setShown(null);
+      show(null);
       return;
     }
-    const from = shown;
-    if (!from || reduce.current || meters(from, point) > MAX_GLIDE_M || meters(from, point) < 1) {
-      setShown(point);
+    const now = Date.now();
+    const gap = lastTargetAt.current ? now - lastTargetAt.current : MAX_GLIDE_MS;
+    lastTargetAt.current = now;
+
+    const from = shownRef.current;
+    if (!from || reduce.current || meters(from, point) > MAX_GLIDE_M || meters(from, point) < 0.3) {
+      show(point);
       return;
     }
-    let step = 0;
+    const duration = Math.min(MAX_GLIDE_MS, Math.max(MIN_GLIDE_MS, gap));
+    const started = now;
     timer.current = setInterval(() => {
-      step += 1;
-      const t = step / STEPS;
-      const ease = 1 - (1 - t) * (1 - t);
-      setShown({
-        latitude: from.latitude + (point.latitude - from.latitude) * ease,
-        longitude: from.longitude + (point.longitude - from.longitude) * ease,
+      const t = Math.min(1, (Date.now() - started) / duration);
+      show({
+        latitude: from.latitude + (point.latitude - from.latitude) * t,
+        longitude: from.longitude + (point.longitude - from.longitude) * t,
       });
-      if (step >= STEPS && timer.current) clearInterval(timer.current);
-    }, DURATION_MS / STEPS);
+      if (t >= 1 && timer.current) clearInterval(timer.current);
+    }, FRAME_MS);
     return () => {
       if (timer.current) clearInterval(timer.current);
     };

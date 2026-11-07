@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase";
+import { normalizeMode } from "../lib/travelMode";
 import type { LocationLog } from "../types/safetrack";
 
 
@@ -82,7 +83,7 @@ function mapRow(
       row.heading_degrees == null ? null : Number(row.heading_degrees),
 
     travelMode:
-      row.travel_mode ?? null,
+      normalizeMode(row.travel_mode),
 
     modeConfidence:
       row.mode_confidence == null ? null : Number(row.mode_confidence),

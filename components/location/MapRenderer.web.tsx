@@ -40,6 +40,7 @@ const LeafletEngine = forwardRef<MapEngineHandle, MapEngineProps>(function Leafl
       fit: () => post({ type: "fit" }),
       focus: (target) => post({ type: "focus", ...target }),
       zoomBy: (delta) => post({ type: "zoomBy", delta }),
+      resetNorth: () => post({ type: "north" }),
     }),
     [post],
   );
@@ -62,11 +63,22 @@ const LeafletEngine = forwardRef<MapEngineHandle, MapEngineProps>(function Leafl
           ax: box.anchorX,
           ay: box.anchorY,
           z: zIndexFor(marker) * 10,
+          // Turned by the page itself, so it can animate the short way round.
+          hd: marker.headingDegrees ?? null,
         };
       }),
       circles,
       path,
-      steps: footprints.map((step) => [step.latitude, step.longitude, step.opacity]),
+      steps: footprints.map((step) => [
+        step.id,
+        step.latitude,
+        step.longitude,
+        step.heading,
+        step.opacity,
+        step.foot === "left" ? "l" : "r",
+        step.gait,
+        step.fresh,
+      ]),
     };
   }, []);
 
@@ -102,7 +114,11 @@ const LeafletEngine = forwardRef<MapEngineHandle, MapEngineProps>(function Leafl
           current.onMarkerPress(String(message.id));
           break;
         case "state":
-          current.onViewChange({ latitude: message.latitude, longitude: message.longitude, zoom: message.zoom });
+          current.bearing?.set(Number(message.bearing) || 0);
+          current.onViewChange({ latitude: message.latitude, longitude: message.longitude, zoom: message.zoom, bearing: Number(message.bearing) || 0 });
+          break;
+        case "bearing":
+          current.bearing?.set(Number(message.bearing) || 0);
           break;
         case "tiles":
           if (!message.ok) current.onError("Map tiles are unavailable right now. Check the connection or try another map type.");

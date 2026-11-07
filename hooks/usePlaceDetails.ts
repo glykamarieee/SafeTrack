@@ -91,7 +91,7 @@ export function usePlaceDetails(location: LocationLog | null | undefined, histor
 
     let stay: string | null = null;
     let mode = (location.travelMode ?? null) as TravelMode | null;
-    const moving = mode === "walking" || mode === "running" || mode === "biking" || mode === "vehicle" || mode === "boat";
+    const moving = mode === "walking" || mode === "running" || mode === "vehicle" || mode === "boat";
     const latestTime = Date.parse(location.recordedAt);
     let earliest = latestTime;
     for (const point of history) {

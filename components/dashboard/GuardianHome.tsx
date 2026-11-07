@@ -19,7 +19,8 @@ import { useWatchStatus } from "../../hooks/useWatchStatus";
 import { LocationMapCard } from "../location/LocationMapCard";
 import { MapAwareScrollView } from "../location/MapScrollLock";
 import { PullRefresh } from "../ui/PullRefresh";
-import { childRing, toZoneCircles } from "../location/zoneCircles";
+import { childRing } from "../location/zoneCircles";
+import { useZoneCircles } from "../../hooks/useZoneCircles";
 import { freshness } from "../location/mapTypes";
 import { Button } from "../ui/Button";
 import { Entrance } from "../ui/Entrance";
@@ -97,7 +98,6 @@ export function GuardianHome() {
   const loadActiveAll = useSosStore((state) => state.loadActiveAll);
 
   const zones = useGeofenceStore((state) => state.zones);
-  const zoneEvents = useGeofenceStore((state) => state.events);
   const loadZones = useGeofenceStore((state) => state.load);
 
   const storedAnomaly = useAnomalyStore((state) => state.latestAnomaly);
@@ -142,7 +142,8 @@ export function GuardianHome() {
     await Promise.allSettled([refreshChildren(), loadActiveAll(), reload()]);
   };
 
-  const zoneCircles = useMemo(() => toZoneCircles(zones, zoneEvents), [zones, zoneEvents]);
+  // Inside/outside updates by itself: live position plus the server's events.
+  const zoneCircles = useZoneCircles(child?.id, latestLocation);
   const details = usePlaceDetails(latestLocation, locationHistory, zoneCircles);
   const recent = useMemo(() => recentTrail(latestLocation, locationHistory, liveTrail), [latestLocation, locationHistory, liveTrail]);
   // Switched-off zones are not monitored, so they are not counted.

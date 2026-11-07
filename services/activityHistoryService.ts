@@ -1,5 +1,6 @@
 import type { TravelMode } from "../types/safetrack";
 import { supabase } from "../lib/supabase";
+import { normalizeMode } from "../lib/travelMode";
 import { fetchGeofences } from "./geofenceService";
 import { acknowledgeSosAlert } from "./sosService";
 import type { Geofence } from "../types/safetrack";
@@ -167,7 +168,7 @@ async function loadPoints(childId: string, start: string, end: string) {
         accuracy: nullableNumber(row.accuracy_meters),
         recordedAt: String(row.recorded_at),
         speedMps: nullableNumber(row.speed_mps),
-        travelMode: (row.travel_mode as TravelMode | undefined) ?? null,
+        travelMode: normalizeMode(row.travel_mode),
         modeConfidence: nullableNumber(row.mode_confidence),
       };
 

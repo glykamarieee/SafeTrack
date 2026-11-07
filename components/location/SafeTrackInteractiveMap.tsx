@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Image,
   Linking,
   Modal,
@@ -18,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 
 import { MapRenderer } from "./MapRenderer";
+import { MapBearingContext, createBearingStore, useMapBearing } from "./mapBearing";
 import { MapSheet, SheetButton, SheetRow, sheetStyles } from "./MapSheet";
 import { useMapScrollLock } from "./MapScrollLock";
 import { useMapPrefs } from "./mapPrefs";
@@ -43,6 +45,8 @@ import {
   type MapView,
 } from "./mapTypes";
 import { showAlert } from "../../lib/platformAlert";
+import { testLog } from "../../lib/testLog";
+import { myFacing, restartMyLocation, useMyLocation, watchMyLocation } from "../../services/myLocationService";
 import { useAuthStore } from "../../store/authStore";
 import { makeStyles, useTheme } from "../../theme/ThemeProvider";
 import { shadow } from "../../theme/tokens";
@@ -96,7 +100,7 @@ type Props = {
   onZoneAction?: (id: string, action: string) => void;
 };
 
-type Me = { latitude: number; longitude: number; accuracy: number };
+type Me = { latitude: number; longitude: number; accuracy: number; heading: number | null };
 
 type Shared = {
   prefs: MapPrefs;
@@ -105,6 +109,13 @@ type Shared = {
   locating: boolean;
   locateMe(): void;
 };
+
+/** "together" when the gap is within what GPS can tell apart, else the distance. */
+function gapLabel(meters: number, accuracy: number) {
+  if (meters <= Math.max(8, Math.min(accuracy, 25))) return "together";
+  if (meters < 1000) return `${Math.round(meters)} m`;
+  return `${(meters / 1000).toFixed(meters < 10_000 ? 1 : 0)} km`;
+}
 
 type CoreProps = Props &
   Shared & {
@@ -182,6 +193,8 @@ function MapCore(props: CoreProps) {
   } = props;
 
   const engine = useRef<MapEngineHandle>(null);
+  // The map's rotation: reported by the engine, read by the arrows and the compass.
+  const bearing = useRef(createBearingStore()).current;
   const touch = useMapScrollLock();
   const guardian = useAuthStore((state) => state.guardian);
   const guardianPhoto = useAvatarUrl(guardian?.avatarPath, guardian?.avatarUrl);
@@ -232,19 +245,25 @@ function MapCore(props: CoreProps) {
       list.push(...markers);
 
       if (me && showMyLocation) {
+        // How far the guardian is from the child, so "together" is never
+        // left to guessing from two avatars.
+        const child = markers.find((item) => item.kind === "child");
+        const gap = child ? distanceMeters(child, me) : null;
         list.push({
           id: "guardian:me",
           latitude: me.latitude,
           longitude: me.longitude,
           title: guardian?.fullName ? `${guardian.fullName} (you)` : "You",
+          detail: gap != null ? `${gapLabel(gap, Math.max(me.accuracy, child?.accuracyMeters ?? 0))} from the child` : undefined,
           kind: "guardian",
-          label: "You",
+          label: gap != null ? `You · ${gapLabel(gap, Math.max(me.accuracy, child?.accuracyMeters ?? 0))}` : "You",
           initials: initialsOf(guardian?.fullName),
           color: "#1A73E8",
           photoUrl: guardianPhoto,
           photoKey: guardian?.avatarPath ?? null,
           ring: "neutral",
           accuracyMeters: me.accuracy,
+          headingDegrees: me.heading,
         });
       }
 
@@ -349,6 +368,7 @@ function MapCore(props: CoreProps) {
   const showZoom = mapHeight === 0 || roomBelow >= 88 + (showLocate ? 54 : 0);
 
   return (
+    <MapBearingContext.Provider value={bearing}>
     <View style={styles.fill} {...touch} onLayout={(event) => setMapHeight(Math.round(event.nativeEvent.layout.height))}>
       <MapRenderer
         ref={engine}
@@ -362,6 +382,7 @@ function MapCore(props: CoreProps) {
         mapPadding={nativePadding}
         picking={picking}
         initialView={initialView}
+        bearing={bearing}
         onReady={() => {
           setLoaded(true);
           setEngineError(null);
@@ -393,6 +414,7 @@ function MapCore(props: CoreProps) {
             <ControlButton icon="layers-outline" label="Map layers" active={layersOpen} onPress={() => setLayersOpen(true)} />
           ) : null}
           <ControlButton icon="scan-outline" label="Fit everything" onPress={() => engine.current?.fit(true)} />
+          <CompassButton onPress={() => engine.current?.resetNorth()} />
           {allowExpand && onToggleExpand ? (
             <ControlButton
               icon={expanded ? "contract-outline" : "expand-outline"}
@@ -467,6 +489,39 @@ function MapCore(props: CoreProps) {
         }
       />
     </View>
+    </MapBearingContext.Provider>
+  );
+}
+
+/**
+ * Shown only while the map is rotated: the needle points to north, and a tap
+ * turns the map back to north up.
+ */
+function CompassButton({ onPress }: { onPress(): void }) {
+  const styles = useStyles();
+  const bearing = useMapBearing(2);
+  const appear = useRef(new Animated.Value(0)).current;
+  const rotated = bearing > 2 && bearing < 358;
+
+  useEffect(() => {
+    Animated.spring(appear, { toValue: rotated ? 1 : 0, useNativeDriver: true, friction: 7, tension: 90 }).start();
+  }, [rotated, appear]);
+
+  if (!rotated) return null;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Map turned ${Math.round(bearing)} degrees. Turn back to north up`}
+      onPress={onPress}
+      hitSlop={4}
+      style={({ pressed }) => [styles.control, pressed && styles.controlPressed]}
+    >
+      <Animated.View style={[styles.needle, { opacity: appear, transform: [{ scale: appear }, { rotate: `${-bearing}deg` }] }]}>
+        <View style={styles.needleNorth} />
+        <View style={styles.needleSouth} />
+        <Text style={styles.needleN}>N</Text>
+      </Animated.View>
+    </Pressable>
   );
 }
 
@@ -798,8 +853,17 @@ export function SafeTrackInteractiveMap(props: Props) {
   const prefs = useMapPrefs((state) => state.prefs);
   const loadPrefs = useMapPrefs((state) => state.load);
   const [expanded, setExpanded] = useState(false);
-  const [me, setMe] = useState<Me | null>(null);
   const [locating, setLocating] = useState(false);
+  // The guardian's own position, live (about every second) with the compass.
+  const myPosition = useMyLocation((state) => state.me);
+  const myHeading = useMyLocation((state) => myFacing(state));
+  const me = useMemo<Me | null>(
+    () =>
+      myPosition
+        ? { latitude: myPosition.latitude, longitude: myPosition.longitude, accuracy: myPosition.accuracy, heading: myHeading }
+        : null,
+    [myPosition, myHeading],
+  );
   const lastView = useRef<MapView | null>(null);
 
   // Auto follows the app's appearance (Light / Dark / Match phone).
@@ -811,31 +875,11 @@ export function SafeTrackInteractiveMap(props: Props) {
     void loadPrefs();
   }, [loadPrefs]);
 
-  // Show the guardian without asking when location access was granted before.
+  // Show the guardian without asking when location access was granted before;
+  // kept live while this map is mounted (stops in the background).
   useEffect(() => {
     if (props.showMyLocation === false) return;
-    let active = true;
-
-    (async () => {
-      try {
-        const permission = await Location.getForegroundPermissionsAsync();
-        if (!permission.granted) return;
-        const position = await Location.getLastKnownPositionAsync();
-        if (active && position) {
-          setMe({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy ?? 0,
-          });
-        }
-      } catch {
-        // Location services off: the guardian marker simply isn't shown.
-      }
-    })();
-
-    return () => {
-      active = false;
-    };
+    return watchMyLocation();
   }, [props.showMyLocation]);
 
   const locateMe = useCallback(async () => {
@@ -848,12 +892,21 @@ export function SafeTrackInteractiveMap(props: Props) {
         showAlert("Location permission needed", "Allow location access to show where you are on the map.");
         return;
       }
-      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      setMe({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-        accuracy: position.coords.accuracy ?? 0,
+      if (!useMyLocation.getState().granted) restartMyLocation();
+      // A fresh, accurate fix now (the live updates continue after it).
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      useMyLocation.setState({
+        granted: true,
+        me: {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy ?? 0,
+          at: position.timestamp,
+          speedMps: position.coords.speed != null && position.coords.speed >= 0 ? position.coords.speed : null,
+          courseDegrees: null,
+        },
       });
+      testLog("locate", { acc: position.coords.accuracy });
     } catch (reason) {
       showAlert(
         "Location unavailable",
@@ -946,6 +999,28 @@ const useStyles = makeStyles((c, scheme) =>
     },
     groupGap: { marginBottom: 10 },
     control: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+    needle: { width: 26, height: 26, alignItems: "center", justifyContent: "center" },
+    needleNorth: {
+      width: 0,
+      height: 0,
+      borderLeftWidth: 5,
+      borderRightWidth: 5,
+      borderBottomWidth: 11,
+      borderLeftColor: "transparent",
+      borderRightColor: "transparent",
+      borderBottomColor: "#D93025",
+    },
+    needleSouth: {
+      width: 0,
+      height: 0,
+      borderLeftWidth: 5,
+      borderRightWidth: 5,
+      borderTopWidth: 11,
+      borderLeftColor: "transparent",
+      borderRightColor: "transparent",
+      borderTopColor: c.muted,
+    },
+    needleN: { position: "absolute", top: -7, fontSize: 8, fontWeight: "900", color: "#D93025" },
     controlPressed: { backgroundColor: c.primaryTint },
     divider: { height: StyleSheet.hairlineWidth, marginHorizontal: 9, backgroundColor: c.ruleStrong },
     sheetSection: {

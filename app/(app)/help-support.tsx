@@ -46,6 +46,10 @@ const FAQS: Array<{ question: string; answer: string }> = [
     answer: "While you have the Home or Location map open, about every second while the child moves (every 5 seconds while still), so the map follows the child live without refreshing. Otherwise about every 10 seconds while the child is moving and every 3 minutes while still. After an SOS, the watch checks every 5 seconds for 10 minutes.",
   },
   {
+    question: "What do the arrow, the footprints and the compass on the map mean?",
+    answer: "The arrow and soft cone on your child's photo (and on yours) show which way that person is facing, from the compass when standing still and the direction of travel when moving. Footprints show where your child walked or ran in the last 10 minutes; running prints are spaced further apart. Turn the map with two fingers; the compass button appears and turns it back to north. The safe zone badge changes by itself when your child goes in or out.",
+  },
+  {
     question: "Why does the map say Updated some time ago?",
     answer: "The watch or phone has not sent a new location, usually because it is off, has no internet, or has no location signal. The map shows the last known location until a new one arrives.",
   },

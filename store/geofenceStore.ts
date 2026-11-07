@@ -66,6 +66,12 @@ interface GeofenceState {
   clear:
     () => void;
 
+  /** Newer entry/exit events only, without a loading state (kept current while a map is open). */
+  refreshEvents:
+    (
+      childId: string
+    ) => Promise<void>;
+
 }
 
 
@@ -451,6 +457,28 @@ create<GeofenceState>((set, get) => ({
 
     });
 
+
+  },
+
+
+  refreshEvents:
+  async(
+    childId
+  ) => {
+
+    try{
+      const events = await fetchGeofenceEvents(childId);
+      // Another child may have been selected meanwhile.
+      if (get().zones.length && get().zones.every((zone) => zone.childId !== childId)) return;
+      const current = get().events;
+      const same =
+        current.length === events.length &&
+        current.every((event, index) => event.id === events[index]?.id);
+      if (!same) set({ events });
+    }
+    catch{
+      // Offline: the last known events stay.
+    }
 
   }
 

@@ -68,7 +68,7 @@ const TILE_PX = Platform.OS === "web" ? 256 : 512;
 /** After the guardian pans or zooms, following waits this long. */
 const USER_HOLD_MS = 15_000;
 
-/** Pixel offset of a point from the view's centre (Web Mercator). */
+/** Pixel offset of a point from the view's centre on screen (Web Mercator, map rotation included). */
 function pixelOffset(view: SafeTrackMapState, point: { latitude: number; longitude: number }) {
   const world = TILE_PX * 2 ** view.zoom;
   const x = (longitude: number) => ((longitude + 180) / 360) * world;
@@ -76,8 +76,15 @@ function pixelOffset(view: SafeTrackMapState, point: { latitude: number; longitu
     const sin = Math.sin((Math.max(-85, Math.min(85, latitude)) * Math.PI) / 180);
     return (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * world;
   };
-  return { dx: x(point.longitude) - x(view.longitude), dy: y(point.latitude) - y(view.latitude) };
+  const dx = x(point.longitude) - x(view.longitude);
+  const dy = y(point.latitude) - y(view.latitude);
+  // A map turned by `bearing` shows north-up offsets turned the other way.
+  const angle = (-(view.bearing ?? 0) * Math.PI) / 180;
+  return { dx: dx * Math.cos(angle) - dy * Math.sin(angle), dy: dx * Math.sin(angle) + dy * Math.cos(angle) };
 }
+
+/** How long a direction stays believable after the last update. */
+const HEADING_MAX_AGE_MS = 30_000;
 
 const NO_FOOTPRINTS: MapFootprint[] = [];
 
@@ -145,6 +152,11 @@ export function LocationMapCard({
   const isWatch = location?.source === "smartwatch";
   // The marker glides to each new point instead of jumping.
   const glide = useGlide(validLocation && location ? { latitude: location.latitude, longitude: location.longitude } : null);
+  // Where the child faces: only from a recent live update, never from an old record.
+  const recentHeading =
+    location?.headingDegrees != null && Date.now() - Date.parse(location.recordedAt) < HEADING_MAX_AGE_MS
+      ? Math.round(location.headingDegrees)
+      : null;
   // The trail ends where the marker is drawn.
   const path = useMemo(() => (glide && trail.length ? [...trail, glide] : NO_TRAIL), [trail, glide]);
 
@@ -200,6 +212,7 @@ export function LocationMapCard({
               networkType: isWatch ? networkType : null,
               accuracyMeters: location.accuracyMeters ?? null,
               mode,
+              headingDegrees: recentHeading,
             },
           ]
         : [],
@@ -222,6 +235,7 @@ export function LocationMapCard({
       batteryPercent,
       networkType,
       mode,
+      recentHeading,
     ],
   );
 

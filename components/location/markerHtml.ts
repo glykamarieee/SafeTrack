@@ -43,8 +43,6 @@ const MODE_ICONS: Record<string, string> = {
     '<svg viewBox="0 0 24 24"><circle cx="13" cy="4" r="2.2"/><path d="M12.5 8 10.5 14l-3 6M10.5 14l3.5 3 1 4M11.5 10 8 12.5M12.5 9l3.5 3"/></svg>',
   running:
     '<svg viewBox="0 0 24 24"><circle cx="15.5" cy="4" r="2.2"/><path d="M14.5 8 11 13H6.5M11 13l3 4-2 4.5M14 17h4.5M14.5 8.5l4 3M13.5 8.5 9 10"/></svg>',
-  biking:
-    '<svg viewBox="0 0 24 24"><circle cx="6" cy="16" r="3.6"/><circle cx="18" cy="16" r="3.6"/><path d="M6 16 9.5 9H15l3 7M9.5 9 12.5 16 15 9M8.5 6.5h3"/></svg>',
   vehicle:
     '<svg viewBox="0 0 24 24"><path d="M3.5 16v-3.5L6 7h12l2.5 5.5V16zM3.5 12.5h17"/><circle cx="7.5" cy="16.5" r="1.8"/><circle cx="16.5" cy="16.5" r="1.8"/></svg>',
   boat: '<svg viewBox="0 0 24 24"><path d="M3 14h18l-3 5H6zM12 4v10M12 5l5 6h-5"/></svg>',
@@ -64,12 +62,47 @@ function iconSvg(name?: string) {
   return "";
 }
 
+/** A left footprint pointing up (the right one is mirrored); the map rotates it. */
+export const FOOT_SVG = {
+  walk:
+    '<svg viewBox="0 0 24 24"><g class="st-foot-shape"><ellipse cx="11.3" cy="19.2" rx="2.8" ry="3"/><path d="M8.7 18.8 8.1 12h6.3l-1.5 3.6 1 3.4z"/><ellipse cx="11.3" cy="10.4" rx="4" ry="3.7"/><ellipse cx="14" cy="4.9" rx="1.5" ry="1.7"/><ellipse cx="11.6" cy="4.3" rx="1.1" ry="1.3"/><ellipse cx="9.7" cy="4.7" rx="1" ry="1.15"/><ellipse cx="8.2" cy="5.4" rx=".9" ry="1"/><ellipse cx="7" cy="6.5" rx=".75" ry=".85"/></g></svg>',
+  run: '<svg viewBox="0 0 24 24"><g class="st-foot-shape"><ellipse cx="11.5" cy="18.7" rx="3.1" ry="3.6"/><path d="M8.4 18.7 7.9 9.6h7.5l-1 9.1z"/><ellipse cx="11.6" cy="7.2" rx="4" ry="4.8"/></g><g class="st-foot-tread"><rect x="9" y="5.3" width="5.6" height=".9" rx=".45"/><rect x="9" y="7.4" width="5.6" height=".9" rx=".45"/><rect x="9" y="9.5" width="5.6" height=".9" rx=".45"/><rect x="9.6" y="17.4" width="4" height=".9" rx=".45"/><rect x="9.6" y="19.5" width="4" height=".9" rx=".45"/></g></svg>',
+};
+
 export function markerHtml(marker: MapMarker): MarkerHtml {
   const offset = marker.offsetX ?? 0;
 
   switch (marker.kind) {
     case "child":
-    case "guardian":
+    case "guardian": {
+      // The avatar's centre is the person's position; the direction layer
+      // (.st-dir) is turned by the map page, the short way round.
+      const ring = RING_COLORS[marker.ring ?? "neutral"];
+      const tint = marker.kind === "guardian" ? "#1A73E8" : ring;
+      const photo = safeUrl(marker.photoUrl);
+      const face = photo
+        ? `<img class="st-av-photo" src="${esc(photo)}" alt="" draggable="false" referrerpolicy="no-referrer" onerror="this.remove()"/><div class="st-av-initials" style="background:${esc(marker.color ?? "#15803D")}">${esc(marker.initials ?? "?")}</div>`
+        : `<div class="st-av-initials" style="background:${esc(marker.color ?? "#15803D")}">${esc(marker.initials ?? "?")}</div>`;
+      const source = marker.source && ICONS[marker.source] ? `<div class="st-av-source">${ICONS[marker.source]}</div>` : "";
+      const battery =
+        marker.batteryPercent != null
+          ? `<div class="st-av-battery${marker.batteryPercent <= 20 ? " low" : ""}">${Math.round(marker.batteryPercent)}%</div>`
+          : "";
+      const label = marker.label ? `<div class="st-av-label${marker.kind === "guardian" ? " me" : ""}">${esc(marker.label)}</div>` : "";
+      const mode =
+        marker.mode && MODE_ICONS[marker.mode]
+          ? `<div class="st-av-mode" data-mode="${esc(marker.mode)}" title="${esc(marker.mode)}">${MODE_ICONS[marker.mode]}</div>`
+          : "";
+      const direction = `<div class="st-dir${marker.headingDegrees == null ? " off" : ""}" style="--tint:${tint}"><div class="st-dir-cone"></div><svg class="st-dir-arrow" viewBox="0 0 92 92"><path d="M46 1 56 17 46 12.5 36 17Z"/></svg></div>`;
+
+      return {
+        html: `<div class="st-person${marker.ring === "sos" ? " sos" : ""}" style="--ring:${ring}">${direction}${marker.ring === "sos" ? '<div class="st-av-halo"></div>' : ""}<div class="st-av-ring">${face}</div>${source}${mode}${battery}${label}</div>`,
+        width: 92,
+        height: marker.label ? 112 : 92,
+        anchorX: 46 - offset,
+        anchorY: 46,
+      };
+    }
     case "replay": {
       const ring = RING_COLORS[marker.ring ?? "neutral"];
       const photo = safeUrl(marker.photoUrl);
@@ -161,4 +194,31 @@ export const MARKER_CSS = `
 .st-pin{position:relative;width:30px;height:40px;cursor:pointer}
 .st-pin-head{position:absolute;left:2px;top:2px;width:26px;height:26px;box-sizing:border-box;border-radius:50% 50% 0 50%;transform:rotate(45deg);border:2px solid #fff;box-shadow:0 2px 8px rgba(16,40,30,.3)}
 .st-pin-dot{position:absolute;left:11px;top:11px;width:8px;height:8px;border-radius:50%;background:#fff}
+.st-person{position:relative;width:92px;height:100%;cursor:pointer;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.st-person .st-av-ring{position:absolute;left:21px;top:21px;margin:0}
+.st-person .st-av-halo{top:20px;left:20px}
+.st-person .st-av-source{top:17px;right:15px}
+.st-person .st-av-mode{top:53px;left:15px}
+.st-person .st-av-battery{top:55px;right:9px}
+.st-person .st-av-label{position:absolute;top:90px;left:50%;transform:translateX(-50%);white-space:nowrap;margin:0}
+.st-av-label.me{background:#1A73E8}
+.st-dir{position:absolute;left:0;top:0;width:92px;height:92px;pointer-events:none;transition:transform .32s cubic-bezier(.2,.8,.2,1),opacity .26s}
+.st-dir.off{opacity:0}
+.st-dir-cone{position:absolute;inset:0;border-radius:50%;background:conic-gradient(from -34deg,var(--tint) 0deg 68deg,transparent 68deg);-webkit-mask:radial-gradient(circle,rgba(0,0,0,.85) 25%,rgba(0,0,0,.35) 55%,transparent 72%);mask:radial-gradient(circle,rgba(0,0,0,.85) 25%,rgba(0,0,0,.35) 55%,transparent 72%);animation:st-breathe 2.8s ease-in-out infinite}
+.st-dir-arrow{position:absolute;inset:0;width:92px;height:92px;overflow:visible;z-index:5;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.35))}
+.st-dir-arrow path{fill:var(--tint);stroke:#fff;stroke-width:2.2;stroke-linejoin:round}
+@keyframes st-breathe{0%,100%{opacity:.6}50%{opacity:1}}
+.st-foot{width:22px;height:22px;transform:rotate(calc(var(--hd) * 1deg - var(--map-bearing,0deg)))}
+.st-foot.r svg{transform:scaleX(-1)}
+.st-foot svg{width:100%;height:100%;display:block;overflow:visible}
+.st-foot .st-foot-shape{fill:#0D2A1E;stroke:#fff;stroke-width:1.1;paint-order:stroke;filter:drop-shadow(0 .6px .6px rgba(0,0,0,.3))}
+.st-foot.run .st-foot-shape{fill:#15803D}
+.st-foot .st-foot-tread{fill:#fff}
+body.dark .st-foot .st-foot-shape{fill:#CDEFD9;stroke:#0D2A1E}
+body.dark .st-foot.run .st-foot-shape{fill:#3DDC84}
+body.dark .st-foot .st-foot-tread{fill:#0D2A1E}
+.st-foot.fresh svg{animation:st-press .42s cubic-bezier(.2,.8,.2,1) both}
+.st-foot.r.fresh svg{animation-name:st-press-r}
+@keyframes st-press{from{transform:scale(1.45);opacity:.35}to{transform:scale(1);opacity:1}}
+@keyframes st-press-r{from{transform:scaleX(-1) scale(1.45);opacity:.35}to{transform:scaleX(-1) scale(1);opacity:1}}
 `;

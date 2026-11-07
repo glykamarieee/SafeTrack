@@ -122,6 +122,8 @@ export const ExpoGoMapRenderer = forwardRef<MapEngineHandle, MapEngineProps>(fun
           );
         });
       },
+      // Expo Go's map does not rotate.
+      resetNorth() {},
       zoomBy(delta) {
         // Queued, so fast taps add up instead of reading a mid-animation camera.
         zoomQueue.current = zoomQueue.current.then(async () => {

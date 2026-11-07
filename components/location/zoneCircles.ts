@@ -2,10 +2,10 @@ import type { Geofence, GeofenceEvent } from "../../types/safetrack";
 import type { AvatarRing, MapCircle, ZoneStatus } from "./mapTypes";
 
 /**
- * Safe Zones as map circles. A zone's inside/outside colour comes only from
- * the server's latest `entry`/`exit` geofence event for that zone, never from
- * comparing positions on the client: the map must not become a second,
- * competing geofence engine.
+ * Safe Zones as map circles, coloured from the server's latest `entry`/`exit`
+ * geofence event for each zone. The guardian's live map refines this with the
+ * live position (hooks/useZoneCircles.ts, with an edge buffer); alerts still
+ * come only from the server.
  */
 export function toZoneCircles(
   zones: Geofence[],

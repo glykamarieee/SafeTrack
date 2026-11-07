@@ -109,7 +109,8 @@ export interface LocationLog {
   modeConfidence?: number | null;
 }
 
-export type TravelMode = "still" | "walking" | "running" | "biking" | "vehicle" | "boat" | "unknown";
+/** "biking" was removed (2026-11-08); old rows are read as "vehicle" (lib/travelMode normalizeMode). */
+export type TravelMode = "still" | "walking" | "running" | "vehicle" | "boat" | "unknown";
 
 
 /*

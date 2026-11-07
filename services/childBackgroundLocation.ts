@@ -40,10 +40,50 @@ const LIVE_PROBE_MS = 20 * 1000;
 // or a walking speed sends at once.
 const LIVE_STILL_MS = 5 * 1000;
 const LIVE_MOVE_M = 5;
+// Live: turning this much in place is sent at once (the arrow on the map).
+const LIVE_TURN_DEG = 20;
+// Live: a fix coarser than this is not sent while a sharp one is this recent.
+const LIVE_COARSE_M = 50;
+const LIVE_SHARP_M = 20;
+const LIVE_SHARP_MS = 10 * 1000;
 const LIVE_KEY = "safetrack.childPhone.live";
 
-/** probedAt, latitude, longitude: the last fix sent to the live map. */
-type LiveState = { live: boolean; probedAt: number; latitude?: number; longitude?: number };
+/** probedAt, latitude, longitude, heading, accuracy: the last fix sent to the live map. */
+type LiveState = {
+  live: boolean;
+  probedAt: number;
+  latitude?: number;
+  longitude?: number;
+  heading?: number | null;
+  accuracy?: number | null;
+};
+
+// The phone's compass while a guardian watches: which way the child faces
+// when standing still (GPS gives a direction only while moving).
+let compass: Location.LocationSubscription | null = null;
+let compassHeading: { degrees: number; at: number } | null = null;
+
+async function setCompass(on: boolean) {
+  if (on && !compass) {
+    compass = await Location.watchHeadingAsync((value) => {
+      const degrees = value.trueHeading >= 0 ? value.trueHeading : value.magHeading;
+      if (Number.isFinite(degrees) && degrees >= 0 && value.accuracy !== 0) compassHeading = { degrees, at: Date.now() };
+    }).catch(() => null);
+  } else if (!on && compass) {
+    compass.remove();
+    compass = null;
+    compassHeading = null;
+  }
+}
+
+/** GPS direction while walking or running, otherwise the compass (when recent). */
+function facing(fix: Location.LocationObject, speed: number | null): number | null {
+  if (speed != null && speed >= 1 && fix.coords.heading != null && fix.coords.heading >= 0) return fix.coords.heading;
+  if (compassHeading && Date.now() - compassHeading.at < 3000) return Math.round(compassHeading.degrees) % 360;
+  return null;
+}
+
+const angleBetween = (a: number, b: number) => Math.abs(((a - b + 540) % 360) - 180);
 
 async function readLive(): Promise<LiveState> {
   try {
@@ -132,18 +172,26 @@ async function shareLive(fix: Location.LocationObject, last: LastSent | null): P
   const reported = fix.coords.speed != null && fix.coords.speed >= 0 ? fix.coords.speed : null;
   const speed = reported ?? (last ? speedBetween({ ...last, time: last.at }, { ...point, time: fix.timestamp }) : null);
 
-  // Live and still: the marker does not move, so one fix every LIVE_STILL_MS.
+  const heading = state.live ? facing(fix, speed) : null;
+
   if (state.live && state.latitude != null && state.longitude != null) {
+    // A Wi-Fi/cell fix right after a GPS one would pull the marker away.
+    const sharpRecently = (state.accuracy ?? Infinity) <= LIVE_SHARP_M && fix.timestamp - state.probedAt < LIVE_SHARP_MS;
+    if (accuracy != null && accuracy > LIVE_COARSE_M && sharpRecently) return true;
+
+    // Live and still: the marker does not move, so one fix every LIVE_STILL_MS,
+    // unless the child turned (the direction arrow).
     const still = (speed ?? 0) < SPEED_BANDS.still;
     const moved = metersBetween({ latitude: state.latitude, longitude: state.longitude }, point) >= LIVE_MOVE_M;
-    if (still && !moved && fix.timestamp - state.probedAt < LIVE_STILL_MS) return true;
+    const turned = heading != null && (state.heading == null || angleBetween(heading, state.heading) >= LIVE_TURN_DEG);
+    if (still && !moved && !turned && fix.timestamp - state.probedAt < LIVE_STILL_MS) return true;
   }
 
   let live: boolean | null;
   try {
     live = await pushChildPhoneLive(point.latitude, point.longitude, accuracy, fix.timestamp, {
       speedMps: speed,
-      headingDegrees: fix.coords.heading,
+      headingDegrees: heading ?? fix.coords.heading,
       ...classifySpeed(speed, accuracy),
     });
   } catch (reason) {
@@ -156,12 +204,15 @@ async function shareLive(fix: Location.LocationObject, last: LastSent | null): P
   }
 
   const next = Boolean(live);
-  await AsyncStorage.setItem(LIVE_KEY, JSON.stringify({ live: next, probedAt: fix.timestamp, ...point })).catch(() => undefined);
+  const saved: LiveState = { live: next, probedAt: fix.timestamp, ...point, heading, accuracy };
+  await AsyncStorage.setItem(LIVE_KEY, JSON.stringify(saved)).catch(() => undefined);
   if (next !== state.live) {
     await startTask(next ? LIVE_INTERVAL_MS : CHECK_INTERVAL_MS).catch((reason) =>
       console.warn("[background location] pace change failed", reason),
     );
   }
+  // The compass runs only while a guardian watches (battery).
+  if (next !== Boolean(compass)) await setCompass(next);
   return true;
 }
 
@@ -233,6 +284,7 @@ export async function refreshBackgroundSharing(): Promise<void> {
 }
 
 export async function stopBackgroundSharing(): Promise<void> {
+  await setCompass(false);
   try {
     if (await Location.hasStartedLocationUpdatesAsync(CHILD_LOCATION_TASK)) {
       await Location.stopLocationUpdatesAsync(CHILD_LOCATION_TASK);

@@ -259,8 +259,33 @@ the Expo app.
 - **Live map:** `location_logs` is in the `supabase_realtime` publication; the
   location store adds each new row to the front of the recent history and also
   reads the newest row every 15 s as a fallback. The marker glides between points
-  (`useGlide`) with a 10-minute trail: footprints where the child walked or ran,
-  a line for the current bike or vehicle stretch (`components/location/footprints.ts`).
+  at an even pace lasting about the gap between fixes (`useGlide`, ~30 frames/s),
+  with a 10-minute trail (`components/location/footprints.ts`): left/right foot
+  prints facing the direction of travel where the child walked (2.6 m apart) or
+  ran (4.4 m, sneaker prints), GPS wobble smoothed, fading after 2 min, the newest
+  pressing in (Mapbox `SymbolLayer` with the PNGs in `assets/map/`, Leaflet
+  inline SVG); a line for the current vehicle stretch.
+- **Avatars (2026-11-08):** the child and "You" are drawn centred on the true
+  position (`MarkerGlyph.tsx` `PersonGlyph`, `markerHtml.ts` `.st-person`) with
+  a direction arrow and a breathing view cone where the person faces: the
+  child's from the live fix (`heading_degrees`: GPS direction while moving,
+  else the watch/phone compass, only while a guardian watches), the guardian's
+  from the phone compass. Turns the short way round and subtracts the map's
+  rotation (`mapBearing.ts`); hidden when unknown or older than 30 s. The
+  guardian's own position is live (`services/myLocationService.ts`: GPS every
+  ~1 s and the compass while a map is open, paused in the background) and the
+  "You" chip shows "together" or the distance to the child; only "You" is
+  nudged aside when the two overlap (`spreadOverlapping`).
+- **Rotation:** two fingers on the phone map (Mapbox `rotateEnabled`, free) and
+  Shift + drag/wheel on the web map (`leaflet-rotate@0.2.8`); a compass button
+  (top right) appears while rotated and turns the map back to north.
+- **Safe zone status** updates by itself (`hooks/useZoneCircles.ts`): entry/exit
+  events are re-read every 20 s and on each saved record, and while the
+  position is live, inside/outside follows it with an edge buffer (half the GPS
+  accuracy, 5-20 m) and 2 agreeing readings. Alerts still come only from the server.
+- **Field-test log:** guardian app lines `[STLOG]` in logcat (`lib/testLog.ts`,
+  `TEST_LOG`); watch `/sdcard/Android/data/com.safetrack.watch/files/safetrack-test.csv`
+  (`LiveTestLog.kt`; off when `testlog.off` exists in that folder).
 - **Live position (about 1 s, `20261108_live_stream.sql`):** while Home or
   Location is in front, `useChildLive` → `services/liveLocationService.ts` calls
   `request_child_live` every 15 s (`live_viewers.until` = now + 30 s) and joins
@@ -275,10 +300,17 @@ the Expo app.
   (`hooks/useWatchStatus.ts`). Runs while the screen is in front with no tap needed;
   stops in the background and when the screen closes, restarts on return, and
   a failed renewal is retried every 15 s. `applyLiveFix` in the location store ignores drift
-  within the accuracy while still, needs 2 agreeing readings to change the
-  activity, and never lets an older saved row pull the marker back.
+  within the accuracy while still (unless the new fix is clearly sharper), skips
+  a coarse (> 50 m, or 3x worse) fix while a sharp one is recent and a jump
+  faster than 25 m/s beyond both accuracies (until 3 fixes agree), changes the
+  activity after 2 agreeing readings or at once when confidence ≥ 0.7, and never
+  lets an older saved row pull the marker back. The watch and phone do not send
+  a coarse fix right after a sharp one, never drop a fix while a push is on its
+  way (the newest is sent next), and send a turn of 15-20° at once while still.
 - **Travel mode:** `location_logs.speed_mps`, `heading_degrees`, `travel_mode`
-  (`still | walking | running | biking | vehicle | boat | unknown`) and
+  (`still | walking | running | vehicle | boat | unknown`; the bike mode was
+  removed 2026-11-08: running is up to 5 m/s, faster or a detected bicycle is
+  "vehicle", and old `biking` rows are read as vehicle by `normalizeMode`) and
   `mode_confidence`, written by `record_watch_location_v2` /
   `record_child_phone_location_v2` (wrappers that call the unchanged originals,
   so old watches and phones keep working; the apps fall back to the originals

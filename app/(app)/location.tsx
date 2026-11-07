@@ -13,7 +13,8 @@ import { useAuthStore } from "../../store/authStore";
 import { useLocationStore } from "../../store/locationStore";
 import { useGeofenceStore } from "../../store/geofenceStore";
 import { LocationMapCard } from "../../components/location/LocationMapCard";
-import { childRing, toZoneCircles } from "../../components/location/zoneCircles";
+import { childRing } from "../../components/location/zoneCircles";
+import { useZoneCircles } from "../../hooks/useZoneCircles";
 import { freshness } from "../../components/location/mapTypes";
 import { useSosStore } from "../../store/sosStore";
 import { useWatchStatus } from "../../hooks/useWatchStatus";
@@ -68,8 +69,6 @@ export default function LocationScreen() {
   // About one fix a second while this screen is open (guardians only).
   const live = useChildLive(role === "child" ? null : primaryChild?.id);
   const guardianId = useAuthStore((state) => state.guardian?.id);
-  const zones = useGeofenceStore((state) => state.zones);
-  const zoneEvents = useGeofenceStore((state) => state.events);
   const loadZones = useGeofenceStore((state) => state.load);
   const sosAlerts = useSosStore((state) => state.alerts);
   const loadSos = useSosStore((state) => state.loadForChild);
@@ -108,7 +107,8 @@ export default function LocationScreen() {
 
   const sosActive = sosAlerts.some((alert) => alert.childId === primaryChild?.id && alert.status === "active");
 
-  const zoneCircles = useMemo(() => toZoneCircles(zones, zoneEvents), [zones, zoneEvents]);
+  // Inside/outside updates by itself: live position plus the server's events.
+  const zoneCircles = useZoneCircles(primaryChild?.id, location);
   const details = usePlaceDetails(location, history, zoneCircles);
 
   // The last 10 minutes behind the child: footprints on foot, a line otherwise.

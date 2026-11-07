@@ -11,6 +11,8 @@ import { readCache, writeCache } from "../lib/offlineCache";
 
 import { supabase } from "../lib/supabase";
 
+import { testLog } from "../lib/testLog";
+
 import type { LiveFix } from "../services/liveLocationService";
 
 import type { LocationLog, TravelMode } from "../types/safetrack";
@@ -90,12 +92,21 @@ const LIVE_TRAIL_MS = 10 * 60_000;
 const LIVE_TRAIL_MAX = 900;
 /** A fix this coarse is used only when nothing better is recent. */
 const POOR_ACCURACY_M = 50;
+/** A fix much coarser than the one shown (this factor) waits while that one is recent. */
+const WORSE_FACTOR = 3;
 /** Still: moves within the accuracy (at least this much) are GPS drift. */
 const STILL_DRIFT_M = 8;
-/** A new activity is shown after this many readings in a row agree. */
+/** A new activity is shown after this many readings in a row agree... */
 const MODE_AGREE = 2;
+/** ...or at once when the device is this sure (a child starting to run). */
+const MODE_SURE = 0.7;
+/** Faster than this between two fixes is a GPS jump, not the child (~90 km/h). */
+const MAX_JUMP_MPS = 25;
+/** ...unless this many fixes in a row agree on the new place. */
+const JUMP_CONFIRM = 3;
 
 let pendingMode: { mode: TravelMode | null; count: number } = { mode: null, count: 0 };
+let jumpCandidate: { latitude: number; longitude: number; count: number } | null = null;
 
 function metersBetween(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) {
   const radians = (value: number) => (value * Math.PI) / 180;
@@ -106,6 +117,11 @@ function metersBetween(a: { latitude: number; longitude: number }, b: { latitude
 }
 
 const isLiveRow = (log: LocationLog | null) => Boolean(log?.id.startsWith("live:"));
+
+/** A live fix that was not shown, for the field-test log. */
+function skip(fix: LiveFix, reason: string) {
+  testLog("live-skip", { why: reason, acc: fix.accuracyMeters, delay: fix.receivedAt - Date.parse(fix.recordedAt) });
+}
 
 
 
@@ -617,17 +633,35 @@ applyLiveFix: (fix) => {
   const fixTime = Date.parse(fix.recordedAt);
   if (!Number.isFinite(fixTime) || fixTime <= Date.parse(current.recordedAt)) return;
 
-  // A poor fix is skipped while a better one is recent.
-  const recent = fixTime - Date.parse(current.recordedAt) < 30_000;
-  if ((fix.accuracyMeters ?? 0) > POOR_ACCURACY_M && recent && (current.accuracyMeters ?? Infinity) <= POOR_ACCURACY_M) return;
+  // A poor fix is skipped while a better one is recent: a Wi-Fi or cell
+  // position can be 50-300 m off and would pull the child away from where
+  // they really are (seen when the child and guardian stood together).
+  const elapsedMs = fixTime - Date.parse(current.recordedAt);
+  const recent = elapsedMs < 30_000;
+  const shownAccuracy = current.accuracyMeters ?? Infinity;
+  const fixAccuracy = fix.accuracyMeters ?? 0;
+  if (recent && fixAccuracy > POOR_ACCURACY_M && shownAccuracy <= POOR_ACCURACY_M) return skip(fix, "coarse");
+  if (elapsedMs < 15_000 && fixAccuracy > 20 && fixAccuracy > shownAccuracy * WORSE_FACTOR) return skip(fix, "worse");
+  // A jump faster than any child can travel is a bad fix, not movement...
+  const jump = metersBetween(current, fix);
+  // Both accuracies count: a sharp fix far from a coarse one is a correction.
+  const slack = fixAccuracy + (Number.isFinite(shownAccuracy) ? shownAccuracy : 1000) + 30;
+  if (recent && elapsedMs > 0 && jump - slack > MAX_JUMP_MPS * (elapsedMs / 1000)) {
+    // ...unless the next fixes agree on the new place: then the shown one was wrong.
+    const agrees = jumpCandidate && metersBetween(jumpCandidate, fix) <= Math.max(25, fixAccuracy * 2);
+    jumpCandidate = { latitude: fix.latitude, longitude: fix.longitude, count: agrees ? jumpCandidate!.count + 1 : 1 };
+    if (jumpCandidate.count < JUMP_CONFIRM) return skip(fix, "jump");
+  }
+  jumpCandidate = null;
 
-  // The activity changes only when MODE_AGREE readings in a row agree, so one
-  // odd reading never flips it.
+  // The activity changes when MODE_AGREE readings in a row agree, so one odd
+  // reading never flips it; a confident reading switches at once (no lag when
+  // the child starts running).
   const reported = fix.travelMode && fix.travelMode !== "unknown" ? fix.travelMode : null;
   let mode = (current.travelMode ?? null) as TravelMode | null;
   if (reported && reported !== mode) {
     pendingMode = pendingMode.mode === reported ? { mode: reported, count: pendingMode.count + 1 } : { mode: reported, count: 1 };
-    if (pendingMode.count >= MODE_AGREE || !mode || mode === "unknown") {
+    if (pendingMode.count >= MODE_AGREE || (fix.modeConfidence ?? 0) >= MODE_SURE || !mode || mode === "unknown") {
       mode = reported;
       pendingMode = { mode: null, count: 0 };
     }
@@ -635,10 +669,12 @@ applyLiveFix: (fix) => {
     pendingMode = { mode: null, count: 0 };
   }
 
-  // Standing still: GPS drift within the accuracy does not move the marker.
+  // Standing still: GPS drift within the accuracy does not move the marker,
+  // unless the new fix is clearly more accurate (then it is the better spot).
   const still = mode === "still" || (fix.speedMps != null && fix.speedMps < 0.6);
-  const drift = metersBetween(current, fix) <= Math.max(fix.accuracyMeters ?? 0, STILL_DRIFT_M);
-  const hold = still && drift;
+  const drift = jump <= Math.max(fixAccuracy, STILL_DRIFT_M);
+  const sharper = fix.accuracyMeters != null && fix.accuracyMeters < shownAccuracy * 0.6;
+  const hold = still && drift && !sharper;
 
   const latest: LocationLog = {
     ...current,
@@ -664,6 +700,19 @@ applyLiveFix: (fix) => {
   }
 
   set({ latest, liveTrail: trail.slice(-LIVE_TRAIL_MAX) });
+  testLog("live", {
+    src: fix.source === "smartwatch" ? "watch" : "phone",
+    delay: fix.receivedAt - fixTime,
+    acc: fix.accuracyMeters,
+    spd: fix.speedMps,
+    hd: fix.headingDegrees,
+    mode: fix.travelMode,
+    conf: fix.modeConfidence,
+    shown: mode,
+    hold: hold ? 1 : 0,
+    lat: Math.round(fix.latitude * 1e6) / 1e6,
+    lng: Math.round(fix.longitude * 1e6) / 1e6,
+  });
 },
 
 }));

@@ -2,17 +2,19 @@ import { forwardRef, memo, type ElementRef, useCallback, useEffect, useImperativ
 import { Pressable, StyleSheet, View } from "react-native";
 import Mapbox, {
   Camera,
-  CircleLayer,
   FillLayer,
+  Images,
   LineLayer,
   MapView,
   MarkerView,
   ShapeSource,
+  SymbolLayer,
   VectorSource,
   type MapState,
 } from "@rnmapbox/maps";
 
 import { MarkerGlyph, glyphBox } from "./MarkerGlyph";
+import { MapBearingContext, createBearingStore } from "./mapBearing";
 import { MAPBOX_TOKEN } from "./mapSupport";
 import {
   DEFAULT_VIEW,
@@ -28,12 +30,48 @@ import {
   type MapCircle,
   type MapEngineHandle,
   type MapEngineProps,
+  type MapFootprint,
   type MapMarker,
   type MapPoint,
   type MapPrefs,
 } from "./mapTypes";
 
 void Mapbox.setAccessToken(MAPBOX_TOKEN);
+
+/** Footprint icons (assets/map, drawn by scripts: left/right, walk/run, light/dark). */
+const FOOT_IMAGES = {
+  "foot-walk-l": require("../../assets/map/foot-walk-l.png"),
+  "foot-walk-r": require("../../assets/map/foot-walk-r.png"),
+  "foot-run-l": require("../../assets/map/foot-run-l.png"),
+  "foot-run-r": require("../../assets/map/foot-run-r.png"),
+  "foot-walk-l-d": require("../../assets/map/foot-walk-l-d.png"),
+  "foot-walk-r-d": require("../../assets/map/foot-walk-r-d.png"),
+  "foot-run-l-d": require("../../assets/map/foot-run-l-d.png"),
+  "foot-run-r-d": require("../../assets/map/foot-run-r-d.png"),
+};
+
+/** Footprint size on the map: grows with zoom like a real print. */
+const FOOT_SIZE = ["interpolate", ["exponential", 1.6], ["zoom"], 14, 0.1, 17, 0.2, 19, 0.36, 21, 0.62];
+/** A fresh print starts this much bigger and settles (press-in). */
+const PRESS_MS = 420;
+
+function stepFeatures(steps: MapFootprint[], dark: boolean) {
+  return {
+    type: "FeatureCollection" as const,
+    features: steps.map((step, index) => ({
+      type: "Feature" as const,
+      id: step.id,
+      properties: {
+        icon: `foot-${step.gait}-${step.foot === "left" ? "l" : "r"}${dark ? "-d" : ""}`,
+        heading: step.heading,
+        opacity: step.opacity,
+        // Newest first when prints overlap at a low zoom.
+        order: steps.length - index,
+      },
+      geometry: { type: "Point" as const, coordinates: [step.longitude, step.latitude] },
+    })),
+  };
+}
 
 function styleUrl(prefs: MapPrefs, dark: boolean) {
   if (prefs.mapType === "satellite") {
@@ -74,6 +112,11 @@ export const MapboxRenderer = forwardRef<MapEngineHandle, MapEngineProps>(functi
 
   const latest = useRef(props);
   latest.current = props;
+
+  // The shell's store when given (compass button), otherwise our own: the
+  // avatar arrows read it to stay correct while the map is rotated.
+  const ownBearing = useRef(createBearingStore()).current;
+  const bearing = props.bearing ?? ownBearing;
 
   const size = useRef({ width: 0, height: 0 });
 
@@ -143,6 +186,9 @@ export const MapboxRenderer = forwardRef<MapEngineHandle, MapEngineProps>(functi
         targetZoom.current = next;
         camera.current?.zoomTo(next, 220);
       },
+      resetNorth() {
+        camera.current?.setCamera({ heading: 0, animationDuration: 450, animationMode: "easeTo" });
+      },
     }),
     [fit, fitPoints],
   );
@@ -176,18 +222,12 @@ export const MapboxRenderer = forwardRef<MapEngineHandle, MapEngineProps>(functi
     };
   }, [path]);
 
+  // Settled prints in one layer; just-stepped ones in their own, animated.
   const stepShape = useMemo(() => {
-    const steps = props.footprints ?? [];
-    if (!steps.length) return null;
-    return {
-      type: "FeatureCollection" as const,
-      features: steps.map((step) => ({
-        type: "Feature" as const,
-        properties: { opacity: step.opacity },
-        geometry: { type: "Point" as const, coordinates: [step.longitude, step.latitude] },
-      })),
-    };
-  }, [props.footprints]);
+    const steps = (props.footprints ?? []).filter((step) => !step.fresh);
+    return steps.length ? stepFeatures(steps, dark) : null;
+  }, [props.footprints, dark]);
+  const freshSteps = useMemo(() => (props.footprints ?? []).filter((step) => step.fresh), [props.footprints]);
 
   const start = initialView ?? DEFAULT_VIEW;
   const ornamentBottom = 8 + mapPadding.bottom;
@@ -207,8 +247,10 @@ export const MapboxRenderer = forwardRef<MapEngineHandle, MapEngineProps>(functi
         logoPosition={{ bottom: ornamentBottom, left: 8 }}
         attributionPosition={{ bottom: ornamentBottom, left: 92 }}
         scaleBarEnabled={false}
+        // SafeTrack draws its own compass button (SafeTrackInteractiveMap).
         compassEnabled={false}
-        rotateEnabled={false}
+        // Two-finger rotate (free: rotating costs no extra map loads).
+        rotateEnabled
         pitchEnabled={false}
         // Android: keep drags inside the map even within a ScrollView.
         requestDisallowInterceptTouchEvent
@@ -228,14 +270,17 @@ export const MapboxRenderer = forwardRef<MapEngineHandle, MapEngineProps>(functi
         }}
         onCameraChanged={(state: MapState) => {
           currentZoom.current = state.properties.zoom;
+          bearing.set(state.properties.heading ?? 0);
         }}
         onMapIdle={(state: MapState) => {
           currentZoom.current = state.properties.zoom;
           targetZoom.current = null;
+          bearing.set(state.properties.heading ?? 0);
           const [longitude, latitude] = state.properties.center;
-          onViewChange({ latitude: latitude!, longitude: longitude!, zoom: state.properties.zoom });
+          onViewChange({ latitude: latitude!, longitude: longitude!, zoom: state.properties.zoom, bearing: state.properties.heading ?? 0 });
         }}
       >
+        <Images images={FOOT_IMAGES} />
         <Camera
           ref={camera}
           defaultSettings={{ centerCoordinate: [start.longitude, start.latitude], zoomLevel: start.zoom }}
@@ -310,23 +355,32 @@ export const MapboxRenderer = forwardRef<MapEngineHandle, MapEngineProps>(functi
 
         {stepShape ? (
           <ShapeSource id="st-steps" shape={stepShape}>
-            <CircleLayer
-              id="st-steps-dot"
+            <SymbolLayer
+              id="st-steps-foot"
               style={{
-                circleRadius: ["interpolate", ["linear"], ["zoom"], 14, 1.6, 17, 3.2, 20, 5.5],
-                circleColor: dark ? "#BFE8CF" : "#0D2A1E",
-                circleOpacity: ["get", "opacity"],
-                circleStrokeColor: dark ? "#0D2A1E" : "#FFFFFF",
-                circleStrokeWidth: 1,
-                circleStrokeOpacity: ["get", "opacity"],
+                iconImage: ["get", "icon"],
+                iconSize: FOOT_SIZE as never,
+                iconRotate: ["get", "heading"],
+                // Turns with the map, so prints keep pointing along the path.
+                iconRotationAlignment: "map",
+                iconOpacity: ["get", "opacity"],
+                // At a low zoom overlapping prints thin out instead of piling up.
+                iconAllowOverlap: false,
+                iconIgnorePlacement: true,
+                iconPadding: 0,
+                symbolSortKey: ["get", "order"],
               }}
             />
           </ShapeSource>
         ) : null}
 
-        {[...markers].sort((first, second) => zIndexFor(first) - zIndexFor(second)).map((marker) => (
-          <MapboxMarker key={marker.id} marker={marker} onPress={onMarkerPress} />
-        ))}
+        <FreshSteps steps={freshSteps} dark={dark} />
+
+        <MapBearingContext.Provider value={bearing}>
+          {[...markers].sort((first, second) => zIndexFor(first) - zIndexFor(second)).map((marker) => (
+            <MapboxMarker key={marker.id} marker={marker} onPress={onMarkerPress} />
+          ))}
+        </MapBearingContext.Provider>
       </MapView>
     </View>
   );
@@ -348,6 +402,51 @@ function circleFeature(circle: MapCircle) {
     geometry: { type: "Polygon" as const, coordinates: [circleRing(circle)] },
   };
 }
+
+/**
+ * Prints the child just stepped: they appear a little bigger and lighter and
+ * settle into place over PRESS_MS, like a foot pressing into sand. Only this
+ * small layer re-renders while it animates.
+ */
+const FreshSteps = memo(function FreshSteps({ steps, dark }: { steps: MapFootprint[]; dark: boolean }) {
+  const [press, setPress] = useState(1);
+  const key = steps.map((step) => step.id).join(",");
+
+  useEffect(() => {
+    if (!key) return;
+    const started = Date.now();
+    let frame = 0;
+    const tick = () => {
+      const t = Math.min(1, (Date.now() - started) / PRESS_MS);
+      setPress(1 - (1 - t) ** 3);
+      if (t < 1) frame = requestAnimationFrame(tick);
+    };
+    setPress(0);
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [key]);
+
+  const shape = useMemo(() => (steps.length ? stepFeatures(steps, dark) : null), [steps, dark]);
+  if (!shape) return null;
+
+  const grow = 1.45 - 0.45 * press;
+  return (
+    <ShapeSource id="st-steps-new" shape={shape}>
+      <SymbolLayer
+        id="st-steps-new-foot"
+        style={{
+          iconImage: ["get", "icon"],
+          iconSize: ["*", FOOT_SIZE, grow] as never,
+          iconRotate: ["get", "heading"],
+          iconRotationAlignment: "map",
+          iconOpacity: 0.35 + 0.65 * press,
+          iconAllowOverlap: true,
+          iconIgnorePlacement: true,
+        }}
+      />
+    </ShapeSource>
+  );
+});
 
 const MapboxMarker = memo(function MapboxMarker({ marker, onPress }: { marker: MapMarker; onPress(id: string): void }) {
   const box = glyphBox(marker);

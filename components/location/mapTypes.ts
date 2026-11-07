@@ -2,6 +2,7 @@
 // iOS, and the Google Maps JavaScript API (or the Leaflet fallback) on web.
 
 import type { TravelMode } from "../../types/safetrack";
+import type { BearingStore } from "./mapBearing";
 
 export type MarkerKind =
   | "child"
@@ -54,10 +55,28 @@ export type MapMarker = {
   offsetX?: number;
   /** Child avatar: how the child is moving, shown as a small badge. */
   mode?: TravelMode | null;
+  /**
+   * Child and guardian avatars: the direction the person faces (0 = north,
+   * clockwise), drawn as an arrow and a soft view cone. Null hides them.
+   */
+  headingDegrees?: number | null;
 };
 
-/** One footprint behind a walking or running child; opacity fades with age. */
-export type MapFootprint = { latitude: number; longitude: number; heading: number; opacity: number };
+/**
+ * One footprint behind a walking or running child: a left or right foot
+ * facing the direction of travel. Opacity fades with age; `fresh` prints
+ * (just stepped) get a short press-in animation.
+ */
+export type MapFootprint = {
+  id: string;
+  latitude: number;
+  longitude: number;
+  heading: number;
+  opacity: number;
+  foot: "left" | "right";
+  gait: "walk" | "run";
+  fresh: boolean;
+};
 
 export type ZoneStatus = "inside" | "outside" | "active" | "inactive" | "draft" | "accuracy";
 
@@ -85,7 +104,8 @@ export type MapPoint = {
   gapAfter?: boolean;
 };
 
-export type MapView = { latitude: number; longitude: number; zoom: number };
+/** `bearing`: the map's rotation, degrees clockwise from north (0 = north up). */
+export type MapView = { latitude: number; longitude: number; zoom: number; bearing?: number };
 
 export type MapPadding = { top: number; right: number; bottom: number; left: number };
 
@@ -151,6 +171,8 @@ export type MapEngineProps = {
   mapPadding: MapPadding;
   picking: boolean;
   initialView?: MapView | null;
+  /** Engines that rotate report their bearing here (mapBearing.ts). */
+  bearing?: BearingStore;
   onReady(): void;
   onError(message: string): void;
   onPress(point: MapPoint): void;
@@ -164,6 +186,8 @@ export type MapEngineHandle = {
   focus(target: MapPoint & { radiusMeters?: number; zoom?: number }): void;
   /** Zoom in or out by whole levels; repeated presses queue up. */
   zoomBy(delta: number): void;
+  /** Turn the map back to north up (after the guardian rotated it). */
+  resetNorth(): void;
 };
 
 export function clampZoom(zoom: number) {
@@ -279,22 +303,21 @@ export function lastSeenLabel(value?: string | null) {
   return `Last seen ${days} day${days === 1 ? "" : "s"} ago`;
 }
 
-/** Spread avatar markers that would sit on top of each other. */
+/**
+ * Avatars that would sit exactly on top of each other stay readable: the
+ * child is always drawn at its true position; only the guardian's own avatar
+ * ("You") is nudged a little to the side, overlapping, so the two read as
+ * "together" instead of being pushed apart (the old rule moved both by 17 px,
+ * which looked like two separate places).
+ */
 export function spreadOverlapping(markers: MapMarker[], thresholdMeters = 35): MapMarker[] {
-  const avatars = markers.filter((marker) => marker.kind === "child" || marker.kind === "guardian");
-  if (avatars.length < 2) return markers;
-
-  const groups: MapMarker[][] = [];
-  avatars.forEach((marker) => {
-    const group = groups.find((items) => distanceMeters(items[0]!, marker) < thresholdMeters);
-    if (group) group.push(marker);
-    else groups.push([marker]);
-  });
+  const children = markers.filter((marker) => marker.kind === "child");
+  const guardians = markers.filter((marker) => marker.kind === "guardian");
+  if (!children.length || !guardians.length) return markers;
 
   const offsets = new Map<string, number>();
-  groups.forEach((group) => {
-    if (group.length < 2) return;
-    group.forEach((marker, index) => offsets.set(marker.id, (index - (group.length - 1) / 2) * 34));
+  guardians.forEach((guardian) => {
+    if (children.some((child) => distanceMeters(child, guardian) < thresholdMeters)) offsets.set(guardian.id, -26);
   });
 
   if (!offsets.size) return markers;

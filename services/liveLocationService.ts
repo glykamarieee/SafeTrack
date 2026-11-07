@@ -3,6 +3,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { create } from "zustand";
 
 import { supabase } from "../lib/supabase";
+import { normalizeMode } from "../lib/travelMode";
 import type { TravelMode } from "../types/safetrack";
 
 /**
@@ -106,7 +107,7 @@ function toFix(childId: string, payload: Record<string, unknown>): LiveFix | nul
     receivedAt: Date.now(),
     speedMps: number(payload.speedMps),
     headingDegrees: number(payload.headingDegrees),
-    travelMode: (typeof payload.travelMode === "string" ? payload.travelMode : null) as TravelMode | null,
+    travelMode: normalizeMode(payload.travelMode),
     modeConfidence: number(payload.modeConfidence),
     batteryPercent: number(payload.batteryPercent),
     networkType: typeof payload.networkType === "string" ? payload.networkType : null,

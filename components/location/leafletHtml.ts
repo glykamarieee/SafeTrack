@@ -5,7 +5,7 @@
 // (markerHtml.ts) so they match the native ones.
 
 import { DEFAULT_VIEW, MAX_ZOOM, MIN_ZOOM, ZONE_COLORS } from "./mapTypes";
-import { MARKER_CSS } from "./markerHtml";
+import { FOOT_SVG, MARKER_CSS } from "./markerHtml";
 import { MAPBOX_TOKEN } from "./mapSupport";
 
 const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services";
@@ -95,6 +95,7 @@ ${MARKER_CSS}
 <body>
 <div id="map"></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate.js"></script>
 <script>
 (function(){
 function post(message){
@@ -107,12 +108,21 @@ var BASES=${JSON.stringify(BASES)};
 var ZONE_COLORS=${JSON.stringify(ZONE_COLORS)};
 var DEFAULT_VIEW=${JSON.stringify(DEFAULT_VIEW)};
 
-var map=L.map("map",{zoomControl:false,minZoom:${MIN_ZOOM},maxZoom:${MAX_ZOOM},worldCopyJump:true,wheelPxPerZoomLevel:80});
+// Two-finger (or Shift + drag) rotate through leaflet-rotate, when it loaded;
+// without it the map simply stays north up.
+var canRotate=typeof L.Map.prototype.setBearing==="function";
+var map=L.map("map",{zoomControl:false,minZoom:${MIN_ZOOM},maxZoom:${MAX_ZOOM},worldCopyJump:true,wheelPxPerZoomLevel:80,
+  rotate:canRotate,touchRotate:canRotate,shiftKeyRotate:canRotate,rotateControl:false,compassBearing:false,bearing:0});
+function bearingOf(){return canRotate?((map.getBearing()%360)+360)%360:0;}
+// Angles turn the short way round: 350 -> 10 goes through 0, not back.
+function nearest(from,to){return from+((((to-from)%360)+540)%360)-180;}
+var shownBearing=0;
 map.attributionControl.setPrefix(false);
 map.attributionControl.setPosition("bottomleft");
 map.setView([DEFAULT_VIEW.latitude,DEFAULT_VIEW.longitude],DEFAULT_VIEW.zoom);
-map.createPane("zones").style.zIndex=410;
-map.createPane("route").style.zIndex=420;
+// Inside the rotating pane (leaflet-rotate), so zones and the route turn with the tiles.
+map.createPane("zones",map.getPane("rotatePane")).style.zIndex=410;
+map.createPane("route",map.getPane("rotatePane")).style.zIndex=420;
 
 var zoneGroup=L.layerGroup().addTo(map),routeGroup=L.layerGroup().addTo(map),stepGroup=L.layerGroup().addTo(map),markerGroup=L.layerGroup().addTo(map);
 var state={base:null,baseLayers:[],markers:{},circles:{},routeOuter:null,routeInner:null,
@@ -195,16 +205,34 @@ function renderMarkers(list){
         post({type:"marker",id:m.id});
       });
       marker.addTo(markerGroup);
-      state.markers[m.id]={marker:marker,sig:iconSig(m),data:m};
+      state.markers[m.id]={marker:marker,sig:iconSig(m),data:m,fresh:true};
       return;
     }
     var pos=entry.marker.getLatLng();
     if(pos.lat!==m.latitude||pos.lng!==m.longitude)entry.marker.setLatLng([m.latitude,m.longitude]);
-    if(entry.sig!==iconSig(m)){entry.marker.setIcon(iconFor(m));entry.sig=iconSig(m);}
+    if(entry.sig!==iconSig(m)){entry.marker.setIcon(iconFor(m));entry.sig=iconSig(m);entry.fresh=true;}
     entry.data=m;
   });
   Object.keys(state.markers).forEach(function(id){if(!seen[id]){markerGroup.removeLayer(state.markers[id].marker);delete state.markers[id];}});
+  Object.keys(state.markers).forEach(function(id){turnDirection(state.markers[id]);});
 }
+// The direction arrow and cone: where the person faces minus the map's turn.
+function turnDirection(entry){
+  var el=entry.marker.getElement(),dir=el&&el.querySelector(".st-dir");
+  var hd=entry.data.hd;
+  if(!dir||hd==null)return;
+  var target=hd-shownBearing;
+  entry.angle=entry.angle==null?target:nearest(entry.angle,target);
+  if(entry.fresh){dir.style.transition="none";}
+  dir.style.transform="rotate("+entry.angle+"deg)";
+  if(entry.fresh){void dir.offsetWidth;dir.style.transition="";entry.fresh=false;}
+}
+function onRotate(){
+  shownBearing=nearest(shownBearing,bearingOf());
+  map.getContainer().style.setProperty("--map-bearing",shownBearing+"deg");
+  Object.keys(state.markers).forEach(function(id){turnDirection(state.markers[id]);});
+}
+if(canRotate)map.on("rotate",onRotate);
 
 // ---- Circles: Safe Zones and accuracy, true to scale at every zoom.
 function circleStyle(c){
@@ -248,16 +276,35 @@ function renderPath(path){
   gaps.forEach(function(pts){L.polyline(pts,{pane:"route",color:"#22B35E",weight:5,opacity:1,dashArray:"10 8",interactive:false}).addTo(routeGroup);});
 }
 
-// Footprints behind a walking or running child: [lat, lng, opacity].
-function renderSteps(steps){
-  stepGroup.clearLayers();
-  var dark=document.body.classList.contains("dark"),r=map.getZoom()>=18?4:(map.getZoom()>=16?3:2);
-  steps.forEach(function(s){
-    L.circleMarker([s[0],s[1]],{pane:"route",radius:r,weight:1,color:dark?"#0D2A1E":"#FFFFFF",opacity:s[2],
-      fillColor:dark?"#BFE8CF":"#0D2A1E",fillOpacity:s[2],interactive:false}).addTo(stepGroup);
-  });
+// Footprints behind a walking or running child, keyed by id so only new
+// prints are added (fresh ones press in): [id, lat, lng, heading, opacity, "l"|"r", "walk"|"run", fresh].
+var FOOT=${JSON.stringify(FOOT_SVG)};
+var steps={};
+function footSize(){var z=map.getZoom();return z>=19?30:z>=18?24:z>=17?18:z>=16?13:9;}
+function footIcon(s,size){
+  return L.divIcon({className:"st-icon",iconSize:[size,size],iconAnchor:[size/2,size/2],
+    html:'<div class="st-foot '+s[5]+' '+s[6]+(s[7]?' fresh':'')+'" style="--hd:'+s[3]+';width:'+size+'px;height:'+size+'px;opacity:'+s[4]+'">'+FOOT[s[6]]+'</div>'});
 }
-map.on("zoomend",function(){renderSteps(state.data.steps||[]);});
+function renderSteps(list,resize){
+  var seen={},size=footSize();
+  // Below street zoom only every other print, so the trail doesn't clump.
+  var every=map.getZoom()<16?3:map.getZoom()<17?2:1;
+  list.forEach(function(s,i){
+    if((list.length-1-i)%every!==0)return;
+    seen[s[0]]=true;
+    var entry=steps[s[0]];
+    if(!entry){
+      // Marker pane (upright); the CSS turns each print by its heading minus the map's turn.
+      steps[s[0]]={marker:L.marker([s[1],s[2]],{icon:footIcon(s,size),interactive:false,keyboard:false,zIndexOffset:-20000}).addTo(stepGroup),op:s[4],size:size};
+      return;
+    }
+    if(resize||entry.size!==size){s[7]=false;entry.marker.setIcon(footIcon(s,size));entry.size=size;entry.op=s[4];}
+    else if(entry.op!==s[4]){var el=entry.marker.getElement();if(el&&el.firstChild)el.firstChild.style.opacity=s[4];entry.op=s[4];}
+    entry.marker.setLatLng([s[1],s[2]]);
+  });
+  Object.keys(steps).forEach(function(id){if(!seen[id]){stepGroup.removeLayer(steps[id].marker);delete steps[id];}});
+}
+map.on("zoomend",function(){renderSteps(state.data.steps||[],true);});
 
 function setData(d){
   state.data={markers:d.markers||[],circles:d.circles||[],path:d.path||[],steps:d.steps||[]};
@@ -270,8 +317,9 @@ function setData(d){
 
 function postState(){
   var c=map.getCenter();
-  post({type:"state",latitude:c.lat,longitude:c.lng,zoom:map.getZoom()});
+  post({type:"state",latitude:c.lat,longitude:c.lng,zoom:map.getZoom(),bearing:bearingOf()});
 }
+if(canRotate)map.on("rotate",function(){post({type:"bearing",bearing:bearingOf()});});
 map.on("click",function(e){post({type:"press",latitude:e.latlng.lat,longitude:e.latlng.lng});});
 map.on("moveend",function(){if(targetZoom===map.getZoom()&&!zoomWaiting)targetZoom=null;postState();});
 // A drag or wheel zoom replaces any queued button zoom.
@@ -289,6 +337,7 @@ function receive(text){
     case "fit":fitContent(true);break;
     case "focus":focusOn(m);break;
     case "zoomBy":zoomBy(m.delta);break;
+    case "north":if(canRotate)map.setBearing(0);break;
     case "resize":map.invalidateSize({pan:false});break;
   }
 }
