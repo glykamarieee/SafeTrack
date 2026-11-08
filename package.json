@@ -57,6 +57,7 @@
     "build:android": "expo prebuild -p android && android\\gradlew.bat -p android app:assembleRelease -x lint -x test && expo run:android --variant release --binary android/app/build/outputs/apk/release/app-release.apk",
     "test": "jest",
     "test:auth": "jest __tests__/auth --verbose --forceExit",
+    "test:sos": "jest __tests__/sos --verbose --forceExit && deno test --allow-env --allow-net=jsr.io --allow-read --allow-write=__tests__/results supabase/functions/sos-realert/realert_test.ts",
     "test:geofencing": "jest __tests__/geofencing --verbose --forceExit && deno test --allow-env --allow-net=jsr.io --allow-read --allow-write=__tests__/results supabase/functions/_shared/anomaly_cases_test.ts && cd ai-service && .venv\\Scripts\\python -m pytest tests/test_unit_cases.py -q"
   },
   "jest": {
