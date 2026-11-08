@@ -52,6 +52,11 @@ export async function clearChildPhoneCredentials() {
   await AsyncStorage.removeItem(CREDENTIALS_KEY);
 }
 
+/** The child this phone is linked to, or null. */
+export async function linkedChildId(): Promise<string | null> {
+  return (await readCredentials())?.childId ?? null;
+}
+
 export async function hasChildPhoneCredentials() {
   return (await readCredentials()) !== null;
 }

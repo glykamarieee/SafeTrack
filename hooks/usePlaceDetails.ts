@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { cachedPlace, placeFor, type Place } from "../lib/places";
+import { cachedPlace, nearbyPlace, onPlaceChange, placeCell, placeFor, prefetchAhead, type Place } from "../lib/places";
 import { describeMotion, isLive } from "../lib/travelMode";
 import type { MapCircle } from "../components/location/mapTypes";
 import type { LocationLog, TravelMode } from "../types/safetrack";
@@ -27,19 +27,30 @@ function durationText(ms: number) {
   return `${hours} h${minutes % 60 ? ` ${minutes % 60} min` : ""}`;
 }
 
-/** Address lookup for one point; `undefined` while loading, `null` when none. */
+/**
+ * Address lookup for one point; `undefined` while loading with nothing known
+ * nearby, `null` when none. While loading, a neighbouring cell's place is
+ * shown (marked `near`); the landmark is added as soon as it is found.
+ */
 export function usePlace(latitude: number | null | undefined, longitude: number | null | undefined) {
-  const [place, setPlace] = useState<Place | null | undefined>(() => cachedPlace(latitude, longitude));
+  const [place, setPlace] = useState<Place | null | undefined>(
+    () => cachedPlace(latitude, longitude) ?? nearbyPlace(latitude, longitude) ?? undefined,
+  );
 
   useEffect(() => {
     let active = true;
     const known = cachedPlace(latitude, longitude);
-    setPlace(known);
+    setPlace(known !== undefined ? known : nearbyPlace(latitude, longitude) ?? undefined);
+    const cell = latitude != null && longitude != null ? placeCell(latitude, longitude) : null;
+    const stop = onPlaceChange((changed, value) => {
+      if (active && changed === cell) setPlace(value);
+    });
     if (known === undefined) {
       void placeFor(latitude, longitude).then((value) => active && setPlace(value));
     }
     return () => {
       active = false;
+      stop();
     };
   }, [latitude, longitude]);
 
@@ -65,6 +76,11 @@ export type PlaceDetails = {
 export function usePlaceDetails(location: LocationLog | null | undefined, history: LocationLog[], zones: MapCircle[]): PlaceDetails {
   const place = usePlace(location?.latitude, location?.longitude);
   const [now, setNow] = useState(Date.now());
+
+  // The next street's address is ready before the child gets there.
+  useEffect(() => {
+    if (location) prefetchAhead(location.latitude, location.longitude, location.headingDegrees, location.speedMps);
+  }, [location?.latitude, location?.longitude, location?.headingDegrees, location?.speedMps]);
 
   // The "Live" badge must drop to "Updated X ago" on its own.
   useEffect(() => {

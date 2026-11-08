@@ -703,6 +703,9 @@ applyLiveFix: (fix) => {
   testLog("live", {
     src: fix.source === "smartwatch" ? "watch" : "phone",
     delay: fix.receivedAt - fixTime,
+    // Per hop: device fix -> server, server -> this phone (clocks are NTP-synced).
+    toSrv: fix.sentAt ? Date.parse(fix.sentAt) - fixTime : null,
+    fromSrv: fix.sentAt ? fix.receivedAt - Date.parse(fix.sentAt) : null,
     acc: fix.accuracyMeters,
     spd: fix.speedMps,
     hd: fix.headingDegrees,

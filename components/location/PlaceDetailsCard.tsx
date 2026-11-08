@@ -53,7 +53,9 @@ export function PlaceDetailsCard({
     place === undefined
       ? "Finding the address…"
       : place?.label
-        ? place.label
+        ? place.near
+          ? `Near ${place.label}`
+          : place.label
         : `Address unavailable · ${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`;
 
   const isWatch = location.source === "smartwatch";

@@ -280,7 +280,7 @@ function renderPath(path){
 // prints are added (fresh ones press in): [id, lat, lng, heading, opacity, "l"|"r", "walk"|"run", fresh].
 var FOOT=${JSON.stringify(FOOT_SVG)};
 var steps={};
-function footSize(){var z=map.getZoom();return z>=19?30:z>=18?24:z>=17?18:z>=16?13:9;}
+function footSize(){var z=map.getZoom();return z>=19?17:z>=18?13:z>=17?10:z>=16?7:5;}
 function footIcon(s,size){
   return L.divIcon({className:"st-icon",iconSize:[size,size],iconAnchor:[size/2,size/2],
     html:'<div class="st-foot '+s[5]+' '+s[6]+(s[7]?' fresh':'')+'" style="--hd:'+s[3]+';width:'+size+'px;height:'+size+'px;opacity:'+s[4]+'">'+FOOT[s[6]]+'</div>'});

@@ -40,7 +40,7 @@ const TAG = String(Date.now()).slice(-5);
 const ZONE_A = `UT Zone Home ${TAG}`;
 const ZONE_A2 = `UT Zone House ${TAG}`;
 const ZONE_B = `UT Zone School ${TAG}`;
-const HELP = /Add a name, choose a Safe Zone center, and use a radius from 50 to 5000 meters\./;
+const HELP = /Add a name, choose a Safe Zone center, and use a radius from 30 to 5000 meters\./;
 
 const user = userEvent.setup();
 const alerts = jest.spyOn(Alert, "alert").mockImplementation(() => undefined);
@@ -186,22 +186,22 @@ describe("Safe Zones of a registered child", () => {
     );
   });
 
-  test("CASE-042: Guardian enters a radius below 50 or above 5000 meters", async () => {
+  test("CASE-042: Guardian enters a radius below 30 or above 5000 meters", async () => {
     await openNewZone();
     await setName(`UT Zone Radius ${TAG}`);
     await pickOnMap(7.22, 125.52);
-    await setRadius("200", "40");
+    await setRadius("200", "20");
     expect(screen.getByText("Create Safe Zone")).toBeDisabled();
     screen.getByText(HELP);
-    await setRadius("40", "6000");
+    await setRadius("20", "6000");
     expect(screen.getByText("Create Safe Zone")).toBeDisabled();
     screen.getByText(HELP);
-    screen.getByText("50–5000 meters");
+    screen.getByText("30–5000 meters");
     expect(await zoneNamed(`UT Zone Radius ${TAG}`)).toBeNull();
     recordActual(
       MODULE,
       "CASE-042",
-      'Radius 40 m and 6000 m were both refused: Create Safe Zone stayed disabled and the form showed the allowed range "50–5000 meters" and "use a radius from 50 to 5000 meters".',
+      'Radius 20 m and 6000 m were both refused: Create Safe Zone stayed disabled and the form showed the allowed range "30–5000 meters" and "use a radius from 30 to 5000 meters".',
     );
   });
 

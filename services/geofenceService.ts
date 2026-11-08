@@ -213,7 +213,7 @@ export async function createGeofence(
 
   const radius =
     Math.max(
-      20,
+      30,
       Math.min(
         Number(input.radiusMeters),
         5000
@@ -294,7 +294,7 @@ export async function updateGeofence(
 
   const radius =
     Math.max(
-      20,
+      30,
       Math.min(
         Number(input.radiusMeters),
         5000

@@ -258,12 +258,15 @@ the Expo app.
   (`LocationTracker.kt`, `services/childBackgroundLocation.ts`).
 - **Live map:** `location_logs` is in the `supabase_realtime` publication; the
   location store adds each new row to the front of the recent history and also
-  reads the newest row every 15 s as a fallback. The marker glides between points
-  at an even pace lasting about the gap between fixes (`useGlide`, ~30 frames/s),
-  with a 10-minute trail (`components/location/footprints.ts`): left/right foot
-  prints facing the direction of travel where the child walked (2.6 m apart) or
-  ran (4.4 m, sneaker prints), GPS wobble smoothed, fading after 2 min, the newest
-  pressing in (Mapbox `SymbolLayer` with the PNGs in `assets/map/`, Leaflet
+  reads the newest row every 15 s as a fallback. The marker reaches each new
+  point in 180 ms (`useGlide`, ease-out; it used to glide for the whole gap
+  between fixes, about 1 s behind the child) and never goes past the newest
+  real point, with a 10-minute trail (`components/location/footprints.ts`):
+  small SafeTrack-green left/right foot prints (#15803D, dark #3DDC84; about
+  55% of the first size since 2026-11-08) facing the direction of travel where
+  the child walked (2.6 m apart) or ran (4.4 m, sneaker prints), GPS wobble
+  smoothed, fading after 2 min, the newest pressing in (Mapbox `SymbolLayer`
+  with the PNGs in `assets/map/`, made by `scripts/make_feet.py`; Leaflet
   inline SVG); a line for the current vehicle stretch.
 - **Avatars (2026-11-08):** the child and "You" are drawn centred on the true
   position (`MarkerGlyph.tsx` `PersonGlyph`, `markerHtml.ts` `.st-person`) with
@@ -283,19 +286,32 @@ the Expo app.
   events are re-read every 20 s and on each saved record, and while the
   position is live, inside/outside follows it with an edge buffer (half the GPS
   accuracy, 5-20 m) and 2 agreeing readings. Alerts still come only from the server.
+- **Safe zone size:** 30-5000 m (was 50; presets 30/50/100/200/500 m). The live
+  database's check constraint `geofences_radius_meters_check` (not created by
+  these migrations) is replaced by `20261108c_safe_zone_min_30m.sql`; until the
+  user runs it a 30-49 m zone is refused by the server. The form warns when the
+  radius is smaller than the child's location accuracy; 100 m suits Home.
 - **Field-test log:** guardian app lines `[STLOG]` in logcat (`lib/testLog.ts`,
-  `TEST_LOG`); watch `/sdcard/Android/data/com.safetrack.watch/files/safetrack-test.csv`
+  `TEST_LOG`; `live` lines carry `delay`, `toSrv` (fix → server) and `fromSrv`
+  (server → phone) in ms, `live-start` the time from opening the map to the
+  first live fix, `latency` the average/p95/max of the last 30 fixes); watch `/sdcard/Android/data/com.safetrack.watch/files/safetrack-test.csv`
   (`LiveTestLog.kt`; off when `testlog.off` exists in that folder).
 - **Live position (about 1 s, `20261108_live_stream.sql`):** while Home or
   Location is in front, `useChildLive` → `services/liveLocationService.ts` calls
   `request_child_live` every 15 s (`live_viewers.until` = now + 30 s) and joins
   the private Realtime topic `child-live:<child id>` (RLS on `realtime.messages`:
-  only `is_guardian_of`). The watch and phone ask `push_*_live` every 20 s with
-  their last fix; while it answers `live: true` they take a fix every second and
-  send each one (broadcast by `realtime.send`, nothing written to
-  `location_logs`); a still child sends one every 5 s (any 5 m move or walking
-  speed sends at once), and after 30 s still the watch also takes GPS fixes
-  only every 5 s (battery) until the child moves. Home and Location re-read the
+  only `is_guardian_of`). Right after asking, the app sends a "wake" on the
+  public topic `live-wake:<child id>` (no data; repeated every 3 s up to 4 times
+  until a live fix arrives). The watch (`LiveWake.kt`, one OkHttp WebSocket,
+  heartbeat 25 s, back-off reconnect) and the phone (`listenForLiveWake` in
+  `childBackgroundLocation.ts`) answer by calling `push_*_live` at once, so live
+  starts in about 1 s instead of at their 20 s check (still kept as a
+  fallback); a fake wake only costs one request, since the database decides
+  whether anyone watches. While it answers `live: true` they take a fix every
+  second and send every one (broadcast by `realtime.send`, nothing written to
+  `location_logs`); only after 30 s still does the watch drop to one fix every
+  5 s (a 5 m move, walking speed or a turn sends at once; the phone uses 2 m).
+  A push slower than 1.5 s no longer holds back the next fix. Home and Location re-read the
   watch's battery and network every 15 s, on each saved record and from each live fix; push_watch_live stores them when they change (`20261108b_live_battery.sql`)
   (`hooks/useWatchStatus.ts`). Runs while the screen is in front with no tap needed;
   stops in the background and when the screen closes, restarts on return, and
@@ -324,6 +340,11 @@ the Expo app.
   "© OpenStreetMap contributors" credited in Help & Support and the map's ⓘ,
   not on each card). Cached per ~55 m cell in memory and in
   `location_places` (`location_cell()`, written with `save_location_place`).
+  Fast (2026-11-08): the street/barangay/city show as soon as the first lookup
+  answers and the landmark is added when the second does (`onPlaceChange`);
+  until then the nearest known neighbouring cell is shown as "Near …"
+  (`nearbyPlace`); the cell ~60 m ahead of a moving child is looked up early
+  when no other lookup waits (`prefetchAhead`).
   Shown by `PlaceDetailsCard` (Home, Location), `PlaceLine` (SOS alerts, History
   sheets), admin Records (cached only) and the report exports; SOS and safe-zone
   pushes add "Near: …" when the spot is already cached. Never a guessed address:

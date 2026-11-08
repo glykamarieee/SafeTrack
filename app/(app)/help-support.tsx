@@ -63,7 +63,7 @@ const FAQS: Array<{ question: string; answer: string }> = [
   },
   {
     question: "What is a Safe Zone?",
-    answer: "A place such as Home or School with a center and a radius from 50 to 5000 meters. You are notified when your child enters or leaves it.",
+    answer: "A place such as Home or School with a center and a radius from 30 to 5000 meters. You are notified when your child enters or leaves it. Indoors the location can wander 20–70 m, so 100 m suits Home; a small zone may report short exits that did not happen.",
   },
   {
     question: "Why am I not getting notifications?",

@@ -51,7 +51,8 @@ const FOOT_IMAGES = {
 };
 
 /** Footprint size on the map: grows with zoom like a real print. */
-const FOOT_SIZE = ["interpolate", ["exponential", 1.6], ["zoom"], 14, 0.1, 17, 0.2, 19, 0.36, 21, 0.62];
+// About 55% of the first size (2026-11-08: the prints looked too big).
+const FOOT_SIZE = ["interpolate", ["exponential", 1.6], ["zoom"], 14, 0.055, 17, 0.11, 19, 0.2, 21, 0.34];
 /** A fresh print starts this much bigger and settles (press-in). */
 const PRESS_MS = 420;
 

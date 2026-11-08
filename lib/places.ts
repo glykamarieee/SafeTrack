@@ -14,6 +14,12 @@ import { supabase } from "./supabase";
  *  - requests queue one second apart.
  * Before the migration runs the database steps fail quietly and only the
  * memory cache is used.
+ *
+ * Shown as fast as possible (panel feedback 2026-11-08): the street and
+ * barangay appear as soon as the first lookup answers, the landmark is added
+ * when the second one does (onPlaceChange), the nearest known place is shown
+ * meanwhile ("Near …", nearbyPlace), and the cell ahead of a moving child is
+ * looked up before they reach it (prefetchAhead).
  */
 export type Place = {
   /** "Rizal Ave, Brgy. 495, Caloocan City, Metro Manila" */
@@ -26,6 +32,8 @@ export type Place = {
   landmark?: { name: string; distanceMeters: number } | null;
   /** The point is on water (sea, bay, river): used to show "On a boat". */
   water?: boolean;
+  /** A neighbouring cell's place, shown while this cell is looked up. */
+  near?: boolean;
 };
 
 const NOMINATIM = "https://nominatim.openstreetmap.org/reverse";
@@ -37,6 +45,18 @@ export function placeCell(latitude: number, longitude: number) {
 
 const memory = new Map<string, Place | null>();
 const pending = new Map<string, Promise<Place | null>>();
+const listeners = new Set<(cell: string, place: Place | null) => void>();
+
+/** Called when a cell's place is found or completed (landmark added). */
+export function onPlaceChange(listener: (cell: string, place: Place | null) => void) {
+  listeners.add(listener);
+  return () => void listeners.delete(listener);
+}
+
+function remember(cell: string, place: Place | null) {
+  memory.set(cell, place);
+  listeners.forEach((listener) => listener(cell, place));
+}
 let queue: Promise<unknown> = Promise.resolve();
 let lastRequest = 0;
 
@@ -121,20 +141,28 @@ async function lookUp(latitude: number, longitude: number): Promise<Place | null
   const place = toPlace(address);
   if (!place) return null;
 
-  // The nearest named place (shop, school, church...) within ~400 m.
+  // Shown now; the landmark is added below and saved with it.
+  void addLandmark(cell, latitude, longitude, place);
+  return place;
+}
+
+/** The nearest named place (shop, school, church...) within ~400 m, then saved. */
+async function addLandmark(cell: string, latitude: number, longitude: number, place: Place) {
+  const complete: Place = { ...place };
   try {
     const poi = await nominatim(latitude, longitude, "poi,manmade");
     const poiName = typeof poi.name === "string" ? poi.name.trim() : "";
     if (poiName && poi.lat && poi.lon) {
       const distance = metersBetween(latitude, longitude, Number(poi.lat), Number(poi.lon));
-      if (distance <= 400) place.landmark = { name: poiName, distanceMeters: Math.round(distance) };
+      if (distance <= 400) complete.landmark = { name: poiName, distanceMeters: Math.round(distance) };
     }
   } catch {
-    place.landmark = null;
+    complete.landmark = null;
   }
+  if (complete.landmark) remember(cell, complete);
 
-  if (place.label) {
-    const { label, ...details } = place;
+  if (complete.label) {
+    const { label, near: _near, ...details } = complete;
     void supabase
       .rpc("save_location_place", { p_latitude: latitude, p_longitude: longitude, p_label: label, p_details: details })
       .then(
@@ -142,7 +170,6 @@ async function lookUp(latitude: number, longitude: number): Promise<Place | null
         () => undefined,
       );
   }
-  return place;
 }
 
 /** The place for a point, or null when no address is known. Never throws. */
@@ -155,7 +182,7 @@ export async function placeFor(latitude: number | null | undefined, longitude: n
 
   const request = lookUp(latitude, longitude)
     .then((place) => {
-      memory.set(cell, place);
+      remember(cell, place);
       return place;
     })
     .catch(() => null) // a failed lookup is retried next time
@@ -168,4 +195,34 @@ export async function placeFor(latitude: number | null | undefined, longitude: n
 export function cachedPlace(latitude: number | null | undefined, longitude: number | null | undefined) {
   if (latitude == null || longitude == null) return undefined;
   return memory.get(placeCell(latitude, longitude));
+}
+
+/**
+ * A known place in one of the eight cells around this point (about 55-110 m
+ * away), marked `near`, to show while the point's own cell is looked up.
+ */
+export function nearbyPlace(latitude: number | null | undefined, longitude: number | null | undefined): Place | null {
+  if (latitude == null || longitude == null) return null;
+  const row = Math.floor(latitude * 2000);
+  const column = Math.floor(longitude * 2000);
+  for (const [dRow, dColumn] of [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+    const place = memory.get(`${row + dRow}:${column + dColumn}`);
+    if (place?.label) return { ...place, near: true, landmark: null };
+  }
+  return null;
+}
+
+/**
+ * Looks up the cell about 60 m ahead of a moving child, so its address is
+ * ready when they get there. Only when no other lookup is waiting (the
+ * one-per-second limit is shared). Never throws.
+ */
+export function prefetchAhead(latitude: number, longitude: number, headingDegrees: number | null | undefined, speedMps: number | null | undefined) {
+  if (headingDegrees == null || !Number.isFinite(headingDegrees) || (speedMps ?? 0) < 0.6 || pending.size > 0) return;
+  const radians = (headingDegrees * Math.PI) / 180;
+  const ahead = 60;
+  const aheadLat = latitude + (ahead * Math.cos(radians)) / 111_320;
+  const aheadLng = longitude + (ahead * Math.sin(radians)) / (111_320 * Math.cos((latitude * Math.PI) / 180));
+  if (memory.has(placeCell(aheadLat, aheadLng))) return;
+  void placeFor(aheadLat, aheadLng);
 }

@@ -2,9 +2,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import { Platform } from "react-native";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
 import { SPEED_BANDS, classifySpeed, speedBetween } from "../lib/travelMode";
-import { ChildPhoneUnlinkedError, pushChildPhoneLive, recordChildPhoneLocation } from "./childMobileService";
+import { supabase } from "../lib/supabase";
+import { ChildPhoneUnlinkedError, linkedChildId, pushChildPhoneLive, recordChildPhoneLocation } from "./childMobileService";
 
 /**
  * Optional automatic location sharing for a linked child phone.
@@ -32,14 +34,17 @@ const MOVE_SAVE_M = 15;
 const STILL_SAVE_MS = 3 * 60 * 1000;
 
 // While a guardian has the map open (migration 20261108): a fix every second,
-// each sent to the live map (not saved). Otherwise the phone asks whether
+// each sent to the live map (not saved). The guardian's app wakes the phone
+// at once (live-wake topic, below); as a fallback the phone also asks whether
 // anyone is watching every LIVE_PROBE_MS with the fix it already has.
 const LIVE_INTERVAL_MS = 1000;
 const LIVE_PROBE_MS = 20 * 1000;
 // Live and still: a fix this often keeps the map "Live"; a move of LIVE_MOVE_M
 // or a walking speed sends at once.
 const LIVE_STILL_MS = 5 * 1000;
-const LIVE_MOVE_M = 5;
+// Small: a slow walk often reads as "still", and holding fixes back until 5 m
+// showed as a delay on the guardian's map.
+const LIVE_MOVE_M = 2;
 // Live: turning this much in place is sent at once (the arrow on the map).
 const LIVE_TURN_DEG = 20;
 // Live: a fix coarser than this is not sent while a sharp one is this recent.
@@ -124,6 +129,7 @@ if (Platform.OS !== "web" && !TaskManager.isTaskDefined(CHILD_LOCATION_TASK)) {
 
     const latest = data?.locations?.at(-1);
     if (!latest) return;
+    void listenForLiveWake();
 
     const point = { latitude: latest.coords.latitude, longitude: latest.coords.longitude };
     const last = await readLastSent();
@@ -216,6 +222,44 @@ async function shareLive(fix: Location.LocationObject, last: LastSent | null): P
   return true;
 }
 
+/*
+ * Wake: the guardian's app sends "wake" on the public topic live-wake:<child>
+ * when a map opens (no location in it). The phone then checks in at once with
+ * its newest fix instead of at the next LIVE_PROBE_MS check; the database
+ * still decides whether anyone is watching, so a fake wake does nothing more.
+ */
+let wakeChannel: RealtimeChannel | null = null;
+let wakeChild: string | null = null;
+
+async function wakeNow() {
+  const fix =
+    (await Location.getLastKnownPositionAsync({ maxAge: 15_000 }).catch(() => null)) ??
+    (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }).catch(() => null));
+  if (!fix) return;
+  // Forget the last check so this fix is sent now.
+  const state = await readLive();
+  await AsyncStorage.setItem(LIVE_KEY, JSON.stringify({ ...state, live: false, probedAt: 0 })).catch(() => undefined);
+  await shareLive(fix, await readLastSent());
+}
+
+/** Listens for live-map wakes while sharing is on. Never throws. */
+export async function listenForLiveWake(): Promise<void> {
+  try {
+    const childId = (await isBackgroundSharingOn()) ? await linkedChildId() : null;
+    if (childId === wakeChild) return;
+    if (wakeChannel) void supabase.removeChannel(wakeChannel);
+    wakeChannel = null;
+    wakeChild = childId;
+    if (!childId) return;
+    wakeChannel = supabase
+      .channel(`live-wake:${childId}`, { config: { broadcast: { self: false } } })
+      .on("broadcast", { event: "wake" }, () => void wakeNow().catch(() => undefined))
+      .subscribe();
+  } catch (reason) {
+    console.warn("[background location] wake listener failed", reason);
+  }
+}
+
 export function backgroundSharingSupported() {
   return Platform.OS === "android" || Platform.OS === "ios";
 }
@@ -245,6 +289,7 @@ export async function startBackgroundSharing(): Promise<StartResult> {
   if (background.status !== "granted") return "background-denied";
 
   await startTask();
+  void listenForLiveWake();
   return "started";
 }
 
@@ -281,6 +326,7 @@ export async function refreshBackgroundSharing(): Promise<void> {
   } catch (reason) {
     console.warn("[background location] refresh failed", reason);
   }
+  void listenForLiveWake();
 }
 
 export async function stopBackgroundSharing(): Promise<void> {
@@ -293,4 +339,5 @@ export async function stopBackgroundSharing(): Promise<void> {
     console.warn("[background location] stop failed", reason);
   }
   await AsyncStorage.multiRemove([LAST_SENT_KEY, LIVE_KEY]).catch(() => undefined);
+  void listenForLiveWake();
 }

@@ -88,7 +88,10 @@ const EMPTY_FORM: FormState = {
  * no saved zones and no child location yet. This coordinate is NEVER copied
  * into the Safe Zone form and can never be saved unless the Guardian taps it.
  */
-const RADIUS_PRESETS = [50, 100, 200, 500] as const;
+// 30 m is the smallest zone (2026-11-08); indoors GPS often wanders more than
+// that, which the accuracy warning in the form points out.
+const MIN_RADIUS_M = 30;
+const RADIUS_PRESETS = [30, 50, 100, 200, 500] as const;
 
 function validCoordinate(
   latitude: number,
@@ -543,7 +546,7 @@ export default function SafeZonesScreen() {
     Boolean(form.name.trim()) &&
     Boolean(selectedPoint) &&
     Number.isFinite(selectedRadius) &&
-    selectedRadius >= 50 &&
+    selectedRadius >= MIN_RADIUS_M &&
     selectedRadius <= 5000;
 
   const resetEditor = () => {
@@ -731,12 +734,12 @@ export default function SafeZonesScreen() {
 
     if (
       !Number.isFinite(radiusMeters) ||
-      radiusMeters < 50 ||
+      radiusMeters < MIN_RADIUS_M ||
       radiusMeters > 5000
     ) {
       showAlert(
         "Invalid radius",
-        "Enter a radius from 50 to 5000 meters."
+        "Enter a radius from 30 to 5000 meters."
       );
       return;
     }
@@ -1502,7 +1505,7 @@ export default function SafeZonesScreen() {
                     Custom radius
                   </Text>
                   <Text style={styles.customRadiusText}>
-                    50–5000 meters
+                    30–5000 meters
                   </Text>
                 </View>
 
@@ -1577,7 +1580,7 @@ export default function SafeZonesScreen() {
 
               {!canSave ? (
                 <Text style={styles.saveHelp}>
-                  Add a name, choose a Safe Zone center, and use a radius from 50 to 5000 meters.
+                  Add a name, choose a Safe Zone center, and use a radius from 30 to 5000 meters.
                 </Text>
               ) : null}
 

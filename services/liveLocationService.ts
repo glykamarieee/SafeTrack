@@ -3,6 +3,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { create } from "zustand";
 
 import { supabase } from "../lib/supabase";
+import { testLog } from "../lib/testLog";
 import { normalizeMode } from "../lib/travelMode";
 import type { TravelMode } from "../types/safetrack";
 
@@ -11,9 +12,11 @@ import type { TravelMode } from "../types/safetrack";
  * 20261108_live_stream.sql).
  *
  * - The app tells SafeTrack it is watching (request_child_live) every
- *   RENEW_MS; the watch or phone then sends a fix about every second, which
- *   arrives here on the private Realtime topic child-live:<child id>. Nothing
- *   is saved per second; history rows keep their usual pace.
+ *   RENEW_MS and wakes the watch or phone at once with a "wake" on the public
+ *   topic live-wake:<child id> (no data in it; they used to notice only at
+ *   their next 20-second check). They then send a fix about every second,
+ *   which arrives here on the private Realtime topic child-live:<child id>.
+ *   Nothing is saved per second; history rows keep their usual pace.
  * - One session per child, shared by every screen that shows the child.
  * - Runs as long as a map screen is in front (no tap needed); stops when the
  *   app goes to the background and when the last screen closes, and starts
@@ -43,6 +46,9 @@ export type LiveFix = {
 export type LiveStatus = "connecting" | "live" | "paused" | "off";
 
 const RENEW_MS = 15_000;
+/** Wake again this often while no live fix has arrived, at most WAKE_TRIES times. */
+const WAKE_RETRY_MS = 3_000;
+const WAKE_TRIES = 4;
 const RENEW_SECONDS = 30;
 /** No fix for this long: back to "connecting" (device offline or no signal). */
 const QUIET_MS = 20_000;
@@ -52,6 +58,7 @@ type Session = {
   channel: RealtimeChannel | null;
   renew: ReturnType<typeof setInterval> | null;
   quiet: ReturnType<typeof setInterval> | null;
+  wake: ReturnType<typeof setInterval> | null;
   startedAt: number;
   lastFixAt: number;
 };
@@ -85,10 +92,23 @@ function setStatus(childId: string, status: LiveStatus) {
   useLiveStore.setState((state) => ({ status: { ...state.status, [childId]: status } }));
 }
 
+let delaysSinceSummary = 0;
+
 function recordDelay(childId: string, ms: number) {
   useLiveStore.setState((state) => ({
     delays: { ...state.delays, [childId]: [...(state.delays[childId] ?? []).slice(-29), ms] },
   }));
+  // Field test: average and 95th percentile of the last 30 fixes, every 30 fixes.
+  if (++delaysSinceSummary < 30) return;
+  delaysSinceSummary = 0;
+  const sorted = [...(useLiveStore.getState().delays[childId] ?? [])].sort((a, b) => a - b);
+  if (!sorted.length) return;
+  testLog("latency", {
+    n: sorted.length,
+    avg: Math.round(sorted.reduce((sum, value) => sum + value, 0) / sorted.length),
+    p95: sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))],
+    max: sorted[sorted.length - 1],
+  });
 }
 
 function toFix(childId: string, payload: Record<string, unknown>): LiveFix | null {
@@ -114,6 +134,15 @@ function toFix(childId: string, payload: Record<string, unknown>): LiveFix | nul
   };
 }
 
+/** Tells the child's watch or phone to start live fixes now. Never throws. */
+function wakeDevice(childId: string) {
+  const channel = supabase.channel(`live-wake:${childId}`);
+  void channel
+    .httpSend("wake", { at: new Date().toISOString() })
+    .catch((reason: unknown) => console.log("[live location] wake", (reason as { message?: string })?.message ?? reason))
+    .finally(() => void supabase.removeChannel(channel));
+}
+
 async function request(childId: string, seconds: number) {
   const { error } = await supabase.rpc("request_child_live", { p_child_id: childId, p_seconds: seconds });
   if (error) throw error;
@@ -122,8 +151,10 @@ async function request(childId: string, seconds: number) {
 function stopTimers(session: Session) {
   if (session.renew) clearInterval(session.renew);
   if (session.quiet) clearInterval(session.quiet);
+  if (session.wake) clearInterval(session.wake);
   session.renew = null;
   session.quiet = null;
+  session.wake = null;
 }
 
 function closeChannel(session: Session) {
@@ -144,6 +175,7 @@ function start(childId: string, session: Session) {
       .on("broadcast", { event: "live" }, ({ payload }) => {
         const fix = toFix(childId, (payload ?? {}) as Record<string, unknown>);
         if (!fix) return;
+        if (!session.lastFixAt) testLog("live-start", { afterMs: fix.receivedAt - session.startedAt });
         session.lastFixAt = Date.now();
         setStatus(childId, "live");
         const fixTime = Date.parse(fix.recordedAt);
@@ -165,7 +197,21 @@ function start(childId: string, session: Session) {
       if (!session.lastFixAt || Date.now() - session.lastFixAt > QUIET_MS) setStatus(childId, "off");
     });
   };
-  renew();
+  // Ask first, then wake: the device checks in right after the wake and
+  // must find the request already there.
+  void request(childId, RENEW_SECONDS)
+    .catch(() => undefined)
+    .finally(() => wakeDevice(childId));
+  let tries = 1;
+  session.wake = setInterval(() => {
+    if (session.lastFixAt || tries >= WAKE_TRIES) {
+      if (session.wake) clearInterval(session.wake);
+      session.wake = null;
+      return;
+    }
+    tries += 1;
+    wakeDevice(childId);
+  }, WAKE_RETRY_MS);
   session.renew = setInterval(renew, RENEW_MS);
   session.quiet = setInterval(() => {
     if (session.lastFixAt && Date.now() - session.lastFixAt > QUIET_MS) setStatus(childId, "connecting");
@@ -202,7 +248,7 @@ AppState.addEventListener("change", (next) => {
 export function watchChildLive(childId: string, listener: (fix: LiveFix) => void): () => void {
   let session = sessions.get(childId);
   if (!session) {
-    session = { listeners: new Set(), channel: null, renew: null, quiet: null, startedAt: 0, lastFixAt: 0 };
+    session = { listeners: new Set(), channel: null, renew: null, quiet: null, wake: null, startedAt: 0, lastFixAt: 0 };
     sessions.set(childId, session);
   }
   session.listeners.add(listener);

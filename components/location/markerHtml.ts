@@ -208,13 +208,13 @@ export const MARKER_CSS = `
 .st-dir-arrow{position:absolute;inset:0;width:92px;height:92px;overflow:visible;z-index:5;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.35))}
 .st-dir-arrow path{fill:var(--tint);stroke:#fff;stroke-width:2.2;stroke-linejoin:round}
 @keyframes st-breathe{0%,100%{opacity:.6}50%{opacity:1}}
-.st-foot{width:22px;height:22px;transform:rotate(calc(var(--hd) * 1deg - var(--map-bearing,0deg)))}
+.st-foot{width:12px;height:12px;transform:rotate(calc(var(--hd) * 1deg - var(--map-bearing,0deg)))}
 .st-foot.r svg{transform:scaleX(-1)}
 .st-foot svg{width:100%;height:100%;display:block;overflow:visible}
-.st-foot .st-foot-shape{fill:#0D2A1E;stroke:#fff;stroke-width:1.1;paint-order:stroke;filter:drop-shadow(0 .6px .6px rgba(0,0,0,.3))}
+.st-foot .st-foot-shape{fill:#15803D;stroke:#fff;stroke-width:1.1;paint-order:stroke;filter:drop-shadow(0 .6px .6px rgba(0,0,0,.3))}
 .st-foot.run .st-foot-shape{fill:#15803D}
 .st-foot .st-foot-tread{fill:#fff}
-body.dark .st-foot .st-foot-shape{fill:#CDEFD9;stroke:#0D2A1E}
+body.dark .st-foot .st-foot-shape{fill:#3DDC84;stroke:#0D2A1E}
 body.dark .st-foot.run .st-foot-shape{fill:#3DDC84}
 body.dark .st-foot .st-foot-tread{fill:#0D2A1E}
 .st-foot.fresh svg{animation:st-press .42s cubic-bezier(.2,.8,.2,1) both}
