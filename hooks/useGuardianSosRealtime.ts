@@ -92,7 +92,7 @@ export function useGuardianSosRealtime(guardianId: string | null | undefined) {
         void notifyAlert({
           key: `sos:${id}:realert:${count}`,
           type: "sos_realert",
-          title: `🚨 SOS still active – ${name}`,
+          title: `🚨 SOS re-alert #${count} from ${name}`,
           body: `${name}'s SOS hasn't been acknowledged yet.`,
           data: { sos_alert_id: id, child_id: row.child_id },
         });
