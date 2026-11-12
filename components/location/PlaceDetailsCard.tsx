@@ -47,7 +47,7 @@ export function PlaceDetailsCard({
   const ink = dark ? "#FFFFFF" : colors.ink;
   const soft = dark ? "rgba(255,255,255,0.72)" : colors.muted;
   const iconColor = dark ? "#3DDC84" : colors.primary;
-  const { place, motion, zone, inside, stay, live } = details;
+  const { place, motion, zone, inside, zoneName, stay, live } = details;
 
   const address =
     place === undefined
@@ -74,7 +74,7 @@ export function PlaceDetailsCard({
     <View
       style={[styles.card, dark ? styles.dark : { backgroundColor: colors.surface, borderColor: colors.rule }]}
       accessible
-      accessibilityLabel={`${live ? "Live. " : ""}${motion?.label ?? ""}. ${address}. ${zone ?? ""}. ${stay ?? ""}`}
+      accessibilityLabel={`${live ? "Live. " : ""}${motion?.label ?? ""}. ${zoneName ? `${zoneName}. ` : ""}${address}. ${zoneName ? "" : zone ?? ""}. ${stay ?? ""}`}
     >
       <View style={styles.head}>
         <View style={[styles.badge, live ? styles.badgeLive : dark ? styles.badgeDark : { backgroundColor: colors.sunken }]}>
@@ -97,11 +97,13 @@ export function PlaceDetailsCard({
         ) : null}
       </View>
 
-      <Row colors={rowColors} icon="location" text={address} strong />
+      {/* Inside a safe zone the guardian's own name for the place comes first. */}
+      {zoneName ? <Row colors={rowColors} icon="shield-checkmark" text={stay ? `${zoneName} · ${stay}` : zoneName} strong /> : null}
+      <Row colors={rowColors} icon="location" text={address} strong={!zoneName} />
       {!compact && place?.landmark ? (
         <Row colors={rowColors} icon="business-outline" text={`Near ${place.landmark.name} (${place.landmark.distanceMeters} m)`} />
       ) : null}
-      {zone ? <Row colors={rowColors} icon={inside ? "shield-checkmark" : "shield-outline"} text={stay ? `${zone} · ${stay}` : zone} /> : stay ? <Row colors={rowColors} icon="time-outline" text={stay} /> : null}
+      {zoneName ? null : zone ? <Row colors={rowColors} icon={inside ? "shield-checkmark" : "shield-outline"} text={stay ? `${zone} · ${stay}` : zone} /> : stay ? <Row colors={rowColors} icon="time-outline" text={stay} /> : null}
       {!compact ? <Row colors={rowColors} icon={isWatch ? "watch-outline" : "phone-portrait-outline"} text={device} /> : null}
     </View>
   );

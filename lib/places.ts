@@ -12,6 +12,8 @@ import { supabase } from "./supabase";
  *  - each cell is looked up once: memory, then the shared location_places
  *    table, then Nominatim, and the result is saved back;
  *  - requests queue one second apart.
+ * Where OpenStreetMap has no street (inside subdivisions), the street comes
+ * from Mapbox (mapboxAddress) and is kept in memory only.
  * Before the migration runs the database steps fail quietly and only the
  * memory cache is used.
  *
@@ -34,10 +36,14 @@ export type Place = {
   water?: boolean;
   /** A neighbouring cell's place, shown while this cell is looked up. */
   near?: boolean;
+  /** The street came from Mapbox: kept in memory only, never saved. */
+  mapbox?: boolean;
 };
 
 const NOMINATIM = "https://nominatim.openstreetmap.org/reverse";
 const MIN_GAP_MS = 1100;
+const MAPBOX_REVERSE = "https://api.mapbox.com/search/geocode/v6/reverse";
+const MAPBOX_TIMEOUT_MS = 4000;
 
 export function placeCell(latitude: number, longitude: number) {
   return `${Math.floor(latitude * 2000)}:${Math.floor(longitude * 2000)}`;
@@ -123,6 +129,49 @@ export function toPlace(result: Record<string, any>): Place | null {
   return { label: parts.join(", "), name, road, barangay, city, province, water };
 }
 
+type MapboxAddress = { road?: string; barangay?: string; city?: string; province?: string };
+
+/**
+ * Street, barangay and city from Mapbox (Geocoding v6, inside the free
+ * monthly allowance), used only where OpenStreetMap has no street. Null when
+ * there is no token, no answer within 4 s, or any error. Mapbox's terms do not
+ * allow storing these results, so they are never written to location_places.
+ */
+async function mapboxAddress(latitude: number, longitude: number): Promise<MapboxAddress | null> {
+  const token = (process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? "").trim();
+  if (!token) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MAPBOX_TIMEOUT_MS);
+  try {
+    const params = new URLSearchParams({ longitude: String(longitude), latitude: String(latitude), language: "en", access_token: token });
+    const response = await fetch(`${MAPBOX_REVERSE}?${params}`, { signal: controller.signal });
+    if (!response.ok) return null;
+    const json = (await response.json()) as { features?: { properties?: { context?: Record<string, { name?: string } | undefined> } }[] };
+    const context = json.features?.[0]?.properties?.context;
+    if (!context) return null;
+    return {
+      road: context.street?.name,
+      barangay: context.locality?.name ?? context.neighborhood?.name,
+      city: context.place?.name,
+      province: context.region?.name,
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Adds Mapbox's street to what OpenStreetMap knows; OpenStreetMap's own parts win. */
+export function withMapboxStreet(place: Place | null, found: MapboxAddress | null): Place | null {
+  if (!found?.road) return place;
+  const barangay = place?.barangay ?? (found.barangay ? (/^(barangay|brgy)/i.test(found.barangay) ? found.barangay : `Brgy. ${found.barangay}`) : undefined);
+  const city = place?.city ?? found.city;
+  const province = place?.province ?? found.province;
+  const parts = [place?.name, found.road, barangay, city, province].filter((part, index, all): part is string => Boolean(part) && all.indexOf(part) === index);
+  return { ...(place ?? {}), label: parts.join(", "), road: found.road, barangay, city, province, mapbox: true };
+}
+
 async function lookUp(latitude: number, longitude: number): Promise<Place | null> {
   const cell = placeCell(latitude, longitude);
 
@@ -138,7 +187,9 @@ async function lookUp(latitude: number, longitude: number): Promise<Place | null
   if (data?.label) return { ...(data.details as Place), label: String(data.label) };
 
   const address = await nominatim(latitude, longitude);
-  const place = toPlace(address);
+  let place = toPlace(address);
+  // OpenStreetMap has no street here (common inside subdivisions): ask Mapbox.
+  if (!place || (!place.road && !place.water)) place = withMapboxStreet(place, await mapboxAddress(latitude, longitude));
   if (!place) return null;
 
   // Shown now; the landmark is added below and saved with it.
@@ -161,7 +212,7 @@ async function addLandmark(cell: string, latitude: number, longitude: number, pl
   }
   if (complete.landmark) remember(cell, complete);
 
-  if (complete.label) {
+  if (complete.label && !complete.mapbox) {
     const { label, near: _near, ...details } = complete;
     void supabase
       .rpc("save_location_place", { p_latitude: latitude, p_longitude: longitude, p_label: label, p_details: details })

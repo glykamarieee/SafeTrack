@@ -63,6 +63,8 @@ export type PlaceDetails = {
   /** "Inside School" / "120 m from Home" / null without zones. */
   zone: string | null;
   inside: boolean;
+  /** The safe zone the child is in ("School"): shown before the address. */
+  zoneName: string | null;
   /** "Here for 12 min", from recent points within 60 m. */
   stay: string | null;
   live: boolean;
@@ -89,11 +91,12 @@ export function usePlaceDetails(location: LocationLog | null | undefined, histor
   }, []);
 
   return useMemo(() => {
-    if (!location) return { place, motion: null, zone: null, inside: false, stay: null, live: false };
+    if (!location) return { place, motion: null, zone: null, inside: false, zoneName: null, stay: null, live: false };
 
 
     let zone: string | null = null;
     let inside = false;
+    let zoneName: string | null = null;
     const enabled = zones.filter((circle) => circle.status !== "inactive" && circle.status !== "draft" && circle.status !== "accuracy" && circle.enabled !== false);
     let best: { label: string; edge: number } | null = null;
     for (const circle of enabled) {
@@ -102,6 +105,7 @@ export function usePlaceDetails(location: LocationLog | null | undefined, histor
     }
     if (best) {
       inside = best.edge <= 0;
+      zoneName = inside ? best.label : null;
       zone = inside ? `Inside ${best.label}` : `${distanceText(best.edge)} from ${best.label}`;
     }
 
@@ -128,6 +132,6 @@ export function usePlaceDetails(location: LocationLog | null | undefined, histor
     if (place?.water && mode && mode !== "still" && (location.speedMps ?? 0) > 1.5) mode = "boat";
     const motion = describeMotion(mode, location.speedMps, location.modeConfidence);
 
-    return { place, motion, zone, inside, stay, live: isLive(location.recordedAt, now) };
+    return { place, motion, zone, inside, zoneName, stay, live: isLive(location.recordedAt, now) };
   }, [location, history, zones, place, now]);
 }
