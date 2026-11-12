@@ -12,6 +12,7 @@ import { Text } from "../../components/ui/Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import {
   MIN_PASSWORD_LENGTH,
+  PASSWORD_RULE,
   passwordProblem,
   signOut,
   startPasswordRecovery,
@@ -153,6 +154,7 @@ export default function ResetPasswordScreen() {
             autoCapitalize="none"
             autoComplete="new-password"
             placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+            hint={PASSWORD_RULE}
           />
           <Field
             label="Confirm new password"

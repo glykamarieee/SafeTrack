@@ -19,6 +19,8 @@ import {
   Ionicons,
 } from "@expo/vector-icons";
 
+import { useAuthStore } from "../../store/authStore";
+
 import {
   completeChildRegistration,
   type TrackingSource,
@@ -88,6 +90,15 @@ export default function ChildRegistrationScreen(){
 
 
 const router = useRouter();
+
+const logout = useAuthStore((state) => state.logout);
+
+// A new guardian can stop here and register the child later (before
+// 2026-11-13 this screen had no way out).
+const logOut = async () => {
+  await logout();
+  router.replace("/(auth)/login");
+};
 
 
 
@@ -363,6 +374,7 @@ return (
     {error ? <Notice tone="error">{error}</Notice> : null}
 
     <Button label={loading ? "Registering…" : "Register child"} iconRight="arrow-forward" size="lg" loading={loading} onPress={() => void registerChild()} />
+    <Button label="Not now? Log out" variant="ghost" onPress={() => void logOut()} />
   </AuthShell>
 );
 }

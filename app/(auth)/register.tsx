@@ -9,7 +9,7 @@ import { Field } from "../../components/ui/Field";
 import { Notice } from "../../components/ui/Notice";
 import { Text } from "../../components/ui/Text";
 import { useAuthStore } from "../../store/authStore";
-import { MIN_PASSWORD_LENGTH } from "../../services/supabaseAuthService";
+import { MIN_PASSWORD_LENGTH, PASSWORD_RULE, passwordStrengthProblem } from "../../services/supabaseAuthService";
 import { useTheme } from "../../theme/ThemeProvider";
 
 function validEmail(value: string) { return /^\S+@\S+\.\S+$/.test(value); }
@@ -34,6 +34,8 @@ export default function RegisterScreen() {
     if (!validEmail(email.trim())) return setLocalError("Enter a valid email address.");
     if (password.length < MIN_PASSWORD_LENGTH) return setLocalError(`Password must contain at least ${MIN_PASSWORD_LENGTH} characters.`);
     if (password !== confirmPassword) return setLocalError("Passwords do not match.");
+    const weak = passwordStrengthProblem(password);
+    if (weak) return setLocalError(weak);
     try {
       await register(fullName.trim(), email.trim().toLowerCase(), password);
       await logout();
@@ -69,7 +71,7 @@ export default function RegisterScreen() {
     >
       <Field label="Full name" icon="person-outline" value={fullName} onChangeText={setFullName} placeholder="Full name" autoCapitalize="words" autoComplete="name" />
       <Field label="Email address" icon="mail-outline" value={email} onChangeText={setEmail} placeholder="Email address" keyboardType="email-address" autoCapitalize="none" autoComplete="email" />
-      <Field label="Password" icon="lock-closed-outline" value={password} onChangeText={setPassword} placeholder="Password" secure autoCapitalize="none" autoComplete="new-password" hint={`At least ${MIN_PASSWORD_LENGTH} characters.`} />
+      <Field label="Password" icon="lock-closed-outline" value={password} onChangeText={setPassword} placeholder="Password" secure autoCapitalize="none" autoComplete="new-password" hint={PASSWORD_RULE} />
       <Field label="Confirm password" icon="shield-checkmark-outline" value={confirmPassword} onChangeText={setConfirmPassword} placeholder="Confirm password" secure autoCapitalize="none" autoComplete="new-password" />
       {displayError ? <Notice tone="error">{displayError}</Notice> : null}
       <Button label={isLoading ? "Creating account…" : "Create account"} icon="person-add-outline" size="lg" loading={isLoading} onPress={() => void createAccount()} />

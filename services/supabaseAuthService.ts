@@ -363,13 +363,28 @@ export async function startPasswordRecovery(url: string): Promise<void> {
 
 export const MIN_PASSWORD_LENGTH = 8;
 
+/** The Supabase project's password rule (Authentication → Policies). */
+export const PASSWORD_RULE = `At least ${MIN_PASSWORD_LENGTH} characters, with an upper-case letter, a lower-case letter, a number and a symbol.`;
+
+/**
+ * The server also requires an upper-case letter, a lower-case letter, a
+ * number and a symbol; without this check sign-up showed Supabase's raw
+ * message listing every allowed character (found 2026-11-13).
+ */
+export function passwordStrengthProblem(password: string): string | null {
+  if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+    return "Use an upper-case letter, a lower-case letter, a number and a symbol (for example ! # ?).";
+  }
+  return null;
+}
+
 export function passwordProblem(password: string, confirm: string): string | null {
   if (password.length < MIN_PASSWORD_LENGTH) {
     return `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
   }
   if (password !== confirm) return "The passwords do not match.";
 
-  return null;
+  return passwordStrengthProblem(password);
 }
 
 /** Saves a new password for the signed-in user (after recovery or re-authentication). */
