@@ -13,7 +13,7 @@ import { StatusBar } from "expo-status-bar";
 import { useAuthStore } from "../store/authStore";
 import { hasChildPhoneCredentials } from "../services/childMobileService";
 import { needsWelcomeGuide } from "../services/onboardingService";
-import { openedByNewResetLink } from "../lib/deepLinks";
+import { openedByConfirmationLink, openedByNewResetLink } from "../lib/deepLinks";
 import { StartSplash } from "../components/StartSplash";
 
 
@@ -77,6 +77,18 @@ export default function SplashScreen() {
     openedByNewResetLink()
       .then((reset) => active && setOpenedByResetLink(reset))
       .catch(() => active && setOpenedByResetLink(false));
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // An email-confirmation link that started the app shows its result on Login.
+  const [confirmationNotice, setConfirmationNotice] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    let active = true;
+    openedByConfirmationLink()
+      .then((notice) => active && setConfirmationNotice(notice))
+      .catch(() => active && setConfirmationNotice(null));
     return () => {
       active = false;
     };
@@ -220,12 +232,17 @@ export default function SplashScreen() {
     return <Redirect href="/(auth)/reset-password" />;
   }
 
+  if (confirmationNotice) {
+    return <Redirect href={{ pathname: "/(auth)/login", params: { notice: confirmationNotice } }} />;
+  }
+
   if(
     !isBootstrapped ||
     !minimumSplashFinished ||
     childPhoneLinked === null ||
     showWelcomeGuide === null ||
-    openedByResetLink === null
+    openedByResetLink === null ||
+    confirmationNotice === undefined
   ){
 
     return <StartSplash />;

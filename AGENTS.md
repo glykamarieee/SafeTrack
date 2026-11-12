@@ -622,6 +622,8 @@ rest.
   Login then shows "Account created…". If Supabase requires email confirmation
   (dashboard: Authentication → Sign In / Providers → Email → "Confirm email"),
   login shows **Resend confirmation email** (`supabase.auth.resend`).
+- **Email confirmation is ON** (since 2026-11-13; Supabase requires upper case, lower case, a digit and a symbol in passwords). Confirmation links open Login directly: `takeConfirmationNotice` (`lib/deepLinks.ts`) shows "Email confirmed…" or, for a refused link (`#error=…`), "already used or has expired". Email apps may open a link once before the guardian's tap, so a link that just confirmed the account can still arrive as "used".
+- **Links after Android closed the app:** `plugins/withLinkIntent.js` makes MainActivity call `setIntent()` in `onNewIntent`; without it a reset or confirmation link that restarted SafeTrack reached JS as no link (`[SafeTrack link] launch none` in logcat) and the start screen opened.
 - **Password reset:**
   - `resetPasswordForEmail` with `redirectTo` = `authRedirectUrl("/reset-password")`.
   - The `app/(auth)/reset-password.tsx` screen turns the link into a session

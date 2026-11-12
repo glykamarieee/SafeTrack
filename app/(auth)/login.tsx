@@ -11,6 +11,7 @@ import { Text } from "../../components/ui/Text";
 import { useAuthStore } from "../../store/authStore";
 import { resendVerificationEmail } from "../../services/supabaseAuthService";
 import { hasSeenOnboarding } from "../../services/onboardingService";
+import { onAppLink, takeConfirmationNotice } from "../../lib/deepLinks";
 import { makeStyles, useTheme } from "../../theme/ThemeProvider";
 import { space } from "../../theme/tokens";
 
@@ -23,6 +24,15 @@ const NOTICES: Record<string, string> = {
     "Account created. If SafeTrack sent you a confirmation email, open its link first, then log in.",
   "password-updated": "Password updated. Log in with your new password.",
   "account-deleted": "Your account was deleted.",
+  "email-confirmed": "Email confirmed. You can now log in.",
+};
+
+/** Notices about a problem, shown in red. */
+const ERROR_NOTICES: Record<string, string> = {
+  "link-expired":
+    // Email apps may open a link once to check it before the guardian's tap,
+    // so a link that just confirmed the account can still arrive as "used".
+    "This confirmation link was already used or has expired. If you just confirmed your email, you can log in now. Otherwise, log in and tap Resend confirmation email.",
 };
 
 export default function LoginScreen() {
@@ -30,7 +40,24 @@ export default function LoginScreen() {
   const { colors } = useTheme();
   const styles = useStyles();
   const params = useLocalSearchParams<{ notice?: string; email?: string }>();
-  const notice = params.notice ? NOTICES[params.notice] : undefined;
+  // The result of an email-confirmation link that opened this screen.
+  const [linkNotice, setLinkNotice] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    const check = () =>
+      void takeConfirmationNotice().then((value) => {
+        if (active && value) setLinkNotice(value);
+      });
+    check();
+    const stop = onAppLink(() => setTimeout(check, 300));
+    return () => {
+      active = false;
+      stop();
+    };
+  }, []);
+  const noticeKey = linkNotice ?? params.notice;
+  const notice = noticeKey ? NOTICES[noticeKey] : undefined;
+  const errorNotice = noticeKey ? ERROR_NOTICES[noticeKey] : undefined;
   const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
 
   const login = useAuthStore((state) => state.login);
@@ -183,6 +210,7 @@ export default function LoginScreen() {
       </View>
 
       {notice && !displayError ? <Notice tone="success">{notice}</Notice> : null}
+      {errorNotice && !displayError ? <Notice tone="error">{errorNotice}</Notice> : null}
 
       {displayError ? <Notice tone="error">{displayError}</Notice> : null}
 

@@ -30,6 +30,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     plugins: [
       ...(config.plugins ?? []),
       "@rnmapbox/maps",
+      // Email links reach the app even after Android closed it (plugins/withLinkIntent.js).
+      "./plugins/withLinkIntent",
       [
         "expo-notifications",
         {

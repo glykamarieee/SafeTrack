@@ -37,8 +37,39 @@ function remember(url: string | null) {
   listeners.forEach((listener) => listener(url));
 }
 
+/**
+ * What an email-confirmation link reports, for the Login screen:
+ * "email-confirmed" when Supabase confirmed the address, "link-expired" when
+ * it refused the link (expired, already used, or replaced by a newer email).
+ * Null for any other link. Before 2026-11-13 these links only opened the
+ * start screen, so a refused link gave no message at all (CASE-343).
+ */
+export function confirmationNotice(url: string | null | undefined): "email-confirmed" | "link-expired" | null {
+  if (!url || isRecoveryLink(url)) return null;
+  if (/[?&#]error(_code|_description)?=/.test(url)) return "link-expired";
+  if (/[?&#]type=(signup|email)/.test(url) || (/login/.test(url) && /access_token=|[?&#]code=/.test(url))) return "email-confirmed";
+  return null;
+}
+
 /** Launch links already sent to Reset password (each is used once). */
 const handledLaunchLinks = new Set<string>();
+
+/**
+ * The Login notice for the email-confirmation link that started the app, if
+ * it hasn't been shown yet.
+ */
+export async function openedByConfirmationLink(): Promise<"email-confirmed" | "link-expired" | null> {
+  if (Platform.OS === "web") return null;
+  try {
+    const url = await Linking.getInitialURL();
+    const notice = confirmationNotice(url);
+    if (!url || !notice || handledLaunchLinks.has(url)) return null;
+    handledLaunchLinks.add(url);
+    return notice;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Whether the screen was just opened by a password-reset link that hasn't
@@ -59,9 +90,20 @@ export async function openedByNewResetLink(): Promise<boolean> {
   }
 }
 
+/** Path and parameter names of a link, never its tokens (for the device log). */
+function describe(url: string | null) {
+  return url ? `${url.split(/[?#]/)[0]} [${Array.from(url.matchAll(/[?&#]([a-z_]+)=/g), (m) => m[1]).join(",")}]` : "none";
+}
+
 if (Platform.OS !== "web") {
-  void Linking.getInitialURL().then(remember).catch(() => undefined);
+  void Linking.getInitialURL()
+    .then((url) => {
+      console.log(`[SafeTrack link] launch ${describe(url)}`);
+      remember(url);
+    })
+    .catch(() => undefined);
   Linking.addEventListener("url", ({ url }) => {
+    console.log(`[SafeTrack link] event ${describe(url)}`);
     remember(url);
     // Already running on another screen: go to Reset password (unless the
     // router already opened it for this link).
@@ -69,8 +111,38 @@ if (Platform.OS !== "web") {
       setTimeout(() => {
         if (!resetScreenOpen) router.replace("/(auth)/reset-password");
       }, 700);
+      return;
+    }
+    // An email-confirmation link: show the result on Login.
+    const notice = confirmationNotice(url);
+    if (notice) {
+      setTimeout(() => router.replace({ pathname: "/(auth)/login", params: { notice } }), 700);
     }
   });
+}
+
+/**
+ * The notice for the newest email-confirmation link not shown yet, or null.
+ * Used by the Login screen, which these links open directly (expo-router
+ * routes safetrack://login to it, so the start screen never sees the link).
+ * Each link gives its notice once.
+ */
+export async function takeConfirmationNotice(): Promise<"email-confirmed" | "link-expired" | null> {
+  if (Platform.OS === "web") return null;
+  let url = latest;
+  if (!url) {
+    try {
+      url = await Linking.getInitialURL();
+    } catch {
+      url = null;
+    }
+  }
+  const notice = confirmationNotice(url);
+  // Path and parameter names only (never tokens), to check links in the device log.
+  if (url) console.log(`[SafeTrack link] ${url.split(/[?#]/)[0]} ${notice ?? "no notice"}; params: ${Array.from(url.matchAll(/[?&#]([a-z_]+)=/g), (m) => m[1]).join(",")}`);
+  if (!url || !notice || handledLaunchLinks.has(url)) return null;
+  handledLaunchLinks.add(url);
+  return notice;
 }
 
 /** The newest link that carries a recovery token, code or error, if any. */
