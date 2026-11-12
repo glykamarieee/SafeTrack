@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 import { supabase } from "../../lib/supabase";
+import { useSelectedChild } from "../../hooks/useSelectedChild";
 import { useAuthStore } from "../../store/authStore";
 import { useSosStore } from "../../store/sosStore";
 
@@ -40,11 +41,11 @@ export default function SafetyCenterScreen() {
   const router = useRouter();
 
   const guardian = useAuthStore((state) => state.guardian);
-  const children = useAuthStore((state) => state.linkedChildren);
+  // The child chosen on Home, Location and the other guardian screens.
+  const { child } = useSelectedChild();
   const alerts = useSosStore((state) => state.alerts);
   const loadSos = useSosStore((state) => state.loadForChild);
 
-  const child = children[0] ?? null;
   const trackingSource = child?.trackingSource ?? "smartwatch";
 
   const [activeZoneCount, setActiveZoneCount] = useState(0);
