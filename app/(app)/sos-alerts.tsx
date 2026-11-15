@@ -22,8 +22,10 @@ import {
 } from "react-native-safe-area-context";
 
 import {
+  useFocusEffect,
   useRouter,
 } from "expo-router";
+import { subscribeToGuardianSos } from "../../services/sosService";
 
 import {
   Ionicons,
@@ -345,6 +347,22 @@ export default function SosAlertsScreen(){
     void loadAlerts();
 
   },[loadAlerts]);
+
+  // The screen stays mounted in the background: reload when it is shown again
+  // (opened from a notification or link) and whenever an SOS of this guardian
+  // is added or changes, so a new alert never waits for a manual Refresh.
+  useFocusEffect(
+    useCallback(() => {
+      void loadAlerts();
+    }, [loadAlerts])
+  );
+
+  useEffect(() => {
+    if (!guardian?.id) return;
+    return subscribeToGuardianSos(guardian.id, () => {
+      void loadAlerts();
+    });
+  }, [guardian?.id, loadAlerts]);
 
 
 
