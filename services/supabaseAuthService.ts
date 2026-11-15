@@ -282,6 +282,13 @@ export async function signUpGuardian(
     throw new Error(getSafeErrorMessage(error.message));
   }
 
+  // With email confirmation on (2026-11-13), Supabase answers a sign-up for an
+  // existing email with no error and a user that has no identities, instead of
+  // "User already registered". Without this check the app said "Account created".
+  if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    throw new Error("An account with this email address already exists.");
+  }
+
   return data;
 }
 

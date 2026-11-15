@@ -101,13 +101,12 @@ describe("Register Account", () => {
     const target = (router.replace as jest.Mock).mock.calls[0][0];
     expect(target).toEqual({ pathname: "/(auth)/login", params: { notice: "registered", email } });
 
-    // The account really exists: it can sign in.
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password: "Passw0rd!9" });
-    expect(error).toBeNull();
-    recordActual(MODULE, "CASE-009", `New account created with a new test email; signing in with it worked; the Login screen opened with the "Account created" notice.`);
-
-    // Clean up: the same soft delete the app uses (Delete Account).
-    if (data.session) await supabase.rpc("delete_my_account");
+    // The account really exists. Email confirmation is on (2026-11-13), so the
+    // server answers "Email not confirmed" for it (an unknown email or a wrong
+    // password would answer "Invalid login credentials").
+    const { error } = await supabase.auth.signInWithPassword({ email, password: "Passw0rd!9" });
+    expect(error?.message).toMatch(/email not confirmed/i);
+    recordActual(MODULE, "CASE-009", `New account created with a new test email (the server now waits for its email confirmation); the Login screen opened with the "Account created" notice.`);
     await supabase.auth.signOut({ scope: "local" });
   });
 
