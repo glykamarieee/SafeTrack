@@ -4581,8 +4581,11 @@
         "npm:@expo-google-fonts/plus-jakarta-sans@~0.4.2",
         "npm:@expo/vector-icons@^15.0.2",
         "npm:@react-native-async-storage/async-storage@2.2.0",
+        "npm:@react-native/jest-preset@~0.86.3",
         "npm:@rnmapbox/maps@^10.3.8",
         "npm:@supabase/supabase-js@^2.110.0",
+        "npm:@testing-library/react-native@14.1.0",
+        "npm:@types/jest@29.5.14",
         "npm:@types/react@~19.2.2",
         "npm:expo-constants@~57.0.19",
         "npm:expo-device@~57.0.2",
@@ -4602,6 +4605,8 @@
         "npm:expo-task-manager@~57.0.21",
         "npm:expo-video@57.0",
         "npm:expo@~57.0.4",
+        "npm:jest-expo@57.0.6",
+        "npm:jest@29.7",
         "npm:patch-package@^8.0.1",
         "npm:react-dom@19.2.3",
         "npm:react-native-maps@1.27.2",
@@ -4612,6 +4617,7 @@
         "npm:react-native-web@~0.21.2",
         "npm:react-native@0.86.0",
         "npm:react@19.2.3",
+        "npm:test-renderer@1",
         "npm:typescript@~6.0.3",
         "npm:zustand@^5.0.14"
       ]

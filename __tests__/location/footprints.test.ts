@@ -11,7 +11,7 @@ const BASE = { latitude: 10.2770, longitude: 123.9450 };
 const M_LAT = 1 / 111_320;
 
 /** A point `north` meters north of BASE, `east` meters east, `seconds` after START. */
-function fix(seconds: number, north: number, east = 0, accuracy = 8, mode: "walking" | "still" = "walking") {
+function fix(seconds: number, north: number, east = 0, accuracy = 8, mode: "walking" | "running" | "still" = "walking") {
   return {
     latitude: BASE.latitude + north * M_LAT,
     longitude: BASE.longitude + (east * M_LAT) / Math.cos((BASE.latitude * Math.PI) / 180),
@@ -59,6 +59,22 @@ describe("footprints", () => {
     const live = Array.from({ length: 60 }, (_, s) => fix(s, (s % 3) * 0.8, (s % 2) * 0.8));
     const end = fix(60, 0.5, 0.5);
     expect(recentTrail(latest(end), [], live, end.at).footprints).toHaveLength(0);
+  });
+
+  it("walk 20 s, then run 12 s: alternating prints, running prints further apart (CASE-167/362)", () => {
+    const walk = Array.from({ length: 20 }, (_, s) => fix(s, s * 1.4, 0, 8, "walking"));
+    const run = Array.from({ length: 12 }, (_, s) => fix(20 + s, 28 + s * 3.2, 0, 8, "running"));
+    const end = fix(32, 28 + 12 * 3.2, 0, 8, "running");
+    const { footprints } = recentTrail(latest(end), [], [...walk, ...run], end.at);
+    const walking = footprints.filter((print) => print.gait === "walk");
+    const running = footprints.filter((print) => print.gait === "run");
+    const gap = (list: typeof footprints) =>
+      list.slice(1).reduce((sum, print, i) => sum + distanceMeters(list[i]!, print), 0) / Math.max(1, list.length - 1);
+    console.log(`walking prints ${walking.length} (avg ${gap(walking).toFixed(2)} m apart), running prints ${running.length} (avg ${gap(running).toFixed(2)} m apart)`);
+    expect(walking.length).toBeGreaterThan(10);
+    expect(running.length).toBeGreaterThan(5);
+    footprints.forEach((print, index) => expect(print.foot).toBe(index % 2 === 0 ? "left" : "right"));
+    expect(gap(running)).toBeGreaterThan(gap(walking));
   });
 
   it("leaves out fixes with poor accuracy", () => {
