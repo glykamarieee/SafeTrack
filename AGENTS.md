@@ -4,6 +4,9 @@ Read this before answering or changing anything. It records how the system
 actually works and the traps already hit. If the code disagrees with this file,
 trust the code and update this file in the same change.
 
+For the database (every table, column, policy, function, trigger, cron job and
+realtime channel, read from the live project), see [SUPABASE.md](SUPABASE.md).
+
 ## Expo HAS CHANGED
 
 Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before writing any code.
