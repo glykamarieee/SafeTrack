@@ -50,9 +50,15 @@ const FOOT_IMAGES = {
   "foot-run-r-d": require("../../assets/map/foot-run-r-d.png"),
 };
 
-/** Footprint size on the map: grows with zoom like a real print. */
-// About 55% of the first size (2026-11-08: the prints looked too big).
-const FOOT_SIZE = ["interpolate", ["exponential", 1.6], ["zoom"], 14, 0.055, 17, 0.11, 19, 0.2, 21, 0.34];
+/**
+ * Footprint size on the map: a fixed size on the ground, so it grows and
+ * shrinks exactly like the streets when zooming (2026-11-15: the prints looked
+ * too big). The 96 px icon covers ~1 m, the print itself ~0.6 m; doubling per
+ * zoom level keeps that (Mapbox: 2^zoom / 77,100 px per meter at latitude 10).
+ * Stops growing past zoom 22. Below zoom 18.5 a real-size print would be
+ * under 5 px, so it keeps that minimum (the trail stays visible, thinned out).
+ */
+const FOOT_SIZE = ["interpolate", ["exponential", 2], ["zoom"], 15, 0.05, 18.5, 0.05, 22, 0.567];
 /** A fresh print starts this much bigger and settles (press-in). */
 const PRESS_MS = 420;
 

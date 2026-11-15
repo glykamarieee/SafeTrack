@@ -86,6 +86,8 @@ export type LiveTrailPoint = {
   longitude: number;
   at: number;
   mode: TravelMode | null;
+  /** GPS accuracy of the fix; poor fixes are left out of the footprints. */
+  accuracy?: number | null;
 };
 
 const LIVE_TRAIL_MS = 10 * 60_000;
@@ -107,6 +109,24 @@ const JUMP_CONFIRM = 3;
 
 let pendingMode: { mode: TravelMode | null; count: number } = { mode: null, count: 0 };
 let jumpCandidate: { latitude: number; longitude: number; count: number } | null = null;
+/**
+ * Live fixes of the last STAY_CHECK_MS (2026-11-15: the card said "Walking" or
+ * "Running" while the child stayed in one place; the watch's activity guess
+ * and GPS speed jitter). Walking moves the child ~15 m in that time.
+ */
+let recentFixes: { latitude: number; longitude: number; at: number; childId: string }[] = [];
+const STAY_CHECK_MS = 10_000;
+
+/** On foot per the watch, but no real progress over the last 15 s: staying. */
+function stayingPut(fix: { latitude: number; longitude: number; childId: string; accuracyMeters?: number | null }, at: number) {
+  recentFixes = recentFixes.filter((point) => point.childId === fix.childId && at - point.at <= STAY_CHECK_MS + 5_000);
+  recentFixes.push({ latitude: fix.latitude, longitude: fix.longitude, at, childId: fix.childId });
+  const oldest = recentFixes[0]!;
+  if (at - oldest.at < STAY_CHECK_MS - 3_000) return false; // not enough history yet
+  // Walking covers 10-14 m in 10 s; GPS drift stays within ~80% of the accuracy.
+  const radius = Math.max(5, Math.min((fix.accuracyMeters ?? 10) * 0.8, 10));
+  return recentFixes.every((point) => metersBetween(point, fix) <= radius);
+}
 
 function metersBetween(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) {
   const radians = (value: number) => (value * Math.PI) / 180;
@@ -668,6 +688,11 @@ applyLiveFix: (fix) => {
   } else {
     pendingMode = { mode: null, count: 0 };
   }
+  // "Walking"/"Running" while every fix of the last 15 s is within GPS drift: the child is staying.
+  if (stayingPut(fix, fixTime) && (mode === "walking" || mode === "running")) {
+    mode = "still";
+    pendingMode = { mode: null, count: 0 };
+  }
 
   // Standing still: GPS drift within the accuracy does not move the marker,
   // unless the new fix is clearly more accurate (then it is the better spot).
@@ -696,7 +721,7 @@ applyLiveFix: (fix) => {
   const trail = get().liveTrail.filter((point) => point.at >= since);
   const last = trail[trail.length - 1];
   if (!hold && (!last || metersBetween(last, latest) >= 1)) {
-    trail.push({ latitude: latest.latitude, longitude: latest.longitude, at: fixTime, mode });
+    trail.push({ latitude: latest.latitude, longitude: latest.longitude, at: fixTime, mode, accuracy: fix.accuracyMeters });
   }
 
   set({ latest, liveTrail: trail.slice(-LIVE_TRAIL_MAX) });

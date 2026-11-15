@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { cachedPlace, nearbyPlace, onPlaceChange, placeCell, placeFor, prefetchAhead, type Place } from "../lib/places";
+import { cachedPlace, cellsAround, checkSpot, nearbyPlace, onPlaceChange, placeCell, placeFor, prefetchAhead, type Place } from "../lib/places";
 import { describeMotion, isLive } from "../lib/travelMode";
 import type { MapCircle } from "../components/location/mapTypes";
 import type { LocationLog, TravelMode } from "../types/safetrack";
@@ -42,11 +42,22 @@ export function usePlace(latitude: number | null | undefined, longitude: number 
     const known = cachedPlace(latitude, longitude);
     setPlace(known !== undefined ? known : nearbyPlace(latitude, longitude) ?? undefined);
     const cell = latitude != null && longitude != null ? placeCell(latitude, longitude) : null;
-    const stop = onPlaceChange((changed, value) => {
-      if (active && changed === cell) setPlace(value);
+    const around = latitude != null && longitude != null ? cellsAround(latitude, longitude) : new Set<string>();
+    const stop = onPlaceChange((changed) => {
+      // This cell or a neighbour learned a place: show the cell's place as seen
+      // from this exact point (the place the child is at comes first).
+      if (!active || !around.has(changed) || !cell) return;
+      const own = cachedPlace(latitude, longitude);
+      if (own !== undefined) setPlace(own);
     });
     if (known === undefined) {
-      void placeFor(latitude, longitude).then((value) => active && setPlace(value));
+      void placeFor(latitude, longitude).then((value) => {
+        if (!active) return;
+        setPlace(value);
+        checkSpot(latitude, longitude);
+      });
+    } else {
+      checkSpot(latitude, longitude);
     }
     return () => {
       active = false;

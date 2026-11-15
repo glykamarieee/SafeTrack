@@ -1,26 +1,35 @@
 import type { LocationLog, TravelMode } from "../../types/safetrack";
 import { distanceMeters, type MapFootprint, type MapPoint } from "./mapTypes";
 
-type TrailPoint = { latitude: number; longitude: number; at: number; mode: TravelMode | null };
+type TrailPoint = { latitude: number; longitude: number; at: number; mode: TravelMode | null; accuracy?: number | null };
 
 /** Prints stay this long, fading. */
 const WINDOW_MS = 10 * 60_000;
 /** Older points are not used, so long walks keep the same prints (stable ids). */
 const LOOKBACK_MS = 30 * 60_000;
 /**
- * Distance between one print and the next (alternating feet). Wider than a
- * real step so the trail reads clearly at street zoom; running prints are
- * spaced further apart, like a running stride.
+ * Distance between one print and the next (alternating feet), in meters on
+ * the ground (2026-11-15: 2.6 m looked too sparse and the prints too big). A
+ * real step is ~0.7 m; 1.2 m keeps the prints (drawn ~0.6 m long, see
+ * FOOT_SIZE in MapboxRenderer) from touching, so the trail stays clean.
  */
-const STRIDE_M = { walk: 2.6, run: 4.4 } as const;
+const STRIDE_M = { walk: 1.2, run: 1.8 } as const;
 /** Half the gap between the left and right prints. */
-const SIDE_M = { walk: 0.45, run: 0.35 } as const;
+const SIDE_M = { walk: 0.18, run: 0.14 } as const;
+/** Fixes less accurate than this are not used for prints (the last point always is). */
+const MAX_ACCURACY_M = 20;
+/**
+ * A fix this close to the last one used is GPS drift, not a step: between
+ * 1.5 and 5 m, depending on the fix's accuracy. Stops prints appearing while
+ * the child stands still, and stops the trail zigzagging.
+ */
+const minMove = (accuracy: number | null | undefined) => Math.min(5, Math.max(1.5, (accuracy ?? 5) * 0.4));
 /** Fully visible this long, then fading to FADE_MIN. */
 const SOLID_MS = 2 * 60_000;
 const FADE_MIN = 0.18;
 /** Prints younger than this are animated in. */
 const FRESH_MS = 2_500;
-const MAX_PRINTS = 400;
+const MAX_PRINTS = 700;
 /** Over this between two fixes is a gap, not a walk. */
 const GAP_M = 150;
 
@@ -45,15 +54,21 @@ export function recentTrail(
 
   const saved: TrailPoint[] = history
     .filter((point) => point.childId === latest.childId && point.id !== latest.id)
-    .map((point) => ({ latitude: point.latitude, longitude: point.longitude, at: Date.parse(point.recordedAt), mode: point.travelMode ?? null }))
+    .map((point) => ({
+      latitude: point.latitude,
+      longitude: point.longitude,
+      at: Date.parse(point.recordedAt),
+      mode: point.travelMode ?? null,
+      accuracy: point.accuracyMeters ?? null,
+    }))
     .filter((point) => point.at >= since && point.at <= end);
   const lastSaved = saved.reduce((max, point) => Math.max(max, point.at), 0);
   const raw = [
     ...saved,
     ...live.filter((point) => point.at > lastSaved && point.at >= since && point.at < end),
-    { latitude: latest.latitude, longitude: latest.longitude, at: end, mode: latest.travelMode ?? null },
+    { latitude: latest.latitude, longitude: latest.longitude, at: end, mode: latest.travelMode ?? null, accuracy: latest.accuracyMeters ?? null },
   ].sort((first, second) => first.at - second.at);
-  const points = smooth(raw);
+  const points = smooth(steady(raw));
 
   const footprints: MapFootprint[] = [];
   // Each walking stretch starts its own left/right sequence, measured from
@@ -73,7 +88,8 @@ export function recentTrail(
       count = 0;
       continue;
     }
-    if (length < 0.3) continue;
+    // Under 1 m to the marker is drift too (the marker's own point is always kept).
+    if (length < 1) continue;
     if (!segmentStart) segmentStart = from.at;
     const gait = to.mode === "running" ? "run" : "walk";
     const heading = bearing(from, to);
@@ -118,22 +134,45 @@ export function recentTrail(
 }
 
 /**
- * A light moving average (each point with its neighbours) for on-foot
- * stretches: removes the 1-3 m GPS wobble between one-second fixes. The first
- * and last points stay exact, so the trail still ends at the marker.
+ * On-foot fixes that can be trusted: poor fixes (over MAX_ACCURACY_M) and
+ * fixes that only drifted from the last one kept (minMove) are dropped. Other
+ * points (vehicle stretches) and the last point (the marker) are always kept.
+ */
+function steady(points: TrailPoint[]): TrailPoint[] {
+  const kept: TrailPoint[] = [];
+  points.forEach((point, index) => {
+    const last = index === points.length - 1;
+    const previous = kept[kept.length - 1];
+    if (!last && onFoot(point.mode)) {
+      if (point.accuracy != null && point.accuracy > MAX_ACCURACY_M) return;
+      if (previous && onFoot(previous.mode) && distanceMeters(previous, point) < minMove(point.accuracy)) return;
+    }
+    kept.push(point);
+  });
+  return kept;
+}
+
+/**
+ * A moving average over five points (weights 1-2-3-2-1) for on-foot
+ * stretches: removes the GPS wobble so the prints follow the path walked. The
+ * first and last points stay exact, so the trail still ends at the marker.
  */
 function smooth(points: TrailPoint[]): TrailPoint[] {
   if (points.length < 3) return points;
   return points.map((point, index) => {
-    const before = points[index - 1];
-    const after = points[index + 1];
-    if (!before || !after || !onFoot(point.mode) || !onFoot(before.mode) || !onFoot(after.mode)) return point;
-    if (distanceMeters(before, after) > GAP_M) return point;
-    return {
-      ...point,
-      latitude: (before.latitude + point.latitude * 2 + after.latitude) / 4,
-      longitude: (before.longitude + point.longitude * 2 + after.longitude) / 4,
-    };
+    if (index === 0 || index === points.length - 1 || !onFoot(point.mode)) return point;
+    let latitude = 0;
+    let longitude = 0;
+    let total = 0;
+    for (let offset = -2; offset <= 2; offset += 1) {
+      const near = points[index + offset];
+      if (!near || !onFoot(near.mode) || distanceMeters(near, point) > GAP_M) continue;
+      const weight = 3 - Math.abs(offset);
+      latitude += near.latitude * weight;
+      longitude += near.longitude * weight;
+      total += weight;
+    }
+    return { ...point, latitude: latitude / total, longitude: longitude / total };
   });
 }
 

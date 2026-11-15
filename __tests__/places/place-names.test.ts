@@ -16,7 +16,7 @@ jest.mock("../../lib/supabase", () => ({
   },
 }));
 
-import { placeFor, withMapboxStreet } from "../../lib/places";
+import { AT_PLACE_M, checkSpot, placeFor, withMapboxStreet } from "../../lib/places";
 
 type Answer = { ok?: boolean; body?: unknown; fail?: boolean };
 
@@ -42,6 +42,7 @@ const OSM_SCHOOL = {
   address: { road: "A.C. Cortes Avenue", suburb: "Looc", city: "Mandaue", state: "Central Visayas" },
 };
 const OSM_NO_STREET = { name: "", address: { neighbourhood: "La Aldea del Mar", suburb: "Babag", city: "Lapu-Lapu", state: "Central Visayas" } };
+const OSM_HIGHWAY = { road: "Manuel L. Quezon National Highway", neighbourhood: "Bombshell", suburb: "Babag", city: "Lapu-Lapu", region: "Central Visayas" };
 const MAPBOX_STREET = {
   features: [{ properties: { context: { street: { name: "Park Place Avenue" }, locality: { name: "Babag" }, place: { name: "Lapu-Lapu" } } } }],
 };
@@ -58,7 +59,7 @@ describe("place names", () => {
   it("uses OpenStreetMap's named place and does not ask Mapbox", async () => {
     const calls = answer({ osm: { body: OSM_SCHOOL }, mapbox: { body: MAPBOX_STREET } });
     const place = await placeFor(10.3254, 123.9538);
-    expect(place?.label).toBe("University of Cebu - Lapu-Lapu Mandaue Campus, A.C. Cortes Avenue, Brgy. Looc, Mandaue, Central Visayas");
+    expect(place?.label).toBe("University of Cebu - Lapu-Lapu Mandaue Campus, Brgy. Looc, Mandaue City");
     expect(place?.mapbox).toBeUndefined();
     await settle();
     expect(calls.mapbox).toBe(0);
@@ -68,7 +69,7 @@ describe("place names", () => {
   it("adds Mapbox's street where OpenStreetMap has none, and does not save it", async () => {
     const calls = answer({ osm: { body: OSM_NO_STREET }, mapbox: { body: MAPBOX_STREET } });
     const place = await placeFor(10.2727, 123.9425);
-    expect(place?.label).toBe("Park Place Avenue, Brgy. Babag, Lapu-Lapu, Central Visayas");
+    expect(place?.label).toBe("Park Place Avenue, Brgy. Babag, Lapu-Lapu City");
     expect(place?.mapbox).toBe(true);
     await settle();
     expect(calls.mapbox).toBe(1);
@@ -78,14 +79,55 @@ describe("place names", () => {
   it("shows what OpenStreetMap gave when Mapbox fails", async () => {
     answer({ osm: { body: OSM_NO_STREET }, mapbox: { fail: true } });
     const place = await placeFor(10.2747, 123.9445);
-    expect(place?.label).toBe("Brgy. Babag, Lapu-Lapu, Central Visayas");
+    expect(place?.label).toBe("Brgy. Babag, Lapu-Lapu City");
     expect(place?.mapbox).toBeUndefined();
   });
 
   it("shows what OpenStreetMap gave when Mapbox answers with an error", async () => {
     answer({ osm: { body: OSM_NO_STREET }, mapbox: { ok: false, body: {} } });
     const place = await placeFor(10.2767, 123.9465);
-    expect(place?.label).toBe("Brgy. Babag, Lapu-Lapu, Central Visayas");
+    expect(place?.label).toBe("Brgy. Babag, Lapu-Lapu City");
+  });
+
+  // 2026-11-15: at Babag Barangay Hall the card said "Manuel L. Quezon National
+  // Highway", because the cell was first looked up from a point on the highway.
+  it("names the place the child is at, from the child's exact point", async () => {
+    answer({
+      osm: { body: { name: "", lat: "10.27701", lon: "123.94546", address: OSM_HIGHWAY } },
+      landmark: { body: { name: "Babag Barangay Hall", lat: "10.2773457", lon: "123.9451645", address: OSM_HIGHWAY } },
+    });
+    // The cell is looked up from the highway, ~49 m from the hall.
+    const onHighway = await placeFor(10.27701, 123.94546);
+    expect(onHighway?.label).toBe("Manuel L. Quezon National Highway, Brgy. Babag, Lapu-Lapu City");
+    await settle();
+
+    // The child at the hall, same cell: the hall's name, no street.
+    const atHall = await placeFor(10.27733, 123.94518);
+    expect(atHall?.name).toBe("Babag Barangay Hall");
+    expect(atHall?.label).toBe("Babag Barangay Hall, Brgy. Babag, Lapu-Lapu City");
+
+    // Back on the highway: the street again, the hall as the nearby landmark.
+    const back = await placeFor(10.27701, 123.94546);
+    expect(back?.label).toBe("Manuel L. Quezon National Highway, Brgy. Babag, Lapu-Lapu City");
+    expect(back?.landmark?.name).toBe("Babag Barangay Hall");
+    expect(back?.landmark?.distanceMeters).toBeGreaterThan(AT_PLACE_M);
+
+    // Saved for everyone, with the named places and the format version.
+    const saved = mockRpc.mock.calls.find(([name]) => name === "save_location_place")?.[1] as { p_details: { spots: unknown[]; v: number } };
+    expect(saved.p_details.v).toBe(2);
+    expect(saved.p_details.spots).toHaveLength(1);
+  });
+
+  it("checks the exact point when the child is at a place the cell does not know yet", async () => {
+    answer({ osm: { body: { name: "", lat: "10.2701", lon: "123.9401", address: OSM_HIGHWAY } }, landmark: { body: {} } });
+    expect((await placeFor(10.2701, 123.9401))?.label).toBe("Manuel L. Quezon National Highway, Brgy. Babag, Lapu-Lapu City");
+    await settle();
+
+    // A store 45 m away, in the same cell, is found only from its own point.
+    answer({ osm: { body: {} }, landmark: { body: { name: "Lim Sari-Sari Store", lat: "10.27035", lon: "123.94040" } } });
+    checkSpot(10.27035, 123.9404);
+    await settle();
+    expect((await placeFor(10.27035, 123.9404))?.label).toBe("Lim Sari-Sari Store, Brgy. Babag, Lapu-Lapu City");
   });
 
   it("gives no address when neither source knows the spot", async () => {

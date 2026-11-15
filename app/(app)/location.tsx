@@ -127,8 +127,12 @@ export default function LocationScreen() {
   const name = primaryChild?.fullName?.split(/\s+/)[0] ?? "Your child";
   const age = ago(location?.recordedAt);
 
+  // The exact-spot place first (it names the place the child is at); the
+  // saved record's address only while that is still being looked up.
   const where =
-    location?.locationLabel || (details.place?.label ? `${details.place.near ? "Near " : ""}${details.place.label}` : null);
+    (details.place?.label && !details.place.near ? details.place.label : null) ||
+    location?.locationLabel ||
+    (details.place?.label ? `Near ${details.place.label}` : null);
   const status: { icon: ComponentProps<typeof Ionicons>["name"]; tile: string; title: string; detail: string } = !location
     ? { icon: "time-outline", tile: colors.forestRaised, title: "Waiting for a location", detail: "The map focuses when the child's device sends one." }
     : ring === "sos"
