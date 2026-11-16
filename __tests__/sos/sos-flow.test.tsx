@@ -20,6 +20,7 @@ import AdminRecordsScreen from "../../app/(app)/admin-records";
 import { supabase } from "../../lib/supabase";
 import { recordChildPhoneLocation } from "../../services/childMobileService";
 import { fetchActiveSosAlerts } from "../../services/sosService";
+import { selectChild } from "../../hooks/useSelectedChild";
 import { useAuthStore } from "../../store/authStore";
 import { useChildMobileStore } from "../../store/childMobileStore";
 import { accounts } from "../setup/accounts";
@@ -165,11 +166,14 @@ describe("The guardian receives and acknowledges the SOS", () => {
   });
 
   test("CASE-096: Guardian views an alert without location", async () => {
-    const { data } = await supabase.from("sos_alerts").select("id").eq("child_id", CHILD).is("latitude", null).limit(1);
+    // Any of this guardian's children with an alert stored without a location.
+    const { data } = await supabase.from("sos_alerts").select("id, child_id").is("latitude", null).limit(1);
     expect(data ?? []).toHaveLength(1);
+    selectChild(data![0]!.child_id);
     await openAlerts();
     screen.getAllByText("Location unavailable");
-    recordActual(MODULE, "CASE-096", 'An earlier alert stored without a location showed "Location unavailable".');
+    selectChild(CHILD);
+    recordActual(MODULE, "CASE-096", 'An alert stored without a location (the child had no location yet) showed "Location unavailable".');
   });
 
   test("CASE-103: Guardian opens the re-alert", async () => {
