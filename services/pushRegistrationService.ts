@@ -247,7 +247,9 @@ export function routeForNotification(data: Record<string, unknown> | undefined):
   const type = typeof data?.type === "string" ? data.type : "";
 
   if (type === "sos" || type === "sos_realert" || type === "sos_cancelled") return "/(app)/sos-alerts";
-  if (["entry", "exit", "possible_anomaly", "watch_disconnected", "prolonged_inactivity"].includes(type)) {
+  // AI notices open their details (as in the in-app Notifications list).
+  if (type === "possible_anomaly") return "/(app)/anomaly-details";
+  if (["entry", "exit", "watch_disconnected", "prolonged_inactivity"].includes(type)) {
     return "/(app)/history";
   }
 
@@ -258,14 +260,18 @@ export function routeForNotification(data: Record<string, unknown> | undefined):
  * Opens the right screen when the guardian taps a notification, including the
  * one that launched the app. Returns a cleanup function.
  */
-export async function listenForNotificationTaps(open: (route: string) => void): Promise<() => void> {
+export async function listenForNotificationTaps(
+  open: (route: string, childId: string | null) => void | Promise<void>,
+): Promise<() => void> {
   const Notifications = await loadNotifications();
 
   if (!Notifications) return () => undefined;
 
   const handle = (response: { notification: { request: { content: { data?: Record<string, unknown> } } } } | null) => {
-    const route = routeForNotification(response?.notification.request.content.data);
-    if (route) open(route);
+    const data = response?.notification.request.content.data;
+    const route = routeForNotification(data);
+    const child = data?.childId ?? data?.child_id;
+    if (route) void open(route, typeof child === "string" && child ? child : null);
   };
 
   handle(await Notifications.getLastNotificationResponseAsync());

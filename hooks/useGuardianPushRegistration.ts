@@ -1,5 +1,8 @@
 import { useEffect } from "react";
+import { AppState } from "react-native";
 import { useRouter, type Href } from "expo-router";
+import { useAuthStore } from "../store/authStore";
+import { selectChild } from "./useSelectedChild";
 import {
   configureSafeTrackNotificationHandler,
   listenForNotificationTaps,
@@ -26,7 +29,20 @@ export function useGuardianPushRegistration(
     let stop: (() => void) | null = null;
     let cancelled = false;
 
-    void listenForNotificationTaps((route) => router.navigate(route as Href)).then((cleanup) => {
+    void listenForNotificationTaps(async (route, childId) => {
+      // Open the notification's own child; reload the list first when that child is new
+      // (registered from another device since this session started).
+      if (childId) {
+        const auth = useAuthStore.getState();
+        if (!auth.linkedChildren.some((child) => child.id === childId)) {
+          await auth.refreshLinkedChildren();
+        }
+        if (useAuthStore.getState().linkedChildren.some((child) => child.id === childId)) {
+          selectChild(childId);
+        }
+      }
+      router.navigate(route as Href);
+    }).then((cleanup) => {
       if (cancelled) cleanup();
       else stop = cleanup;
     });
@@ -36,6 +52,15 @@ export function useGuardianPushRegistration(
       stop?.();
     };
   }, [enabled, router]);
+
+  // Children added or removed on another device appear when the app comes back to the front.
+  useEffect(() => {
+    if (!enabled) return;
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") void useAuthStore.getState().refreshLinkedChildren();
+    });
+    return () => subscription.remove();
+  }, [enabled]);
 
   useEffect(() => {
     if (!enabled) {
