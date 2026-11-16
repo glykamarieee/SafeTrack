@@ -43,7 +43,7 @@ const FAQS: Array<{ question: string; answer: string }> = [
   },
   {
     question: "How often is my child's location updated?",
-    answer: "While you have the Home or Location map open, about every second while the child moves (every 5 seconds while still), so the map follows the child live without refreshing. Otherwise about every 10 seconds while the child is moving and every 3 minutes while still. After an SOS, the watch checks every 5 seconds for 10 minutes.",
+    answer: "While you have the Home or Location map open, about every second while the child moves (every 5 seconds while still), so the map follows the child live without refreshing. Otherwise about every 10 seconds while the child is moving and every 3 minutes while still. After an SOS, the watch sends its location about every 5 seconds until you acknowledge the SOS or your child cancels it (at most 30 minutes).",
   },
   {
     question: "What do the arrow, the footprints and the compass on the map mean?",
@@ -67,7 +67,7 @@ const FAQS: Array<{ question: string; answer: string }> = [
   },
   {
     question: "Why am I not getting notifications?",
-    answer: "Check Notification Settings in your profile and allow SafeTrack notifications on your phone. SOS alerts are always sent and cannot be turned off.",
+    answer: "Check Notification Settings in your profile and allow SafeTrack notifications on your phone. SOS alerts are always sent and cannot be turned off. If your phone uses Do Not Disturb, tap Allow SOS during Do Not Disturb in Notification Settings and add SafeTrack to the allowed apps so SOS alerts still ring.",
   },
   {
     question: "What does Possible unusual movement mean?",

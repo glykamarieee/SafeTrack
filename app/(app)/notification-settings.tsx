@@ -25,7 +25,7 @@ import {
 } from "../../services/accountService";
 import { guardianColors as colors } from "../../constants/guardianDesign";
 import { loadSoundSetting, playSound, setSoundsEnabled, type SoundName } from "../../lib/sounds";
-import { scheduleTestAlert } from "../../services/alertNotifier";
+import { openDoNotDisturbSettings, scheduleTestAlert, sosOverridesDoNotDisturb } from "../../services/alertNotifier";
 import { getPushStatus, subscribePushStatus, type PushStatus } from "../../services/pushRegistrationService";
 
 import { makeStyles, useTheme } from "../../theme/ThemeProvider";
@@ -80,6 +80,14 @@ export default function NotificationSettingsScreen() {
   const [soundsOn, setSoundsOn] = useState(true);
   const [testNote, setTestNote] = useState<string | null>(null);
   const push = useSyncExternalStore(subscribePushStatus, getPushStatus);
+  // SOS during Do Not Disturb: read again whenever the screen is shown (the guardian may have
+  // just come back from Android's channel settings).
+  const [sosDnd, setSosDnd] = useState<boolean | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      void sosOverridesDoNotDisturb().then(setSosDnd);
+    }, [])
+  );
 
   useEffect(() => {
     void loadSoundSetting().then(setSoundsOn);
@@ -199,6 +207,30 @@ export default function NotificationSettingsScreen() {
             />
             <Text style={[styles.text, styles.statusText]}>{PUSH_STATUS_TEXT[push.status]}</Text>
           </View>
+          {sosDnd !== null ? (
+            <View style={styles.statusRow}>
+              <Ionicons
+                name={sosDnd ? "checkmark-circle" : "alert-circle-outline"}
+                size={18}
+                color={sosDnd ? colors.primary : colors.danger}
+              />
+              <Text style={[styles.text, styles.statusText]}>
+                {sosDnd
+                  ? "SOS alerts ring even when Do Not Disturb is on."
+                  : "If this phone uses Do Not Disturb, allow SafeTrack in its exceptions so SOS alerts still ring."}
+              </Text>
+            </View>
+          ) : null}
+          {sosDnd === false ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => void openDoNotDisturbSettings()}
+              style={({ pressed }) => [styles.testButton, pressed && styles.pressed]}
+            >
+              <Ionicons name="moon-outline" size={17} color={colors.primaryDark} />
+              <Text style={styles.chipText}>Allow SOS during Do Not Disturb</Text>
+            </Pressable>
+          ) : null}
           <Pressable
             accessibilityRole="button"
             onPress={() => void sendTest()}

@@ -1,4 +1,4 @@
-import { AppState, Platform } from "react-native";
+import { Linking, Platform } from "react-native";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 
 /**
@@ -33,6 +33,36 @@ async function load() {
 }
 
 let channelsReady: Promise<void> | null = null;
+
+/**
+ * Whether the SOS channel may sound while the phone is in Do Not Disturb. Android lets only the
+ * user turn this on (channel settings › "Override Do Not Disturb"); null when it cannot be read.
+ */
+export async function sosOverridesDoNotDisturb(): Promise<boolean | null> {
+  if (Platform.OS !== "android") return null;
+  const Notifications = await load();
+  if (!Notifications) return null;
+  try {
+    await ensureAlertChannels();
+    const channel = await Notifications.getNotificationChannelAsync(ALERT_CHANNELS.sos);
+    return channel ? Boolean(channel.bypassDnd) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Opens the phone's Do Not Disturb settings, where SafeTrack can be added to the apps allowed to
+ * ring during Do Not Disturb (on Samsung: Do not disturb › App notifications; elsewhere the SOS
+ * channel's "Override Do Not Disturb"). Falls back to SafeTrack's own settings page.
+ */
+export async function openDoNotDisturbSettings(): Promise<void> {
+  try {
+    await Linking.sendIntent("android.settings.ZEN_MODE_SETTINGS");
+  } catch {
+    await Linking.openSettings();
+  }
+}
 
 /**
  * Creates the alert channels with their sounds (files in res/raw, added by the
@@ -165,12 +195,13 @@ export async function notifyAlert(notice: AlertNotice): Promise<void> {
     if (!Notifications) return;
     await ensureAlertChannels();
 
-    // A phone registered for server pushes may get the same alert from the
-    // server a moment later; give it a few seconds and skip the local copy if
-    // it came. (In the background the JS timers can be paused, so this only
-    // waits while the app is open.)
-    if (serverPushRegistered && AppState.currentState === "active") {
-      await new Promise((resolve) => setTimeout(resolve, 4000));
+    // A phone registered for server pushes gets the same alert from the server a
+    // moment later; give it a few seconds and skip the local copy if it came. This
+    // also applies in the background (where the copy used to appear at once and the
+    // guardian got the alert twice); there the timer may run late, which only delays
+    // the backup copy.
+    if (serverPushRegistered) {
+      await new Promise((resolve) => setTimeout(resolve, 6000));
     }
     if (pushArrivedRecently(notice.type) || (await trayHasServerPush(notice.type))) return;
 
