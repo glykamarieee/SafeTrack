@@ -41,21 +41,7 @@ beforeEach(async () => {
   useAuthStore.setState({ session: null, role: null, guardian: null, linkedChildren: [], error: null, isLoading: false });
 });
 
-
 describe("User Login", () => {
-
-
-
-
-
-
-
-
-
-
-
-
-
 
   test("CASE-013: Guardian enters an invalid email format", async () => {
     await signIn("guardian.mail.com", "Passw0rd!");

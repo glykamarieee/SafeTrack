@@ -36,16 +36,7 @@ beforeEach(() => {
   useAuthStore.setState({ error: null, isLoading: false });
 });
 
-
 describe("Register Account", () => {
-
-
-
-
-
-
-
-
 
   test("CASE-006: User leaves the Confirm Password field empty", async () => {
     await fillAndSubmit({ name: "UT Guardian", email: "ut.reg@safetrack-test.com", password: "Passw0rd!" });

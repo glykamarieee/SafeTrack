@@ -68,10 +68,7 @@ beforeAll(async () => {
 
 afterAll(signOutLocally);
 
-
-
 describe("Review Explainable Anomaly Reason", () => {
-
 
   test("CASE-070: Guardian opens a notice with stored reasons", async () => {
     // The notice with the most reasons.

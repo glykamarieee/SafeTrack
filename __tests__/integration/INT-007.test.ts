@@ -40,14 +40,7 @@ afterAll(async () => {
   await signOutLocally();
 });
 
-
-
-
 describe("Child registration, connection code and the child phone", () => {
-
-
-
-
 
   // Setup: earlier cases this case builds on, run as steps (not counted as tests).
   beforeAll(async () => {
@@ -59,7 +52,6 @@ await (async () => {
     expect(listed).toBeTruthy();
     recordActual(MODULE, "INT-006", `"UT Integration Child" (9, phone tracking) was saved under the guardian and listed among the linked children with tracking source "${listed.trackingSource ?? listed.tracking_source ?? "mobile"}", ready for a device to be connected.`);
   })();
-    await require("@testing-library/react-native").cleanup();
     jest.clearAllMocks();
   }, 900_000);
   test("INT-007: The guardian generates a connection code for the registered child", async () => {

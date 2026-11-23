@@ -40,14 +40,7 @@ afterAll(async () => {
   await signOutLocally();
 });
 
-
-
-
 describe("Child registration, connection code and the child phone", () => {
-
-
-
-
 
   test("INT-006: A registered child profile is ready for location tracking", async () => {
     await signInAs(A.guardianWithChild);

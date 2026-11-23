@@ -35,13 +35,7 @@ async function openRecords() {
   await waitFor(() => screen.getByText(/· Philippine time ·/), { timeout: 20000 });
 }
 
-
-
-
 describe("View Safety Records as the administrator", () => {
-
-
-
 
   beforeAll(async () => {
     await signInAs(accounts.admin);

@@ -48,11 +48,7 @@ afterAll(async () => {
   await signOutLocally();
 });
 
-
-
 describe("Geofencing with notifications, the dashboard and the history", () => {
-
-
 
   test("INT-014: Entering and leaving a safe zone records entry and exit events for the guardian", async () => {
     const guardianId = useAuthStore.getState().guardian!.id;

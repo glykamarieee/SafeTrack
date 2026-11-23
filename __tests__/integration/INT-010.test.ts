@@ -40,13 +40,9 @@ afterAll(async () => {
   await signOutLocally();
 });
 
-
-
-
 describe("Smartwatch pairing, locations and the administrator's device status", () => {
   let watch: WatchSession;
   const device = deviceClient();
-
 
   test("INT-010: Locations from the paired smartwatch reach the Guardian dashboard", async () => {
     await signInAs(A.guardianWithChild);

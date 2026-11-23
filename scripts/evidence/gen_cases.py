@@ -77,7 +77,7 @@ def parse(path):
     return header, describes
 
 
-def as_call(block, indent="    "):
+def as_call(block, indent="    ", rtl=True):
     """A test or hook block turned into an awaited call (its body runs as a setup step)."""
     first, *rest = block
     if TEST_RE.match(first):
@@ -87,13 +87,16 @@ def as_call(block, indent="    "):
     text = "\n".join([first] + rest)
     text = re.sub(r"\}\s*(,\s*[\d_]+\s*)?\);\s*$", "})();", text.rstrip()) if rest else re.sub(r"\);\s*$", ")();", text.rstrip())
     # A setup test ends like a finished test: its screen is closed (as Jest does after each test).
+    # (Only files that use the testing library: loading it during a run adds hooks too late.)
     if TEST_RE.match(block[0]):
-        text += '\n    await require("@testing-library/react-native").cleanup();'
+        if rtl:
+            text += '\n    await require("@testing-library/react-native").cleanup();'
         text += '\n    jest.clearAllMocks();'
     return text
 
 
 def build(src, header, describes, di, ti, deps):
+    rtl = any("@testing-library/react-native" in l for l in header)
     d = describes[di]
     target = d["items"][ti]
     out = list(header)
@@ -112,12 +115,12 @@ def build(src, header, describes, di, ti, deps):
         step += ["      " + l for it in dj["items"] if it["kind"] == "other" for l in it["lines"]]
         for it in dj["items"]:
             if it["kind"] == "beforeAll":
-                step.append(as_call(it["lines"]))
+                step.append(as_call(it["lines"], rtl=rtl))
         for it in tests:
-            step.append(as_call(it["lines"]))
+            step.append(as_call(it["lines"], rtl=rtl))
         for it in dj["items"]:
             if it["kind"] == "afterAll":
-                step.append(as_call(it["lines"]))
+                step.append(as_call(it["lines"], rtl=rtl))
         step.append("    })();")
         earlier += step
     if earlier:
@@ -132,11 +135,12 @@ def build(src, header, describes, di, ti, deps):
         out.append("  // Setup: earlier cases this case builds on, run as steps (not counted as tests).")
         out.append("  beforeAll(async () => {")
         for it in prior:
-            out.append(as_call(it["lines"]))
+            out.append(as_call(it["lines"], rtl=rtl))
         out.append("  }, 900_000);")
     out += target["lines"]
     out.append(d["close"])
-    return "\n".join(out) + "\n"
+    # Blank lines left where the file's other tests were taken out are folded into one.
+    return re.sub(r"\n(?:[ \t]*\n){2,}", "\n\n", "\n".join(out)) + "\n"
 
 
 def main():

@@ -41,21 +41,7 @@ beforeEach(async () => {
   useAuthStore.setState({ session: null, role: null, guardian: null, linkedChildren: [], error: null, isLoading: false });
 });
 
-
 describe("User Login", () => {
-
-
-
-
-
-
-
-
-
-
-
-
-
 
   test("CASE-026: User reopens the app with a saved session", async () => {
     await markOnboardingSeen("guardian");

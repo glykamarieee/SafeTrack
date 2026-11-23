@@ -40,13 +40,9 @@ afterAll(async () => {
   await signOutLocally();
 });
 
-
-
-
 describe("Smartwatch pairing, locations and the administrator's device status", () => {
   let watch: WatchSession;
   const device = deviceClient();
-
 
   // Setup: earlier cases this case builds on, run as steps (not counted as tests).
   beforeAll(async () => {
@@ -60,7 +56,6 @@ await (async () => {
     expect(latest!.latitude).toBeCloseTo(LAPU_NORTH.latitude, 4);
     recordActual(MODULE, "INT-010", `Watch ${TEST_WATCH} was paired to ${code.childName} with a guardian code and sent ${fmt(LAPU_NORTH)}; the Guardian dashboard's latest location for ${code.childName} was ${fmt(latest!)} from source "${latest!.source}".`);
   })();
-    await require("@testing-library/react-native").cleanup();
     jest.clearAllMocks();
   }, 900_000);
   test("INT-033: A smartwatch turned off by the administrator is refused until turned on", async () => {

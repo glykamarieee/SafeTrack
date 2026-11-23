@@ -68,10 +68,7 @@ beforeAll(async () => {
 
 afterAll(signOutLocally);
 
-
-
 describe("Review Explainable Anomaly Reason", () => {
-
 
   test("CASE-072: Guardian opens a notice without separate reasons", async () => {
     const notice = notices.find((item) => reasonsOf(item.details).length === 0);

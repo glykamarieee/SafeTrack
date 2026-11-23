@@ -41,21 +41,7 @@ beforeEach(async () => {
   useAuthStore.setState({ session: null, role: null, guardian: null, linkedChildren: [], error: null, isLoading: false });
 });
 
-
 describe("User Login", () => {
-
-
-
-
-
-
-
-
-
-
-
-
-
 
   test("CASE-024: Administrator enters a correct email but wrong password", async () => {
     await signIn(accounts.admin.email, "WrongPass123");

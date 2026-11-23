@@ -72,12 +72,7 @@ async function openChildSos() {
 
 beforeEach(() => alerts.mockClear());
 
-
-
-
 describe("SOS records for other users", () => {
-
-
 
   afterAll(signOutLocally);
   test("CASE-110: Signed-out user requests SOS records", async () => {

@@ -32,11 +32,7 @@ afterAll(async () => {
   await signOutLocally();
 });
 
-
-
-
 describe("User Settings with Authentication and the dashboard", () => {
-
 
   test("INT-045: A guardian sees only their own children's records", async () => {
     await signInAs(A.guardianWithChild);

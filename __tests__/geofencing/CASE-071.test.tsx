@@ -68,10 +68,7 @@ beforeAll(async () => {
 
 afterAll(signOutLocally);
 
-
-
 describe("Review Explainable Anomaly Reason", () => {
-
 
   test("CASE-071: Guardian views the anomaly score", async () => {
     const notice = notices.find((item) => item.anomaly_score != null)!;

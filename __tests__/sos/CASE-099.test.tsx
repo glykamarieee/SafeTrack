@@ -72,32 +72,17 @@ async function openChildSos() {
 
 beforeEach(() => alerts.mockClear());
 
-
-
-
 describe("The guardian receives and acknowledges the SOS", () => {
-
 
   async function openAlerts() {
     await render(<SosAlertsScreen />);
     await waitFor(() => expect(screen.queryByText("Loading SOS records...")).toBeNull(), { timeout: 20000 });
   }
 
-
-
-
-
-
-
-
-
   // Setup: earlier cases this case builds on, run as steps (not counted as tests).
   beforeAll(async () => {
     await (async () => {
-      
-      
-      
-      
+
 await (signOutLocally)();
 await (async () => {
     await AsyncStorage.setItem("safetrack.childPhone", JSON.stringify(accounts.childPhone));

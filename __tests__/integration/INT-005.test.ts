@@ -32,13 +32,7 @@ afterAll(async () => {
   await signOutLocally();
 });
 
-
-
-
 describe("Authentication with the dashboards", () => {
-
-
-
 
   test("INT-005: A new account must confirm its email; a confirmed account with no child goes to child registration", async () => {
     const email = `ut.int005.${Date.now()}@safetrack-test.com`;

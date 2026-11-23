@@ -41,21 +41,7 @@ beforeEach(async () => {
   useAuthStore.setState({ session: null, role: null, guardian: null, linkedChildren: [], error: null, isLoading: false });
 });
 
-
 describe("User Login", () => {
-
-
-
-
-
-
-
-
-
-
-
-
-
 
   test("CASE-014: Guardian leaves the email field empty", async () => {
     await signIn("", "Passw0rd!");

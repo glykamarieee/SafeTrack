@@ -36,16 +36,7 @@ beforeEach(() => {
   useAuthStore.setState({ error: null, isLoading: false });
 });
 
-
 describe("Register Account", () => {
-
-
-
-
-
-
-
-
 
   test("CASE-008: User registers using an existing email address", async () => {
     // A real, already registered guardian email; the server must refuse it.

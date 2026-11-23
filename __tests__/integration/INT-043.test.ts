@@ -40,14 +40,7 @@ afterAll(async () => {
   await signOutLocally();
 });
 
-
-
-
 describe("Child registration, connection code and the child phone", () => {
-
-
-
-
 
   // Setup: earlier cases this case builds on, run as steps (not counted as tests).
   beforeAll(async () => {
@@ -59,7 +52,6 @@ await (async () => {
     expect(listed).toBeTruthy();
     recordActual(MODULE, "INT-006", `"UT Integration Child" (9, phone tracking) was saved under the guardian and listed among the linked children with tracking source "${listed.trackingSource ?? listed.tracking_source ?? "mobile"}", ready for a device to be connected.`);
   })();
-    await require("@testing-library/react-native").cleanup();
     jest.clearAllMocks();
 await (async () => {
     const code = await generateMobilePairingCode({ childId: tempChildId });
@@ -69,7 +61,6 @@ await (async () => {
     expect(minutes).toBeGreaterThan(0);
     recordActual(MODULE, "INT-007", `A six-digit child phone connection code was generated for UT Integration Child, valid for about ${minutes} minutes.`);
   })();
-    await require("@testing-library/react-native").cleanup();
     jest.clearAllMocks();
 await (async () => {
     await linkChildPhone(phoneCode);
@@ -80,7 +71,6 @@ await (async () => {
     expect(reuse).not.toBe("");
     recordActual(MODULE, "INT-008", `Entering the code linked the phone to "${(state.context as any).childName ?? (state.context as any).child_name}"; the same code used again was refused ("${reuse}").`);
   })();
-    await require("@testing-library/react-native").cleanup();
     jest.clearAllMocks();
   }, 900_000);
   test("INT-043: A location shared from the child phone appears on the Guardian dashboard", async () => {

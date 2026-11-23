@@ -72,12 +72,7 @@ async function openChildSos() {
 
 beforeEach(() => alerts.mockClear());
 
-
-
-
 describe("SOS records for other users", () => {
-
-
 
   afterAll(signOutLocally);
   test("CASE-109: User opens SOS records when none exist", async () => {

@@ -32,11 +32,7 @@ afterAll(async () => {
   await signOutLocally();
 });
 
-
-
-
 describe("User Settings with Authentication and the dashboard", () => {
-
 
   test("INT-044: A deleted account cannot sign in", async () => {
     let message = "";

@@ -48,11 +48,7 @@ afterAll(async () => {
   await signOutLocally();
 });
 
-
-
 describe("Geofencing with notifications, the dashboard and the history", () => {
-
-
 
   // Setup: earlier cases this case builds on, run as steps (not counted as tests).
   beforeAll(async () => {
@@ -69,7 +65,6 @@ await (async () => {
     expect((data ?? []).map((e: any) => e.event_type)).toEqual(["entry", "exit"]);
     recordActual(MODULE, "INT-014", `The watch moved from 1.1 km away into the 100 m zone and out again; the server recorded "${data![0].title}" and "${data![1].title}" for the guardian, which fire the guardian push notification trigger.`);
   })();
-    await require("@testing-library/react-native").cleanup();
     jest.clearAllMocks();
   }, 900_000);
   test("INT-030: The entry and exit appear in the Daily Activity History", async () => {

@@ -35,9 +35,6 @@ async function openRecords() {
   await waitFor(() => screen.getByText(/· Philippine time ·/), { timeout: 20000 });
 }
 
-
-
-
 describe("View Safety Records when signed out", () => {
 
   beforeAll(signOutLocally);

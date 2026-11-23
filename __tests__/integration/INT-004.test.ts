@@ -32,13 +32,7 @@ afterAll(async () => {
   await signOutLocally();
 });
 
-
-
-
 describe("Authentication with the dashboards", () => {
-
-
-
 
   test("INT-004: Forgot password sends the reset email through the authentication service", async () => {
     await signOutLocally();

@@ -32,13 +32,7 @@ afterAll(async () => {
   await signOutLocally();
 });
 
-
-
-
 describe("Authentication with the dashboards", () => {
-
-
-
 
   test("INT-001: Guardian login opens the Guardian dashboard with the child's data", async () => {
     await signInAs(A.guardianWithChild);

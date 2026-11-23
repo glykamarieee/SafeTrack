@@ -36,16 +36,7 @@ beforeEach(() => {
   useAuthStore.setState({ error: null, isLoading: false });
 });
 
-
 describe("Register Account", () => {
-
-
-
-
-
-
-
-
 
   test("CASE-009: User enters valid registration details", async () => {
     const email = `ut.case009.${Date.now()}@safetrack-test.com`;

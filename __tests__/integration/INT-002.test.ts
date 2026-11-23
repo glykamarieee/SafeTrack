@@ -32,13 +32,7 @@ afterAll(async () => {
   await signOutLocally();
 });
 
-
-
-
 describe("Authentication with the dashboards", () => {
-
-
-
 
   test("INT-002: Administrator login opens the Administrator dashboard with system totals", async () => {
     await signInAs(A.admin);

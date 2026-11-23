@@ -32,11 +32,7 @@ afterAll(async () => {
   await signOutLocally();
 });
 
-
-
-
 describe("User Settings with Authentication and the dashboard", () => {
-
 
   test("INT-026: A profile name saved in Profile appears on the Guardian dashboard", async () => {
     await signInAs(A.guardianWithChild);

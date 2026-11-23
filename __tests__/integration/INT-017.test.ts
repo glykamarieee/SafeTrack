@@ -48,11 +48,7 @@ afterAll(async () => {
   await signOutLocally();
 });
 
-
-
 describe("Geofencing with notifications, the dashboard and the history", () => {
-
-
 
   test("INT-017: The guardian can read why the AI flagged the movement", async () => {
     const notices: any[] = await fetchAnomaliesForChild(watch.childId);

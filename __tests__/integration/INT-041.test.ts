@@ -32,9 +32,6 @@ afterAll(async () => {
   await signOutLocally();
 });
 
-
-
-
 describe("Administrator Dashboard with Authentication", () => {
   test("INT-041: A Guardian account turned off by the administrator cannot sign in until turned on again", async () => {
     await signInAs(A.guardianNoChild);

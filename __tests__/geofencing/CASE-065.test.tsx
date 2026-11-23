@@ -68,12 +68,7 @@ beforeAll(async () => {
 
 afterAll(signOutLocally);
 
-
-
 describe("Receive and Review Anomaly Notice", () => {
-
-
-
 
   test("CASE-065: Guardian opens an available anomaly notice", async () => {
     selectChild(childNamed("UT Child One"));

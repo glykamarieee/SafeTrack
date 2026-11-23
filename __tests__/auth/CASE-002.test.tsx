@@ -36,16 +36,7 @@ beforeEach(() => {
   useAuthStore.setState({ error: null, isLoading: false });
 });
 
-
 describe("Register Account", () => {
-
-
-
-
-
-
-
-
 
   test("CASE-002: User leaves the Email Address field empty", async () => {
     await fillAndSubmit({ name: "UT Guardian", password: "Passw0rd!", confirm: "Passw0rd!" });

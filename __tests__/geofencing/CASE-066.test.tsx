@@ -68,12 +68,7 @@ beforeAll(async () => {
 
 afterAll(signOutLocally);
 
-
-
 describe("Receive and Review Anomaly Notice", () => {
-
-
-
 
   test("CASE-066: Guardian views a notice with location and time information", async () => {
     const notice = notices.find((item) => item.latitude != null && item.longitude != null)!;

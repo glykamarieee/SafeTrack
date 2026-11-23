@@ -41,21 +41,7 @@ beforeEach(async () => {
   useAuthStore.setState({ session: null, role: null, guardian: null, linkedChildren: [], error: null, isLoading: false });
 });
 
-
 describe("User Login", () => {
-
-
-
-
-
-
-
-
-
-
-
-
-
 
   test("CASE-025: Deactivated or deleted account attempts to log in", async () => {
     await signIn(accounts.deletedAccount.email, accounts.deletedAccount.password);

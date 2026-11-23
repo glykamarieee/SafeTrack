@@ -36,16 +36,7 @@ beforeEach(() => {
   useAuthStore.setState({ error: null, isLoading: false });
 });
 
-
 describe("Register Account", () => {
-
-
-
-
-
-
-
-
 
   test("CASE-003: User enters an invalid email format", async () => {
     await fillAndSubmit({ name: "UT Guardian", email: "guardian.mail.com", password: "Passw0rd!", confirm: "Passw0rd!" });

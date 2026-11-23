@@ -48,13 +48,7 @@ afterAll(async () => {
   await signOutLocally();
 });
 
-
-
 describe("SOS from the watch with notifications, re-alerts, history and records", () => {
-
-
-
-
 
   // Setup: earlier cases this case builds on, run as steps (not counted as tests).
   beforeAll(async () => {
@@ -66,7 +60,6 @@ await (async () => {
     expect(active).toBeTruthy();
     recordActual(MODULE, "INT-018", `The watch sent an SOS (button) with its location; the guardian's SOS alerts listed it as "${active!.status}" at ${(active as any).latitude?.toFixed?.(5) ?? LAPU.latitude}, ${(active as any).longitude?.toFixed?.(5) ?? LAPU.longitude}, which fires the SOS push notification trigger.`);
   })();
-    await require("@testing-library/react-native").cleanup();
     jest.clearAllMocks();
   }, 900_000);
   test("INT-019: The SOS is recorded in the Daily Activity History", async () => {

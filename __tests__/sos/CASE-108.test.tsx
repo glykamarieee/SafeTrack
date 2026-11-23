@@ -72,12 +72,7 @@ async function openChildSos() {
 
 beforeEach(() => alerts.mockClear());
 
-
-
-
 describe("SOS records for other users", () => {
-
-
 
   afterAll(signOutLocally);
   test("CASE-108: Administrator opens the SOS tab", async () => {

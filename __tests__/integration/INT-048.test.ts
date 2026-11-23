@@ -40,12 +40,8 @@ afterAll(async () => {
   await signOutLocally();
 });
 
-
-
-
 describe("Fixes after the first integration run (11/16/2026)", () => {
   const device = deviceClient();
-
 
   test("INT-048: Live-map updates from the watch count as contact", async () => {
     await signInAs(A.guardianWithChild);

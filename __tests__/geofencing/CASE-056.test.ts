@@ -54,13 +54,10 @@ async function eventsFor(zoneId: string, since: string) {
 let zoneId = "";
 let since = "";
 
-
 describe("Safe-Zone Entry and Exit Detection", () => {
 
   // Inside the describe, so it runs while still signed in (the shared
   // after-all hook signs out first).
-
-
 
   beforeAll(async () => {
     await signInAs(accounts.guardianWithChild, CHILD);
@@ -89,7 +86,6 @@ await (async () => {
       `The phone's location moved from 1.1 km away to the zone center: status changed outside → inside and one entry event was recorded ("${events[0]!.title}").`,
     );
   })();
-    await require("@testing-library/react-native").cleanup();
     jest.clearAllMocks();
   }, 900_000);
   test("CASE-056: Latest location moves from inside to outside an enabled zone", async () => {

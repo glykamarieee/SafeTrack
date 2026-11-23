@@ -32,13 +32,7 @@ afterAll(async () => {
   await signOutLocally();
 });
 
-
-
-
 describe("Authentication with the dashboards", () => {
-
-
-
 
   test("INT-003: Password changed in Profile is the one that signs in", async () => {
     const acc = A.verifyAccount;

@@ -36,16 +36,7 @@ beforeEach(() => {
   useAuthStore.setState({ error: null, isLoading: false });
 });
 
-
 describe("Register Account", () => {
-
-
-
-
-
-
-
-
 
   test("CASE-010: User taps Create Account multiple times", async () => {
     const signUp = jest.spyOn(supabase.auth, "signUp");

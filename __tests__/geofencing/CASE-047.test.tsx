@@ -110,10 +110,7 @@ async function pressRowAction(name: string, label: RegExp) {
 
 beforeEach(() => alerts.mockClear());
 
-
-
 describe("Safe Zones without a registered child", () => {
-
 
   beforeAll(async () => {
     await signInAs(accounts.guardianNoChild);

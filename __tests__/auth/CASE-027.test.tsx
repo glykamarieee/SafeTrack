@@ -41,21 +41,7 @@ beforeEach(async () => {
   useAuthStore.setState({ session: null, role: null, guardian: null, linkedChildren: [], error: null, isLoading: false });
 });
 
-
 describe("User Login", () => {
-
-
-
-
-
-
-
-
-
-
-
-
-
 
   test("CASE-027: Guardian or Administrator logs out", async () => {
     await useAuthStore.getState().login(accounts.guardianWithChild.email, accounts.guardianWithChild.password);

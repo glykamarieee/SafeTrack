@@ -68,12 +68,7 @@ beforeAll(async () => {
 
 afterAll(signOutLocally);
 
-
-
 describe("Receive and Review Anomaly Notice", () => {
-
-
-
 
   test("CASE-069: Guardian reads the notice wording", async () => {
     await openNotices();

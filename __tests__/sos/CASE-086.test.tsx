@@ -72,13 +72,7 @@ async function openChildSos() {
 
 beforeEach(() => alerts.mockClear());
 
-
-
-
 describe("SOS from the child phone", () => {
-
-
-
 
   beforeAll(signOutLocally);
   test("CASE-086: Child lifts the finger during the countdown on the child phone", async () => {

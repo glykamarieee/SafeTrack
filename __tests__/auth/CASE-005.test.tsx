@@ -36,16 +36,7 @@ beforeEach(() => {
   useAuthStore.setState({ error: null, isLoading: false });
 });
 
-
 describe("Register Account", () => {
-
-
-
-
-
-
-
-
 
   test("CASE-005: User enters a password shorter than 8 characters", async () => {
     await fillAndSubmit({ name: "UT Guardian", email: "ut.reg@safetrack-test.com", password: "Pass12", confirm: "Pass12" });

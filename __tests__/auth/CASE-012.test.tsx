@@ -21,7 +21,6 @@ async function startDestination() {
   return (Redirect as unknown as jest.Mock).mock.calls.at(-1)[0].href;
 }
 
-
 describe("Welcome Guide", () => {
 
   // Setup: earlier cases this case builds on, run as steps (not counted as tests).

@@ -34,12 +34,7 @@ afterEach(() => {
   require("expo-linking").__setURL(null);
 });
 
-
 describe("Password Recovery", () => {
-
-
-
-
 
   // For CASE-034 and CASE-035 the link itself is accepted (its check is
   // CASE-032, done by hand); these test the new-password rules on the form.
@@ -48,7 +43,6 @@ describe("Password Recovery", () => {
     await openResetLink("safetrack://reset-password#access_token=t&refresh_token=r&type=recovery");
     await waitFor(() => screen.getByPlaceholderText(/at least 8 characters/i));
   }
-
 
   test("CASE-029: User enters an email that is not registered", async () => {
     await requestReset(`nobody.${Date.now()}@safetrack-test.com`);

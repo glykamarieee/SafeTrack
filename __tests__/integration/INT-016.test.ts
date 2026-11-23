@@ -48,11 +48,7 @@ afterAll(async () => {
   await signOutLocally();
 });
 
-
-
 describe("Geofencing with notifications, the dashboard and the history", () => {
-
-
 
   test("INT-016: AI anomaly notices appear in the Daily Activity History", async () => {
     const notices = await fetchAnomaliesForChild(watch.childId);

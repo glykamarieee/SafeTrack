@@ -68,12 +68,7 @@ beforeAll(async () => {
 
 afterAll(signOutLocally);
 
-
-
 describe("Receive and Review Anomaly Notice", () => {
-
-
-
 
   test("CASE-067: Guardian views multiple anomaly notices", async () => {
     await openNotices();

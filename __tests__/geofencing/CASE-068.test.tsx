@@ -68,12 +68,7 @@ beforeAll(async () => {
 
 afterAll(signOutLocally);
 
-
-
 describe("Receive and Review Anomaly Notice", () => {
-
-
-
 
   test("CASE-068: Guardian opens the screen when no notices exist", async () => {
     await openNotices("UT Child Two");

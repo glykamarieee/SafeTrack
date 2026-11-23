@@ -35,11 +35,7 @@ async function openRecords() {
   await waitFor(() => screen.getByText(/· Philippine time ·/), { timeout: 20000 });
 }
 
-
-
-
 describe("Safety records requested by a guardian", () => {
-
 
   beforeAll(async () => {
     await signInAs(accounts.guardianWithChild);

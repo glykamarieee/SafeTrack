@@ -54,13 +54,10 @@ async function eventsFor(zoneId: string, since: string) {
 let zoneId = "";
 let since = "";
 
-
 describe("Safe-Zone Entry and Exit Detection", () => {
 
   // Inside the describe, so it runs while still signed in (the shared
   // after-all hook signs out first).
-
-
 
   beforeAll(async () => {
     await signInAs(accounts.guardianWithChild, CHILD);
@@ -69,6 +66,41 @@ describe("Safe-Zone Entry and Exit Detection", () => {
     for (const id of made) await deleteGeofence(id).catch(() => undefined);
     await signOutLocally();
   });
+  // Setup: earlier cases this case builds on, run as steps (not counted as tests).
+  beforeAll(async () => {
+await (async () => {
+    const zone = await makeZone(`UT Zone Entry ${TAG}`, true);
+    zoneId = zone.id;
+    since = new Date(Date.now() - 60_000).toISOString();
+
+    const before = await phoneAt(OUTSIDE);
+    expect(before.safeZoneStatus.status).toBe("outside");
+    const inside = await phoneAt(CENTER);
+    expect(inside.safeZoneStatus.status).toBe("inside");
+
+    const events = await eventsFor(zoneId, since);
+    expect(events.map((event) => event.event_type)).toEqual(["entry"]);
+    recordActual(
+      MODULE,
+      "CASE-055",
+      `The phone's location moved from 1.1 km away to the zone center: status changed outside → inside and one entry event was recorded ("${events[0]!.title}").`,
+    );
+  })();
+    jest.clearAllMocks();
+await (async () => {
+    const after = await phoneAt(OUTSIDE);
+    expect(after.safeZoneStatus.status).toBe("outside");
+
+    const events = await eventsFor(zoneId, since);
+    expect(events.map((event) => event.event_type)).toEqual(["entry", "exit"]);
+    recordActual(
+      MODULE,
+      "CASE-056",
+      `The location moved back out of the zone: status changed inside → outside and one exit event was recorded ("${events[1]!.title}").`,
+    );
+  })();
+    jest.clearAllMocks();
+  }, 900_000);
   test("CASE-057: Location is recorded for a disabled safe zone", async () => {
     // Only the disabled zone is at this spot now.
     await deleteGeofence(zoneId);

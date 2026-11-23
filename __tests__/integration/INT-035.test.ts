@@ -48,13 +48,7 @@ afterAll(async () => {
   await signOutLocally();
 });
 
-
-
 describe("SOS from the watch with notifications, re-alerts, history and records", () => {
-
-
-
-
 
   test("INT-035: An SOS cancelled on the watch as sent by mistake is closed and not re-alerted", async () => {
     const res = await watchSos(device, watch, LAPU, "shake");

@@ -40,12 +40,8 @@ afterAll(async () => {
   await signOutLocally();
 });
 
-
-
-
 describe("Fixes after the first integration run (11/16/2026)", () => {
   const device = deviceClient();
-
 
   test("INT-047: Linking or unlinking a smartwatch updates the child's tracking source", async () => {
     await signInAs(A.admin);

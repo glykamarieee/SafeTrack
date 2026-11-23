@@ -48,13 +48,7 @@ afterAll(async () => {
   await signOutLocally();
 });
 
-
-
 describe("SOS from the watch with notifications, re-alerts, history and records", () => {
-
-
-
-
 
   test("INT-018: An SOS from the watch reaches the guardian as an active alert", async () => {
     const res = await watchSos(device, watch, LAPU, "button");
