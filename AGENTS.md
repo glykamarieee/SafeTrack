@@ -740,6 +740,14 @@ and safety events for a date range, 50 per page, through
     watch APK `safe-track-wear-os/app/build/outputs/apk/release/app-release.apk`
     (`gradlew.bat assembleRelease`); admin web `npx expo export --platform web`
     → `dist/` (static files, host anywhere; admin signs in at `/login`).
+  - **Web is live on Vercel** (free Hobby plan, project `safetrack`):
+    https://safetrack-omega.vercel.app (admin signs in at `/login`). Redeploy with
+    `bash web-deploy/deploy.sh`. It moves `dist/assets/node_modules` to `assets/nm`
+    because Vercel never uploads `node_modules` folders (without it every icon is an
+    empty box and the app font is missing); `web-deploy/vercel.json` routes the old
+    paths there and sends every page to `index.html`. `vercel link` drops a
+    `.env.local` token file into `dist`: never upload it (`.vercelignore` blocks `.env*`).
+    The site URL must be in Supabase → Authentication → Redirect URLs.
   - Both apps sign release builds with the debug keystore: fine for installing
     the APK directly, not for the Play Store (create an upload keystore first).
   - Don't start Metro with `CI=1` while developing: it disables file watching,

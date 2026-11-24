@@ -69,6 +69,13 @@ test(`prepare ${step}`, async () => {
     const link = await supabase.rpc("link_watch_to_my_child", { p_child_id: c.id, p_watch_id: "ST-WATCH-CQGZ24GY" });
     if (link.error) throw link.error;
     console.log("WATCHCODE", (await generateWatchConnectionCode({ watchId: "ST-WATCH-CQGZ24GY" })).connectionCode);
+  } else if (step === "ping") {
+    // One location from the test child phone (UT Child Two), as the child app sends it: used to check
+    // that an open guardian screen (phone or web) receives it in real time. PING_LAT/PING_LNG set the spot.
+    await AsyncStorage.setItem("safetrack.childPhone", JSON.stringify(A.childPhone));
+    const lat = Number(process.env.PING_LAT ?? LAPU.latitude), lng = Number(process.env.PING_LNG ?? LAPU.longitude);
+    const r = await recordChildPhoneLocation(lat, lng, 8);
+    console.log("PING", lat, lng, r.safeZoneStatus.status);
   } else if (step === "ackall") {
     // Acknowledge any test SOS left active for the test guardian's children.
     const { fetchActiveSosAlerts, acknowledgeSosAlert } = require("../../services/sosService");
