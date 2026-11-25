@@ -230,15 +230,26 @@ function MapCore(props: CoreProps) {
   const engineMarkers = useStable(
     useMemo(() => {
       const list: MapMarker[] = [];
+      const metersPerPixel = (156_543 * Math.cos((14.6 * Math.PI) / 180)) / 2 ** zoomLevel;
 
-      visibleCircles.forEach((circle) => {
-        if (!circle.label || circle.status === "draft") return;
+      // Zone names closer than ~90 px on screen would sit on top of each other (zoomed out, "Home"
+      // could cover "Home 2" where the child is). The zone the child is in keeps its name; a nearby
+      // one is left out until the map is zoomed in far enough to show both apart.
+      const kept: MapCircle[] = [];
+      [...visibleCircles]
+        .filter((circle) => circle.label && circle.status !== "draft")
+        .sort((first, second) => Number(second.status === "inside") - Number(first.status === "inside"))
+        .forEach((circle) => {
+          if (kept.every((other) => distanceMeters(other, circle) >= 90 * metersPerPixel)) kept.push(circle);
+        });
+
+      kept.forEach((circle) => {
         const status = circle.status ?? (circle.enabled === false ? "inactive" : "active");
         list.push({
           id: `zone:${circle.id}`,
           latitude: circle.latitude,
           longitude: circle.longitude,
-          title: circle.label,
+          title: circle.label!,
           kind: "zoneCenter",
           tint: ZONE_COLORS[status],
         });
@@ -270,7 +281,6 @@ function MapCore(props: CoreProps) {
       }
 
       // Avatars closer than ~48 px at this zoom are nudged apart.
-      const metersPerPixel = (156_543 * Math.cos((14.6 * Math.PI) / 180)) / 2 ** zoomLevel;
       return spreadOverlapping(list, 48 * metersPerPixel);
     }, [markers, visibleCircles, me, showMyLocation, guardian?.fullName, guardian?.avatarPath, guardianPhoto, zoomLevel]),
   );
