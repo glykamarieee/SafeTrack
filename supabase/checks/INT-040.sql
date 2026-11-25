@@ -1,11 +1,8 @@
--- INT-040: Saving locations, safe-zone events and SOS never waits for the AI service.
--- None of the functions the watch and phone call contain a web request; only the
--- scheduled safety scan (a separate job) calls the AI service.
-select p.proname                                                  as function_called_by_device,
-       pg_get_functiondef(p.oid) ~* 'http|onrender|net\.'        as calls_a_web_service
-from pg_proc p
-join pg_namespace n on n.oid = p.pronamespace
-where n.nspname = 'public'
-  and p.proname in ('record_watch_location', 'record_watch_location_v2', 'trigger_watch_sos',
-                    'record_child_phone_location', 'record_child_phone_location_v2', 'trigger_child_phone_sos')
-order by 1;
+-- INT-040: with the AI service unreachable (AI_SERVICE_URL pointed at an offline host from 2026-11-24T20:06:59Z UTC),
+-- the child phone's location and SOS were still saved. Read-only.
+select 'location' as record, to_char(l.recorded_at at time zone 'Asia/Manila','HH24:MI:SS') as saved_at, l.travel_mode as detail
+  from location_logs l where l.child_id = (select id from persons where full_name='UT Child Two' and is_active) and l.created_at >= '2026-11-24T20:06:59Z'
+union all
+select 'SOS alert', to_char(a.created_at at time zone 'Asia/Manila','HH24:MI:SS'), a.status
+  from sos_alerts a where a.child_id = (select id from persons where full_name='UT Child Two' and is_active) and a.created_at >= '2026-11-24T20:06:59Z'
+order by 2;

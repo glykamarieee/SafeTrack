@@ -74,8 +74,49 @@ test(`prepare ${step}`, async () => {
     // that an open guardian screen (phone or web) receives it in real time. PING_LAT/PING_LNG set the spot.
     await AsyncStorage.setItem("safetrack.childPhone", JSON.stringify(A.childPhone));
     const lat = Number(process.env.PING_LAT ?? LAPU.latitude), lng = Number(process.env.PING_LNG ?? LAPU.longitude);
-    const r = await recordChildPhoneLocation(lat, lng, 8);
-    console.log("PING", lat, lng, r.safeZoneStatus.status);
+    // Optional motion, as the child app sends it: PING_SPEED (m/s), PING_MODE, PING_HEADING (degrees).
+    const motion = process.env.PING_MODE
+      ? { speedMps: Number(process.env.PING_SPEED ?? 0), headingDegrees: Number(process.env.PING_HEADING ?? 45), mode: process.env.PING_MODE, confidence: 0.9 }
+      : undefined;
+    const r = await recordChildPhoneLocation(lat, lng, Number(process.env.PING_ACC ?? 8), motion as any);
+    console.log("PING", lat, lng, process.env.PING_MODE ?? "-", r.safeZoneStatus.status);
+  } else if (step === "phonecode") {
+    // A phone connection code for the named test child (CHILD_NAME), to link a test phone or emulator.
+    const c = (await fetchLinkedChildren(guardianId)).find((x: any) => (x.fullName ?? x.full_name) === process.env.CHILD_NAME)!;
+    console.log("PHONECODE", (await generateMobilePairingCode({ childId: c.id })).connectionCode);
+  } else if (step === "watchcode") {
+    // A smartwatch connection code (for the test watch of UT Child One): used to show a watch code is refused on a phone.
+    console.log("WATCHCODE", (await generateWatchConnectionCode({ watchId: process.env.WATCH_ID ?? "ST-WATCH-NFEGJ9K6" })).connectionCode);
+  } else if (step === "zone-on") {
+    // A 60 m test safe zone at Lapu-Lapu City Hall for the test child phone (UT Child Two), or CHILD_NAME.
+    const zc = process.env.CHILD_NAME ? (await fetchLinkedChildren(guardianId)).find((x: any) => (x.fullName ?? x.full_name) === process.env.CHILD_NAME)!.id : A.childPhone.childId;
+    await createGeofence({ guardianId, childId: zc, name: "UT Retake Zone", address: "Lapu-Lapu City Hall", ...LAPU, radiusMeters: 60, isEnabled: process.env.ZONE_ENABLED !== "false" });
+    console.log("zone on");
+  } else if (step === "zone-off") {
+    const zc = process.env.CHILD_NAME ? (await fetchLinkedChildren(guardianId)).find((x: any) => (x.fullName ?? x.full_name) === process.env.CHILD_NAME)!.id : A.childPhone.childId;
+    for (const z of await fetchGeofences(guardianId, zc)) if (z.name === "UT Retake Zone") await deleteGeofence(z.id);
+    console.log("zone off");
+  } else if (step === "zone-clean") {
+    // Removes test zones left by test runs (names in ZONE_NAMES, comma-separated) for every linked child.
+    const names = (process.env.ZONE_NAMES ?? "UT Integration Zone").split(",");
+    for (const c of await fetchLinkedChildren(guardianId))
+      for (const z of await fetchGeofences(guardianId, c.id)) if (names.includes(z.name)) { await deleteGeofence(z.id); console.log("deleted", z.name, c.id); }
+  } else if (step === "live-jitter") {
+    // Live (not saved) positions of the test child phone for an open guardian map: LIVE_M lists metres
+    // north of Lapu-Lapu City Hall, one every LIVE_GAP ms, with accuracy LIVE_ACC (CASE-365).
+    await AsyncStorage.setItem("safetrack.childPhone", JSON.stringify(A.childPhone));
+    const { pushChildPhoneLive } = require("../../services/childMobileService");
+    for (const m of (process.env.LIVE_M ?? "10").split(",").map(Number)) {
+      const lat = LAPU.latitude + m / 111_320;
+      const live = await pushChildPhoneLive(lat, LAPU.longitude, Number(process.env.LIVE_ACC ?? 10), Date.now(), { speedMps: 0.5, headingDegrees: 0, mode: "walking", confidence: 0.9 });
+      console.log("LIVE", m, "m", "watching:", live, new Date().toISOString());
+      await wait(Number(process.env.LIVE_GAP ?? 1500));
+    }
+  } else if (step === "sos") {
+    // A real SOS from the test child phone (UT Child Two), as the child app sends it.
+    await AsyncStorage.setItem("safetrack.childPhone", JSON.stringify(A.childPhone));
+    const { triggerChildPhoneSos } = require("../../services/childMobileService");
+    console.log("SOS", JSON.stringify(await triggerChildPhoneSos()));
   } else if (step === "ackall") {
     // Acknowledge any test SOS left active for the test guardian's children.
     const { fetchActiveSosAlerts, acknowledgeSosAlert } = require("../../services/sosService");
