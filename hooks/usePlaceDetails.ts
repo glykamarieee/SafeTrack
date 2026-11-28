@@ -137,6 +137,8 @@ export function usePlaceDetails(location: LocationLog | null | undefined, histor
     }
     if (!moving && latestTime - earliest >= 2 * 60_000) stay = `Here for ${durationText(latestTime - earliest)}`;
 
+    // A Wi-Fi/cell fix (worse than 50 m) jumps around: its "speed" is not movement.
+    if ((location.accuracyMeters ?? 0) > 50 && (mode === "vehicle" || mode === "running" || mode === "walking")) mode = stay ? "still" : "unknown";
     // No speed (Wi-Fi/cell fixes indoors) but several minutes at one spot: still.
     if ((!mode || mode === "unknown") && stay) mode = "still";
     // A vehicle-speed point over water is a boat.

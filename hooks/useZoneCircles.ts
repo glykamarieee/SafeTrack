@@ -10,9 +10,10 @@ import type { LocationLog } from "../types/safetrack";
 
 /** Server entry/exit events are re-read this often while a map is open. */
 const EVENTS_REFRESH_MS = 20_000;
-/** The live position decides only while it is this recent and this accurate. */
+/** The live position decides only while it is this recent. */
 const LIVE_MAX_AGE_MS = 60_000;
-const LIVE_MAX_ACCURACY_M = 100;
+/** A fix worse than this is a Wi-Fi/cell guess: it may prove "inside", but "outside" needs a clear margin. */
+const COARSE_M = 50;
 /** Readings in a row needed to change inside <-> outside (no flicker at the edge). */
 const CONFIRM = 2;
 
@@ -62,7 +63,8 @@ export function useZoneCircles(childId: string | null | undefined, location: Loc
     if (!location || location.childId !== childId) return;
     const age = Date.now() - Date.parse(location.recordedAt);
     const accuracy = location.accuracyMeters ?? 0;
-    if (!(age < LIVE_MAX_AGE_MS) || accuracy > LIVE_MAX_ACCURACY_M) return;
+    if (!(age < LIVE_MAX_AGE_MS)) return;
+    const coarse = accuracy > COARSE_M;
 
     setLive((previous) => {
       let changed = false;
@@ -71,8 +73,11 @@ export function useZoneCircles(childId: string | null | undefined, location: Loc
         if (circle.status === "inactive") continue;
         const distance = distanceMeters(location, circle);
         const margin = Math.min(20, Math.max(5, accuracy / 2), circle.radiusMeters * 0.3);
-        const clearlyInside = distance <= circle.radiusMeters - margin;
-        const clearlyOutside = distance >= circle.radiusMeters + margin;
+        // Coarse fix (same rule as the server): inside when the point is in the circle,
+        // outside only when it is beyond the circle by more than its accuracy.
+        const outSlack = coarse ? Math.min(accuracy, 300) : margin;
+        const clearlyInside = distance <= circle.radiusMeters - (coarse ? 0 : margin);
+        const clearlyOutside = distance >= circle.radiusMeters + outSlack;
         const known = previous[circle.id];
         // First reading: the server's last event, or the position when clear.
         const status = known?.status ?? (circle.status === "inside" ? "inside" : circle.status === "outside" ? "outside" : distance <= circle.radiusMeters ? "inside" : "outside");
@@ -84,7 +89,7 @@ export function useZoneCircles(childId: string | null | undefined, location: Loc
         } else {
           const count = entry.pending === wants ? entry.count + 1 : 1;
           // Far past the edge counts at once; near it, CONFIRM readings.
-          const far = Math.abs(distance - circle.radiusMeters) > margin * 3;
+          const far = Math.abs(distance - circle.radiusMeters) > Math.max(margin * 3, coarse ? outSlack : 0);
           if (count >= CONFIRM || far) {
             entry = { status: wants, since: location.recordedAt, pending: null, count: 0 };
             testLog("zone", { zone: circle.label, now: wants, dist: Math.round(distance), r: circle.radiusMeters, acc: accuracy });

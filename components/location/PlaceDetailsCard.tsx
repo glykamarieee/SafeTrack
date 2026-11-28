@@ -53,7 +53,7 @@ export function PlaceDetailsCard({
     place === undefined
       ? "Finding the address…"
       : place?.label
-        ? place.near
+        ? place.near || (location.accuracyMeters ?? 0) > 100
           ? `Near ${place.label}`
           : place.label
         : `Address unavailable · ${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`;

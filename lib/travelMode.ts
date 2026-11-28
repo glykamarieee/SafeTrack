@@ -27,6 +27,9 @@ export type MotionEstimate = { mode: TravelMode; confidence: number };
 /** Speed in m/s (null when the device gave none) -> mode and 0–1 confidence. */
 export function classifySpeed(speedMps: number | null | undefined, accuracyMeters?: number | null): MotionEstimate {
   if (speedMps == null || !Number.isFinite(speedMps) || speedMps < 0) return { mode: "unknown", confidence: 0 };
+  // A Wi-Fi/cell fix (worse than 50 m) jumps between nearby spots: its speed is
+  // that jumping, not movement, so it says nothing about how the child moves.
+  if (accuracyMeters != null && accuracyMeters > 50) return { mode: "unknown", confidence: 0 };
   // A poor fix makes the speed unreliable.
   const quality = accuracyMeters == null ? 0.8 : accuracyMeters <= 20 ? 1 : accuracyMeters <= 50 ? 0.7 : 0.4;
   if (speedMps < SPEED_BANDS.still) return { mode: "still", confidence: 0.9 * quality };

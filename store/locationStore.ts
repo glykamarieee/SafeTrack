@@ -124,7 +124,9 @@ function stayingPut(fix: { latitude: number; longitude: number; childId: string;
   const oldest = recentFixes[0]!;
   if (at - oldest.at < STAY_CHECK_MS - 3_000) return false; // not enough history yet
   // Walking covers 10-14 m in 10 s; GPS drift stays within ~80% of the accuracy.
-  const radius = Math.max(5, Math.min((fix.accuracyMeters ?? 10) * 0.8, 10));
+  const acc = fix.accuracyMeters ?? 10;
+  // A coarse fix wanders within its accuracy; only a sharp fix can show 10-14 m of walking.
+  const radius = acc > 30 ? Math.min(acc * 0.8, 150) : Math.max(5, Math.min(acc * 0.8, 10));
   return recentFixes.every((point) => metersBetween(point, fix) <= radius);
 }
 
@@ -677,7 +679,10 @@ applyLiveFix: (fix) => {
   // The activity changes when MODE_AGREE readings in a row agree, so one odd
   // reading never flips it; a confident reading switches at once (no lag when
   // the child starts running).
-  const reported = fix.travelMode && fix.travelMode !== "unknown" ? fix.travelMode : null;
+  // A coarse (Wi-Fi/cell) fix cannot tell walking from a car: its speed is the position
+  // jumping. Older watches still label it, so it is ignored unless it really moved.
+  const coarseJitter = fixAccuracy > POOR_ACCURACY_M && jump <= Math.max(fixAccuracy, Number.isFinite(shownAccuracy) ? shownAccuracy : 0);
+  const reported = fix.travelMode && fix.travelMode !== "unknown" && !coarseJitter ? fix.travelMode : coarseJitter ? "still" : null;
   let mode = (current.travelMode ?? null) as TravelMode | null;
   if (reported && reported !== mode) {
     pendingMode = pendingMode.mode === reported ? { mode: reported, count: pendingMode.count + 1 } : { mode: reported, count: 1 };
@@ -689,7 +694,7 @@ applyLiveFix: (fix) => {
     pendingMode = { mode: null, count: 0 };
   }
   // "Walking"/"Running" while every fix of the last 15 s is within GPS drift: the child is staying.
-  if (stayingPut(fix, fixTime) && (mode === "walking" || mode === "running")) {
+  if (stayingPut(fix, fixTime) && (mode === "walking" || mode === "running" || mode === "vehicle")) {
     mode = "still";
     pendingMode = { mode: null, count: 0 };
   }
