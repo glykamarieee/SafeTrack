@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { cachedPlace, cellsAround, checkSpot, nearbyPlace, onPlaceChange, placeCell, placeFor, prefetchAhead, type Place } from "../lib/places";
-import { describeMotion, isLive } from "../lib/travelMode";
+import { describeMotion, isLive, modeForSpeed } from "../lib/travelMode";
 import type { MapCircle } from "../components/location/mapTypes";
 import type { LocationLog, TravelMode } from "../types/safetrack";
 
@@ -143,6 +143,7 @@ export function usePlaceDetails(location: LocationLog | null | undefined, histor
     if ((!mode || mode === "unknown") && stay) mode = "still";
     // A vehicle-speed point over water is a boat.
     if (place?.water && mode && mode !== "still" && (location.speedMps ?? 0) > 1.5) mode = "boat";
+    mode = modeForSpeed(mode, location.speedMps, location.accuracyMeters) ?? mode;
     const motion = describeMotion(mode, location.speedMps, location.modeConfidence);
 
     return { place, motion, zone, inside, zoneName, stay, live: isLive(location.recordedAt, now) };

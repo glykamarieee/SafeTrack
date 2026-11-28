@@ -88,6 +88,23 @@ export const MODE_GLYPHS: Record<TravelMode, string> = {
  * "Walking · 4 km/h", "Running · 11 km/h",
  * "In a vehicle · 38 km/h (car, jeep, tricycle or motorcycle)".
  */
+const BAND_ORDER = ["still", "walking", "running", "vehicle"];
+
+/**
+ * The mode shown must match the speed bands when the speed is trustworthy (a
+ * GPS fix of 50 m or better): never "In a vehicle" at 3 km/h. Only "walking"
+ * at a still speed is kept (the watch feels steps before GPS sees the move).
+ */
+export function modeForSpeed(mode: TravelMode | null | undefined, speedMps?: number | null, accuracyMeters?: number | null): TravelMode | null | undefined {
+  if (!mode || speedMps == null || !Number.isFinite(speedMps) || speedMps < 0 || (accuracyMeters ?? 0) > 50) return mode;
+  const band = classifySpeed(speedMps, accuracyMeters).mode;
+  const byMode = BAND_ORDER.indexOf(mode);
+  const byBand = BAND_ORDER.indexOf(band);
+  if (byMode < 0 || byBand < 0 || byMode === byBand) return mode;
+  if (mode === "walking" && band === "still") return mode;
+  return band;
+}
+
 export function describeMotion(raw: TravelMode | null | undefined, speedMps?: number | null, _confidence?: number | null) {
   const mode = normalizeMode(raw);
   // Unknown is shown as nothing, never as "Moving".
